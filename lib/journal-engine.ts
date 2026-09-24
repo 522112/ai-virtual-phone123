@@ -17,11 +17,12 @@ import type { ApiConfig, PresetConfig, RegexConfig, WorldBookConfig } from "./se
 import { prepareShortTermContext } from "./short-term-assembler";
 import type { Character } from "./character-types";
 import { JOURNAL_STAMPS, type JournalStampKind } from "./journal-types";
-import type { JournalBook, JournalPage } from "./journal-types";
+import type { JournalBook, JournalPage, JournalSide } from "./journal-types";
 import {
   addJournalAnnotation,
   formatJournalBookPlainText,
   formatJournalPagePlainText,
+  formatJournalSidePlainText,
 } from "./journal-storage";
 
 type ResolvedJournalGeneration = {
@@ -113,9 +114,10 @@ export async function generateJournalAnnotation(input: {
   characterId: string;
   book: JournalBook;
   page?: JournalPage;
+  side?: JournalSide;
 }): Promise<string> {
   const target = input.page
-    ? formatJournalPagePlainText(input.page)
+    ? (input.side ? formatJournalSidePlainText(input.page, input.side) : formatJournalPagePlainText(input.page))
     : formatJournalBookPlainText(input.book);
   const resolved = await resolveJournalGeneration(
     input.characterId,
@@ -142,6 +144,8 @@ export async function generateJournalAnnotation(input: {
   addJournalAnnotation({
     bookId: input.book.id,
     pageId: input.page?.id,
+    side: input.side,
+    authorType: "character",
     characterId: resolved.character.id,
     characterName: resolved.character.name,
     text,
@@ -158,11 +162,15 @@ export async function generateJournalCharacterWrite(input: {
     input.characterId,
     [
       "【情侣手账共写】",
-      "这是你们正在一起编辑的手账页。请用符合人设的口吻补写一段，像亲手写在本子上。",
+      "这是一本打开的手账。用户写在左页，请你写在右页。",
+      "用符合人设的口吻补写一段，像亲手写在本子上。",
       "只写正文，不要标题，不要指令。30 到 80 个汉字。",
       "",
-      "当前页：",
-      formatJournalPagePlainText(input.page),
+      "左页（用户）：",
+      formatJournalSidePlainText(input.page, "left"),
+      "",
+      "右页（你这边现有的内容）：",
+      formatJournalSidePlainText(input.page, "right"),
     ].join("\n"),
   );
   const raw = await sendLLMRequest(

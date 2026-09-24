@@ -5,6 +5,7 @@ import type {
   JournalBook,
   JournalBookKind,
   JournalPage,
+  JournalSide,
   JournalStampKind,
   JournalStroke,
 } from "./journal-types";
@@ -77,8 +78,11 @@ function normalizeBlock(value: unknown): JournalBlock | null {
   if (typeof item.id !== "string" || !item.type) return null;
   const author = item.author === "character" ? "character" : "user";
   const characterId = typeof item.characterId === "string" ? item.characterId : undefined;
+  const side: JournalSide = item.side === "right" || item.side === "left"
+    ? item.side
+    : author === "character" ? "right" : "left";
   if (item.type === "text" && typeof item.text === "string") {
-    return { id: item.id, type: "text", text: item.text, author, characterId };
+    return { id: item.id, type: "text", text: item.text, author, characterId, side };
   }
   if (item.type === "image" && typeof item.src === "string" && item.src.trim()) {
     return {
@@ -88,11 +92,12 @@ function normalizeBlock(value: unknown): JournalBlock | null {
       caption: typeof item.caption === "string" ? item.caption : undefined,
       author,
       characterId,
+      side,
     };
   }
   if (item.type === "doodle") {
     const strokes = Array.isArray(item.strokes) ? item.strokes.map(normalizeStroke).filter(Boolean) as JournalStroke[] : [];
-    return { id: item.id, type: "doodle", strokes, author, characterId };
+    return { id: item.id, type: "doodle", strokes, author, characterId, side };
   }
   if (item.type === "stamp" && isStamp(item.stamp)) {
     return {
@@ -102,6 +107,7 @@ function normalizeBlock(value: unknown): JournalBlock | null {
       note: typeof item.note === "string" ? item.note : undefined,
       author,
       characterId,
+      side,
     };
   }
   if (item.type === "clip" && typeof item.text === "string") {
@@ -114,6 +120,7 @@ function normalizeBlock(value: unknown): JournalBlock | null {
       sourceLabel: typeof item.sourceLabel === "string" ? item.sourceLabel : undefined,
       author,
       characterId,
+      side,
     };
   }
   return null;
@@ -158,13 +165,19 @@ function normalizeAnnotation(value: unknown): JournalAnnotation | null {
   if (!value || typeof value !== "object") return null;
   const item = value as Partial<JournalAnnotation>;
   if (typeof item.id !== "string" || typeof item.bookId !== "string") return null;
-  if (typeof item.characterId !== "string" || typeof item.text !== "string") return null;
+  if (typeof item.text !== "string") return null;
+  const authorType = item.authorType === "user" ? "user" : "character";
+  const characterId = typeof item.characterId === "string" ? item.characterId : (authorType === "user" ? "user" : "");
+  if (!characterId && authorType === "character") return null;
   return {
     id: item.id,
     bookId: item.bookId,
     pageId: typeof item.pageId === "string" ? item.pageId : undefined,
-    characterId: item.characterId,
-    characterName: typeof item.characterName === "string" ? item.characterName : "对方",
+    side: item.side === "right" || item.side === "left" ? item.side : undefined,
+    blockId: typeof item.blockId === "string" ? item.blockId : undefined,
+    authorType,
+    characterId,
+    characterName: typeof item.characterName === "string" ? item.characterName : (authorType === "user" ? "我" : "对方"),
     text: item.text,
     createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
   };
@@ -249,7 +262,7 @@ export function createJournalPage(bookId: string, title?: string): JournalPage |
     id: generateId("jpage"),
     title: title?.trim() || `第 ${book.pages.length + 1} 页`,
     dateLabel: `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`,
-    blocks: [{ id: generateId("jblk"), type: "text", text: "", author: "user" }],
+    blocks: [{ id: generateId("jblk"), type: "text", text: "", author: "user", side: "left" }],
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   };
@@ -333,8 +346,41 @@ export function createCharacterDoodleStrokes(stamp: JournalStampKind, color = "#
   ];
 }
 
+export function blocksOnSide(page: JournalPage, side: JournalSide): JournalBlock[] {
+  return page.blocks.filter(block => (block.side || (block.author === "character" ? "right" : "left")) === side);
+}
+
+function appendBlockLine(lines: string[], block: JournalBlock): void {
+  if (block.type === "text" && block.text.trim()) lines.push(block.text.trim());
+  else if (block.type === "image") lines.push(block.caption?.trim() || "[手账图片]");
+  else if (block.type === "doodle") lines.push("[手账涂鸦]");
+  else if (block.type === "stamp") lines.push(block.note?.trim() || "[手账印章]");
+  else if (block.type === "clip" && block.text.trim()) {
+    lines.push(`${block.sourceLabel || "摘录"}：${block.text.trim()}`);
+  }
+}
+
+export function formatJournalSidePlainText(page: JournalPage, side: JournalSide): string {
+  const lines = [page.title, page.dateLabel, side === "left" ? "左页" : "右页"].filter(Boolean);
+  for (const block of blocksOnSide(page, side)) appendBlockLine(lines, block);
+  return lines.join("\n");
+}
+
 export function formatJournalPagePlainText(page: JournalPage): string {
   const lines = [page.title, page.dateLabel].filter(Boolean);
+  const left = blocksOnSide(page, "left");
+  const right = blocksOnSide(page, "right");
+  if (left.length || right.length) {
+    if (left.length) {
+      lines.push("左页");
+      for (const block of left) appendBlockLine(lines, block);
+    }
+    if (right.length) {
+      lines.push("右页");
+      for (const block of right) appendBlockLine(lines, block);
+    }
+    return lines.join("\n");
+  }
   for (const block of page.blocks) {
     if (block.type === "text" && block.text.trim()) lines.push(block.text.trim());
     else if (block.type === "image") lines.push(block.caption?.trim() || "[手账图片]");

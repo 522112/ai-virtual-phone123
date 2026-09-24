@@ -1,5 +1,7 @@
 export type JournalBookKind = "personal" | "couple";
 
+export type JournalSide = "left" | "right";
+
 export type JournalStampKind = "heart" | "star" | "flower" | "arrow" | "underline" | "tape";
 
 export type JournalStrokePoint = { x: number; y: number };
@@ -10,12 +12,21 @@ export type JournalStroke = {
   width: number;
 };
 
+export type JournalBlockAuthor = "user" | "character";
+
+type JournalBlockBase = {
+  id: string;
+  author: JournalBlockAuthor;
+  characterId?: string;
+  side: JournalSide;
+};
+
 export type JournalBlock =
-  | { id: string; type: "text"; text: string; author: "user" | "character"; characterId?: string }
-  | { id: string; type: "image"; src: string; caption?: string; author: "user" | "character"; characterId?: string }
-  | { id: string; type: "doodle"; strokes: JournalStroke[]; author: "user" | "character"; characterId?: string }
-  | { id: string; type: "stamp"; stamp: JournalStampKind; note?: string; author: "user" | "character"; characterId?: string }
-  | { id: string; type: "clip"; source: "chat" | "offline" | "memory"; text: string; sourceLabel?: string; author: "user" | "character"; characterId?: string };
+  | (JournalBlockBase & { type: "text"; text: string })
+  | (JournalBlockBase & { type: "image"; src: string; caption?: string })
+  | (JournalBlockBase & { type: "doodle"; strokes: JournalStroke[] })
+  | (JournalBlockBase & { type: "stamp"; stamp: JournalStampKind; note?: string })
+  | (JournalBlockBase & { type: "clip"; source: "chat" | "offline" | "memory"; text: string; sourceLabel?: string });
 
 export type JournalPage = {
   id: string;
@@ -42,6 +53,9 @@ export type JournalAnnotation = {
   id: string;
   bookId: string;
   pageId?: string;
+  side?: JournalSide;
+  blockId?: string;
+  authorType: "user" | "character";
   characterId: string;
   characterName: string;
   text: string;
