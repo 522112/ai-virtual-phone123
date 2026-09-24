@@ -7,6 +7,8 @@ import {
     saveUserIdentities,
 } from "./settings-storage";
 import { createOrGetSession, pushChatMessage, type ChatMessage } from "./chat-storage";
+import { getChatImageFromIndexedDB } from "./chat-asset-storage";
+import { isMediaStoreRef, loadMediaBlob } from "./media-cache-storage";
 
 const PENDING_REPLY_PREFIX = "pending_friend_reply_";
 
@@ -67,6 +69,163 @@ export function avatarFingerprint(url: string | null | undefined): string {
         return `data:${payload.length}:${simpleHash(payload)}`;
     }
     return trimmed;
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error || new Error("图片读取失败"));
+        reader.readAsDataURL(blob);
+    });
+}
+
+export async function resolveChatImageToDataUrl(ref: string | null | undefined): Promise<string | null> {
+    const raw = (ref || "").trim();
+    if (!raw) return null;
+    if (raw.startsWith("data:")) return raw;
+    if (isMediaStoreRef(raw)) {
+        const media = await loadMediaBlob(raw).catch(() => null);
+        if (!media?.blob) return null;
+        return blobToDataUrl(media.blob);
+    }
+    const assetId = raw.startsWith("asset://") ? raw.slice("asset://".length) : raw;
+    return getChatImageFromIndexedDB(assetId).catch(() => null);
+}
+
+export async function imageSourceToAvatarDataUrl(source: string): Promise<string> {
+    if (typeof document === "undefined") return source;
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("图片解码失败"));
+        img.src = source;
+    });
+    const maxSize = 512;
+    const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return source;
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/webp", 0.82);
+}
+
+type ChatImageLike = {
+    role?: string;
+    mediaType?: string;
+    mediaUrl?: string;
+    content?: string;
+    mediaData?: { fileType?: string; label?: string };
+};
+
+function isUserChatImage(msg: ChatImageLike): boolean {
+    if (msg.role !== "user" || !msg.mediaUrl) return false;
+    if (msg.mediaType === "image") return true;
+    return msg.mediaType === "media_file" && msg.mediaData?.fileType === "image";
+}
+
+function chatImageLabel(msg: ChatImageLike): string {
+    return (msg.mediaData?.label || msg.content || "").trim();
+}
+
+export function findLatestUserChatImage(messages: ChatImageLike[]): string | null {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const msg = messages[i];
+        if (isUserChatImage(msg)) return msg.mediaUrl || null;
+    }
+    return null;
+}
+
+export function looksLikeCoupleAvatarLabel(label?: string | null): boolean {
+    const text = (label || "").trim();
+    return /情头|情侣头像|配对头像|配套头像/.test(text);
+}
+
+/** 用户自己那半张，不应被设成角色聊天头像。 */
+export function looksLikeUserCoupleAvatarLabel(label?: string | null): boolean {
+    const text = (label || "").trim();
+    return /^(我的头像|我的情头)$/.test(text);
+}
+
+export function looksLikeCharacterCoupleAvatarLabel(label?: string | null): boolean {
+    return looksLikeCoupleAvatarLabel(label) && !looksLikeUserCoupleAvatarLabel(label);
+}
+
+/** 换上情头时优先用对方那张；没有标记则退回最近一张用户照片。 */
+export function findLatestWearableCoupleAvatarImage(messages: ChatImageLike[]): string | null {
+    let latestImage: string | null = null;
+    let latestNonUserHalf: string | null = null;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const msg = messages[i];
+        if (!isUserChatImage(msg) || !msg.mediaUrl) continue;
+        if (!latestImage) latestImage = msg.mediaUrl;
+        const label = chatImageLabel(msg);
+        if (looksLikeCharacterCoupleAvatarLabel(label)) return msg.mediaUrl;
+        if (!latestNonUserHalf && !looksLikeUserCoupleAvatarLabel(label)) {
+            latestNonUserHalf = msg.mediaUrl;
+        }
+    }
+    return latestNonUserHalf || latestImage;
+}
+
+export function getCoupleAvatarPromptHint(messages?: ChatImageLike[]): { hasRecentUserImage: boolean; label?: string } {
+    if (!messages?.length) return { hasRecentUserImage: false };
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+        const msg = messages[i];
+        if (!isUserChatImage(msg)) continue;
+        return { hasRecentUserImage: true, label: chatImageLabel(msg) || undefined };
+    }
+    return { hasRecentUserImage: false };
+}
+
+export async function applyCharacterAvatarFromChatImage(
+    characterId: string,
+    imageRef: string | null | undefined,
+): Promise<boolean> {
+    const resolved = await resolveChatImageToDataUrl(imageRef);
+    if (!resolved) return false;
+    const avatar = await imageSourceToAvatarDataUrl(resolved).catch(() => resolved);
+    const changed = updateCharacterAvatar(characterId, avatar);
+    if (changed) dispatchUpdated(characterId);
+    return changed;
+}
+
+export async function applyUserAvatarFromChatImage(
+    characterId: string,
+    imageRef: string | null | undefined,
+): Promise<boolean> {
+    const resolved = await resolveChatImageToDataUrl(imageRef);
+    if (!resolved) return false;
+    const avatar = await imageSourceToAvatarDataUrl(resolved).catch(() => resolved);
+    updateResolvedUserAvatar(characterId, avatar, "chat");
+    dispatchUpdated(characterId);
+    return true;
+}
+
+export function buildCoupleAvatarInstruction(
+    isGroup?: boolean,
+    hint?: { hasRecentUserImage?: boolean; label?: string | null } | null,
+): string {
+    if (isGroup) return "";
+    const lines = [
+        "【情头】",
+        "对方可能在聊天里发来情头或配套头像。请看他刚发的照片：如果那是给你换的头像，必须输出 [换上情头]。",
+        "系统收到标记后，会把那张用户照片设成你的聊天头像。只口头说换了、却不输出标记，头像不会变。",
+        "如果照片标记是「我的头像」或「我的情头」，那是对方自己戴的，不要输出 [换上情头]。",
+    ];
+    if (hint?.hasRecentUserImage) {
+        const label = (hint.label || "").trim();
+        if (looksLikeCharacterCoupleAvatarLabel(label)) {
+            lines.push("对方刚刚发来的照片就是情头。请输出 [换上情头] 换上这张头像。");
+        } else if (looksLikeUserCoupleAvatarLabel(label)) {
+            lines.push("对方刚刚发来的是自己那张头像，不要换你的聊天头像。");
+        } else {
+            lines.push("对方刚刚发来一张照片。请看图判断是不是给你换的情头，是的话必须输出 [换上情头]。");
+        }
+    }
+    return lines.join("\n");
 }
 
 export function avatarsMatch(left: string | null | undefined, right: string | null | undefined): boolean {

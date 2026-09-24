@@ -1237,6 +1237,8 @@ export function formatRichMediaForHistory(msg: ChatMessage, userName: string, ch
             return "[同意关系]";
         case "decline_relationship":
             return "[拒绝关系]";
+        case "change_avatar":
+            return "[换上情头]";
         case "relationship_space": {
             const action = d?.spaceAction;
             const label = d?.label || "";

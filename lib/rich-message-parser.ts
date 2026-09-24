@@ -386,6 +386,10 @@ const RICH_PATTERNS: {
         build: () => ({ content: "", mediaType: "decline_relationship" as const }),
     },
     {
+        regex: /\[(?:换上情头|更换头像|换头像)\]/,
+        build: () => ({ content: "", mediaType: "change_avatar" as const }),
+    },
+    {
         regex: new RegExp(`\\[关系动态感触${C}([^\\]]+)\\]`),
         build: (m) => ({
             content: "",

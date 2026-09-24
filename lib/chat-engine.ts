@@ -76,6 +76,7 @@ import { buildCharacterTimeContext } from "./character-time";
 import { getPromptTimestampOptionsForTimeContext } from "./prompt-time";
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { buildRelationshipSpaceInstruction } from "./relationship-storage";
+import { buildCoupleAvatarInstruction, getCoupleAvatarPromptHint } from "./couple-avatar-storage";
 import { pushApiLog } from "./api-log-store";
 export { getApiLogs, clearApiLogs, type DebugInfo } from "./api-log-store";
 import { stripStateAndInnerForPrompt } from "./prompt-sanitizer";
@@ -2076,6 +2077,13 @@ export async function buildChatPromptMessages(
     const relationshipInstruction = buildRelationshipSpaceInstruction(character.id, session.isGroup);
     if (relationshipInstruction) {
         llmMessages.push({ role: "system", content: relationshipInstruction });
+    }
+    const coupleAvatarInstruction = buildCoupleAvatarInstruction(
+        session.isGroup,
+        getCoupleAvatarPromptHint(historyForPrompt),
+    );
+    if (coupleAvatarInstruction) {
+        llmMessages.push({ role: "system", content: coupleAvatarInstruction });
     }
     appendEmptyGenerateGuardMessage(llmMessages, config, historyForPrompt);
 

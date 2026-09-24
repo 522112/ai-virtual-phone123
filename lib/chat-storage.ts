@@ -120,6 +120,7 @@ export type ChatMessage = {
         | "relationship_invite"
         | "accept_relationship"
         | "decline_relationship"
+        | "change_avatar"
         | "relationship_space"
         | "contact_card"
         | "app_card"
@@ -367,6 +368,7 @@ export function getChatMessagePreview(msg: ChatMessage): string {
     if (msg.mediaType === "relationship_invite") return msg.content || "[关系邀请]";
     if (msg.mediaType === "accept_relationship") return msg.content || "[同意关系]";
     if (msg.mediaType === "decline_relationship") return msg.content || "[拒绝关系]";
+    if (msg.mediaType === "change_avatar") return msg.content || "[换上情头]";
     if (msg.mediaType === "relationship_space") return msg.content || "[关系空间]";
 
     // Call messages: stored as assistant/user role, detect by content

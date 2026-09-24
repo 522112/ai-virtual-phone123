@@ -536,3 +536,65 @@ export function VoiceRecordModal({ characterId, onSend, onClose }: VoiceRecordMo
         </div>
     );
 }
+
+interface CoupleAvatarModalProps {
+    onSend: (userImage?: string, characterImage?: string) => void;
+    onClose: () => void;
+}
+
+export function CoupleAvatarModal({ onSend, onClose }: CoupleAvatarModalProps) {
+    const [userImage, setUserImage] = useState<string | null>(null);
+    const [characterImage, setCharacterImage] = useState<string | null>(null);
+    const userInputRef = useRef<HTMLInputElement>(null);
+    const characterInputRef = useRef<HTMLInputElement>(null);
+
+    const readFile = (file: File, setter: (url: string) => void) => {
+        const reader = new FileReader();
+        reader.onload = () => setter(String(reader.result || ""));
+        reader.readAsDataURL(file);
+    };
+
+    const canSend = Boolean(userImage || characterImage);
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal-dialog couple-avatar-send-dialog" onClick={e => e.stopPropagation()}>
+                <div className="ts-16 font-semibold text-center text-[var(--c-text)]">发送情头</div>
+                <p className="couple-avatar-send-hint">在聊天室发给对方。对方那张会作为情头发出，模型识别后会换上聊天头像。可以只发对方那张，也可以两张一起发。</p>
+                <div className="couple-avatar-send-grid">
+                    <button type="button" className="couple-avatar-send-slot" onClick={() => userInputRef.current?.click()}>
+                        <span className="couple-avatar-send-preview">
+                            {userImage ? <img src={userImage} alt="" /> : <span className="couple-avatar-send-plus" />}
+                        </span>
+                        <span>我的</span>
+                        <input ref={userInputRef} type="file" accept="image/*" className="hidden" onChange={e => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) readFile(file, setUserImage);
+                        }} />
+                    </button>
+                    <button type="button" className="couple-avatar-send-slot" onClick={() => characterInputRef.current?.click()}>
+                        <span className="couple-avatar-send-preview">
+                            {characterImage ? <img src={characterImage} alt="" /> : <span className="couple-avatar-send-plus" />}
+                        </span>
+                        <span>对方的</span>
+                        <input ref={characterInputRef} type="file" accept="image/*" className="hidden" onChange={e => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) readFile(file, setCharacterImage);
+                        }} />
+                    </button>
+                </div>
+                <div className="flex gap-3 w-full">
+                    <button type="button" onClick={onClose} className="ui-btn ui-btn-ghost ui-btn-bordered-ghost flex-1">取消</button>
+                    <button
+                        type="button"
+                        onClick={() => { if (canSend) onSend(userImage || undefined, characterImage || undefined); }}
+                        disabled={!canSend}
+                        className="ui-btn ui-btn-success flex-1"
+                    >发送</button>
+                </div>
+            </div>
+        </div>
+    );
+}

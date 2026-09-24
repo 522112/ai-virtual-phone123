@@ -332,6 +332,7 @@ export function loadNativeTimeline(
             else if (msg.mediaType === "relationship_invite") content = `[关系邀请:${msg.mediaData?.label || "关系"}]`;
             else if (msg.mediaType === "accept_relationship") content = "[同意关系]";
             else if (msg.mediaType === "decline_relationship") content = "[拒绝关系]";
+            else if (msg.mediaType === "change_avatar") content = "[换上情头]";
             else if (msg.mediaType === "relationship_space") {
                 const action = msg.mediaData?.spaceAction;
                 const label = msg.mediaData?.label || "";

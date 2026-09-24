@@ -47,6 +47,10 @@ import {
     materializeRelationshipSpacePart,
 } from "./relationship-storage";
 import {
+    applyCharacterAvatarFromChatImage,
+    findLatestWearableCoupleAvatarImage,
+} from "./couple-avatar-storage";
+import {
     createPendingChatGeneratedImageData,
     generateAndApplyChatGeneratedImage,
     isPendingChatGeneratedImageMessage,
@@ -777,6 +781,24 @@ export function handleFollowUpMediaAction(
     sessionId: string,
     contextMessages: ChatMessage[],
 ) {
+    if (actionType === "change_avatar") {
+        const sess = loadChatSessions().find(item => item.id === sessionId);
+        if (!sess || sess.isGroup) return;
+        const imageRef = findLatestWearableCoupleAvatarImage(contextMessages);
+        void applyCharacterAvatarFromChatImage(sess.contactId, imageRef).then(ok => {
+            if (!ok) return;
+            const charName = resolveFollowUpSenderName(sessionId);
+            pushChatMessage({
+                sessionId,
+                role: "system",
+                content: `${charName}换上了你发来的情头`,
+                responseBatchId: createResponseBatchId(),
+                rawResponseText: "[换上情头]",
+            });
+        });
+        return;
+    }
+
     if (actionType === "accept_relationship" || actionType === "decline_relationship") {
         const accept = actionType === "accept_relationship";
         const sess = loadChatSessions().find(item => item.id === sessionId);
@@ -982,7 +1004,8 @@ export async function parseAndSaveResponse(
         if (p.mediaType === "accept_red_packet" || p.mediaType === "decline_red_packet"
             || p.mediaType === "accept_transfer" || p.mediaType === "decline_transfer"
             || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
-            || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship") {
+            || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship"
+            || p.mediaType === "change_avatar") {
             handleFollowUpMediaAction(p.mediaType, sessionId, contextMessages);
             continue;
         }

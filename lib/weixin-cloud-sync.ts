@@ -83,6 +83,12 @@ import {
   parseRelationshipKindLabel,
   relationshipKindLabel,
 } from "./relationship-storage";
+import {
+  applyCharacterAvatarFromChatImage,
+  buildCoupleAvatarInstruction,
+  findLatestWearableCoupleAvatarImage,
+  getCoupleAvatarPromptHint,
+} from "./couple-avatar-storage";
 
 const WEIXIN_CLOUD_CONFIG_KEY = "weixin_cloud_sync_config_v1";
 const WEIXIN_CLOUD_PREFIX = "weixin-cloud";
@@ -763,6 +769,13 @@ export function buildWeixinCloudPromptMessages(
   const relationshipInstruction = buildRelationshipSpaceInstruction(snapshot.character.id, snapshot.session.isGroup);
   if (relationshipInstruction) {
     messages.push({ role: "system", content: relationshipInstruction });
+  }
+  const coupleAvatarInstruction = buildCoupleAvatarInstruction(
+    snapshot.session.isGroup,
+    getCoupleAvatarPromptHint(history),
+  );
+  if (coupleAvatarInstruction) {
+    messages.push({ role: "system", content: coupleAvatarInstruction });
   }
   return messages;
 }
@@ -1994,6 +2007,15 @@ function importCloudAssistantMessage(
 
   const messages: ChatMessage[] = [];
   visibleParts.forEach((part, index) => {
+    if (part.mediaType === "change_avatar" && !session.isGroup) {
+      const imageRef = findLatestWearableCoupleAvatarImage(loadChatMessages(session.id));
+      void applyCharacterAvatarFromChatImage(stored.characterId, imageRef);
+      messages.push(makeCloudImportedMessage(stored, session.id, createdAt, index, {
+        role: "system",
+        content: `${characterName}换上了你发来的情头`,
+      }, strippedContent));
+      return;
+    }
     if ((part.mediaType === "accept_relationship" || part.mediaType === "decline_relationship") && !session.isGroup) {
       const accept = part.mediaType === "accept_relationship";
       const decided = applyCharacterRelationshipDecision({

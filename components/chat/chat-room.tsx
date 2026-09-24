@@ -10,7 +10,7 @@ import { isKnownStickerLabel } from "@/lib/sticker-data";
 import { translateReasoningText } from "@/lib/reasoning-translate";
 import { MessageBubble, MediaDetailModal, prewarmStickerCache, BilingualTextBlock, isStandaloneHtmlPreviewContent, normalizeTextBubbleContent } from "./message-bubble";
 import { GeneratedImageErrorDialog } from "./generated-image-error-dialog";
-import { PhotoInputModal, TextPhotoModal, VoiceRecordModal, RedPacketModal, LocationInputModal, SystemInstructionModal } from "./rich-input-modals";
+import { PhotoInputModal, TextPhotoModal, VoiceRecordModal, RedPacketModal, LocationInputModal, SystemInstructionModal, CoupleAvatarModal } from "./rich-input-modals";
 import { EmojiPanel, StickerPanel } from "./emoji-panel";
 import { StickerSearchSuggest } from "./sticker-search-suggest";
 import { StateValuesPanel } from "./state-values-panel";
@@ -44,7 +44,14 @@ import { GiftPickerModal } from "./gift-picker-modal";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { deleteWeixinCloudMessagesFromCloud, emitWeixinSyncToast, syncAllWeixinBotRuntimesToCloud } from "@/lib/weixin-cloud-sync";
 import { loadBindingConfig, loadPresets, loadRegexes, resolveBinding, resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
-import { applyCoupleAvatarIfUserSentPair } from "@/lib/couple-avatar-storage";
+import {
+    applyCharacterAvatarFromChatImage,
+    applyCoupleAvatarIfUserSentPair,
+    applyUserAvatarFromChatImage,
+    COUPLE_AVATARS_UPDATED_EVENT,
+    findLatestWearableCoupleAvatarImage,
+    looksLikeCharacterCoupleAvatarLabel,
+} from "@/lib/couple-avatar-storage";
 import { generateGroupChatCompletion, generateGroupOfflineChatCompletion, parseGroupChatResponse, buildEditableGroupRoundText } from "@/lib/group-chat-engine";
 import { appendChatOfflineTurn, deleteChatOfflineTurn, deleteChatOfflineTurnsFrom, extractThinkingTag, loadChatOfflineTurns, parseOfflineResponse, saveChatOfflineTurns, updateChatOfflineTurn, type ChatOfflineTurn } from "@/lib/chat-offline-storage";
 import { applyDisplayRegex, applyEditRegex } from "@/lib/llm-prompt-assembler";
@@ -511,7 +518,7 @@ type PendingMessageJump = {
 };
 
 const TRANSIENT_MESSAGE_PREFIX = "ui-transient-";
-type RichModalKind = "photo" | "text_photo" | "red_packet" | "transfer" | "location" | "transfer_target" | "voice_msg" | "gift" | "system_instruction";
+type RichModalKind = "photo" | "text_photo" | "red_packet" | "transfer" | "location" | "transfer_target" | "voice_msg" | "gift" | "system_instruction" | "couple_avatar";
 type ChatTextInputHandle = {
     appendText: (text: string, options?: { focus?: boolean }) => void;
     clear: () => void;
@@ -756,6 +763,16 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>, label: "位置", onClick: () => onOpenRichModal("location") },
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="22" /><line x1="8" y1="22" x2="16" y2="22" /></svg>, label: "语音条", onClick: () => onOpenRichModal("voice_msg") },
         ...(!isGroup ? [{ icon: <Heart size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "关系", onClick: onOpenRelationship }] : []),
+        ...(!isGroup ? [{
+            icon: (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="9" cy="12" r="5" />
+                    <circle cx="15" cy="12" r="5" />
+                </svg>
+            ),
+            label: "情头",
+            onClick: () => onOpenRichModal("couple_avatar"),
+        }] : []),
         ...customPlusActions.map(action => ({
             icon: action.appIconDataUrl
                 ? <span className="chat-plus-custom-app-icon" style={{ backgroundImage: `url(${action.appIconDataUrl})` }} aria-hidden="true" />
@@ -1710,7 +1727,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 part.mediaType === "accept_payment_request" ||
                 part.mediaType === "decline_payment_request" ||
                 part.mediaType === "accept_relationship" ||
-                part.mediaType === "decline_relationship"
+                part.mediaType === "decline_relationship" ||
+                part.mediaType === "change_avatar"
             ) {
                 return [];
             }
@@ -1768,9 +1786,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         };
         window.addEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
         window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
+        window.addEventListener(COUPLE_AVATARS_UPDATED_EVENT, refreshAvatars);
         return () => {
             window.removeEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
             window.removeEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
+            window.removeEventListener(COUPLE_AVATARS_UPDATED_EVENT, refreshAvatars);
         };
     }, [session.contactId, session.isGroup]);
 
@@ -2159,7 +2179,33 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         rawResponseText,
     });
 
+    const refreshChatAvatars = () => {
+        if (session.isGroup) return;
+        setCharacter(loadCharacters().find(item => item.id === session.contactId) || character);
+        setUserIdentity(resolveUserIdentity(session.contactId, "chat"));
+    };
+
+    const wearCoupleAvatarFromLatestUserImage = async (charN: string) => {
+        const latest = loadChatMessages(session.id);
+        const imageRef = findLatestWearableCoupleAvatarImage(latest.length ? latest : messages);
+        const ok = await applyCharacterAvatarFromChatImage(session.contactId, imageRef);
+        if (!ok) return false;
+        refreshChatAvatars();
+        const notice = pushChatMessage({
+            sessionId: session.id,
+            role: "system",
+            content: `${charN}换上了你发来的情头`,
+            ...buildAssistantActionEditMeta("[换上情头]"),
+        });
+        setMessages(prev => [...prev, notice]);
+        return true;
+    };
+
     const handleAIMediaAction = (actionType: string, charN: string, userN: string) => {
+        if (actionType === "change_avatar") {
+            void wearCoupleAvatarFromLatestUserImage(charN);
+            return;
+        }
         if (actionType === "accept_relationship" || actionType === "decline_relationship") {
             const accept = actionType === "accept_relationship";
             const latest = loadChatMessages(session.id);
@@ -2922,7 +2968,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             if (p.mediaType === "accept_red_packet" || p.mediaType === "decline_red_packet"
                 || p.mediaType === "accept_transfer" || p.mediaType === "decline_transfer"
                 || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
-                || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship") {
+                || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship"
+                || p.mediaType === "change_avatar") {
                 if (p.mediaType === "decline_red_packet" || p.mediaType === "decline_transfer" || p.mediaType === "decline_payment_request" || p.mediaType === "decline_relationship") {
                     hasDecline = true;
                 }
@@ -3574,9 +3621,21 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             })
             : null;
         if (coupleNotice) {
-            setCharacter(loadCharacters().find(item => item.id === session.contactId) || character);
+            refreshChatAvatars();
         }
         setMessages(prev => coupleNotice ? [...prev, newMsg, coupleNotice] : [...prev, newMsg]);
+        if (!coupleNotice && !session.isGroup && mediaType === "image" && mediaUrl && looksLikeCharacterCoupleAvatarLabel(mediaData?.label || content)) {
+            void applyCharacterAvatarFromChatImage(session.contactId, mediaUrl).then(ok => {
+                if (!ok) return;
+                refreshChatAvatars();
+                const notice = pushChatMessage({
+                    sessionId: session.id,
+                    role: "system",
+                    content: `${character?.name || "对方"}换上了你发来的情头`,
+                });
+                setMessages(prev => [...prev, notice]);
+            });
+        }
         setPendingGenerate(true);
         return true;
     };
@@ -4698,7 +4757,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     part.mediaType === "accept_payment_request" ||
                     part.mediaType === "decline_payment_request" ||
                     part.mediaType === "accept_relationship" ||
-                    part.mediaType === "decline_relationship"
+                    part.mediaType === "decline_relationship" ||
+                    part.mediaType === "change_avatar"
                 )
             ) {
                 return [];
@@ -6643,6 +6703,25 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             {richModal === "photo" && (
                 <PhotoInputModal
                     onSend={(desc, imageDataUrl) => { setRichModal(null); sendRichMessage("image", { label: desc }, "", imageDataUrl); }}
+                    onClose={() => setRichModal(null)}
+                />
+            )}
+            {richModal === "couple_avatar" && (
+                <CoupleAvatarModal
+                    onSend={(userImage, characterImage) => {
+                        if (isGenerating) {
+                            showChatToast("请先等待对方回复");
+                            return;
+                        }
+                        setRichModal(null);
+                        if (userImage) {
+                            sendRichMessage("image", { label: "我的头像" }, "", userImage);
+                            void applyUserAvatarFromChatImage(session.contactId, userImage).then(() => refreshChatAvatars());
+                        }
+                        if (characterImage) {
+                            sendRichMessage("image", { label: "情头" }, "", characterImage);
+                        }
+                    }}
                     onClose={() => setRichModal(null)}
                 />
             )}
