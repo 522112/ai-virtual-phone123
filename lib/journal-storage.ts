@@ -199,6 +199,9 @@ function normalizeAnnotation(value: unknown): JournalAnnotation | null {
     characterId,
     characterName: typeof item.characterName === "string" ? item.characterName : (authorType === "user" ? "我" : "对方"),
     text: item.text,
+    stamp: JOURNAL_STAMPS.includes(item.stamp as JournalStampKind) ? item.stamp as JournalStampKind : undefined,
+    x: typeof item.x === "number" && Number.isFinite(item.x) ? Math.min(86, Math.max(0, item.x)) : undefined,
+    y: typeof item.y === "number" && Number.isFinite(item.y) ? Math.min(86, Math.max(0, item.y)) : undefined,
     createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
   };
 }
@@ -312,6 +315,12 @@ export function deleteJournalPage(bookId: string, pageId: string): void {
 }
 
 export function addJournalAnnotation(input: Omit<JournalAnnotation, "id" | "createdAt">): JournalAnnotation {
+  const book = getJournalBook(input.bookId);
+  if (book?.kind === "couple") {
+    if (input.authorType !== "character" || !book.characterId || input.characterId !== book.characterId) {
+      throw new Error("情侣手账只能由对方批注。");
+    }
+  }
   const item: JournalAnnotation = {
     ...input,
     id: generateId("jnote"),

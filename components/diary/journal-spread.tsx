@@ -174,7 +174,6 @@ export function JournalBlockView({
 
 function JournalLeaf({
   side,
-  label,
   page,
   annotations,
   active,
@@ -184,7 +183,6 @@ function JournalLeaf({
   onRemoveBlock,
 }: {
   side: JournalSide;
-  label: string;
   page: JournalPage;
   annotations: JournalAnnotation[];
   active: boolean;
@@ -193,14 +191,15 @@ function JournalLeaf({
   onChangeBlock: (block: JournalBlock) => void;
   onRemoveBlock: (blockId: string) => void;
 }) {
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   const blocks = blocksOnSide(page, side);
   const notes = annotations.filter(item => !item.side || item.side === side);
+  const openNote = notes.find(item => item.id === openNoteId) || null;
   return (
     <div
       className={`journal-leaf journal-leaf-${side}${active ? " is-active" : ""}`}
       onClick={onActivate}
     >
-      <div className="journal-leaf-label">{label}</div>
       <div className="journal-leaf-body">
         {blocks.length === 0 ? <p className="journal-empty">这一页还是空的</p> : blocks.map(block => (
           <JournalBlockView
@@ -212,11 +211,25 @@ function JournalLeaf({
           />
         ))}
         {notes.map(item => (
-          <p key={item.id} className={`journal-annotation${item.authorType === "user" ? " is-user" : ""}`}>
-            <b>{item.characterName}</b>
-            {item.text}
-          </p>
+          <button
+            key={item.id}
+            type="button"
+            className={`journal-note-sticker${openNoteId === item.id ? " is-open" : ""}`}
+            style={{ left: `${item.x ?? (side === "right" ? 64 : 18)}%`, top: `${item.y ?? 16}%` }}
+            onClick={event => {
+              event.stopPropagation();
+              setOpenNoteId(current => current === item.id ? null : item.id);
+            }}
+            aria-label="查看批注"
+          >
+            <JournalStampMark stamp={item.stamp || "heart"} />
+          </button>
         ))}
+        {openNote ? (
+          <div className="journal-note-pop" onClick={event => event.stopPropagation()}>
+            <p>{openNote.text}</p>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -241,16 +254,11 @@ export function JournalOpenBook({
   onChangeBlock: (block: JournalBlock) => void;
   onRemoveBlock: (blockId: string) => void;
 }) {
-  const leftLabel = book.kind === "couple" ? "我" : "左页";
-  const rightLabel = book.kind === "couple"
-    ? (book.characterId ? "对方" : "右页")
-    : "右页";
   return (
     <div className={`journal-spread-stage${preview ? " is-preview" : ""}`}>
       <div className="journal-spread">
         <JournalLeaf
           side="left"
-          label={leftLabel}
           page={page}
           annotations={annotations}
           active={!preview && activeSide === "left"}
@@ -262,7 +270,6 @@ export function JournalOpenBook({
         <span className="journal-spread-gutter" aria-hidden="true" />
         <JournalLeaf
           side="right"
-          label={rightLabel}
           page={page}
           annotations={annotations}
           active={!preview && activeSide === "right"}
@@ -278,43 +285,33 @@ export function JournalOpenBook({
 
 export function JournalFlipPreview({
   book,
+  pageId,
   annotations,
   onClose,
 }: {
   book: JournalBook;
+  pageId?: string;
   annotations: JournalAnnotation[];
   onClose: () => void;
 }) {
-  const [index, setIndex] = useState(0);
-  const [turning, setTurning] = useState<"next" | "prev" | null>(null);
-  const page = book.pages[index] || null;
-  const canPrev = index > 0;
-  const canNext = index < book.pages.length - 1;
+  const page = useMemo(() => {
+    if (pageId) return book.pages.find(item => item.id === pageId) || book.pages[0] || null;
+    return book.pages[0] || null;
+  }, [book.pages, pageId]);
   const pageNotes = useMemo(
     () => (page ? annotations.filter(item => item.pageId === page.id) : []),
     [annotations, page],
   );
 
-  const turn = (dir: "next" | "prev") => {
-    if (turning) return;
-    if (dir === "next" && !canNext) return;
-    if (dir === "prev" && !canPrev) return;
-    setTurning(dir);
-    window.setTimeout(() => {
-      setIndex(current => current + (dir === "next" ? 1 : -1));
-      setTurning(null);
-    }, 420);
-  };
-
   return (
     <div className="journal-flip-overlay" onClick={onClose}>
       <div className="journal-flip-sheet" onClick={event => event.stopPropagation()}>
         <div className="journal-flip-head">
-          <span>{book.title}</span>
+          <span>{page?.title || book.title}</span>
           <button type="button" onClick={onClose}>合上</button>
         </div>
         {page ? (
-          <div className={`journal-flip-book${turning ? ` is-${turning}` : ""}`}>
+          <div className="journal-flip-book">
             <JournalOpenBook
               book={book}
               page={page}
@@ -329,11 +326,6 @@ export function JournalFlipPreview({
         ) : (
           <p className="journal-empty">这一册还是空的</p>
         )}
-        <div className="journal-flip-nav">
-          <button type="button" disabled={!canPrev || Boolean(turning)} onClick={() => turn("prev")}>上一摊</button>
-          <span>{book.pages.length === 0 ? "0 / 0" : `${index + 1} / ${book.pages.length}`}</span>
-          <button type="button" disabled={!canNext || Boolean(turning)} onClick={() => turn("next")}>下一摊</button>
-        </div>
       </div>
     </div>
   );
@@ -371,8 +363,8 @@ export function JournalEditBar({
       {book.kind === "couple" && book.characterId ? (
         <>
           <button type="button" onClick={onClip}>摘录</button>
-          <button type="button" disabled={Boolean(busy)} onClick={onInviteWrite}>请对方写右页</button>
-          <button type="button" disabled={Boolean(busy)} onClick={onInviteDoodle}>请对方涂右页</button>
+          <button type="button" disabled={Boolean(busy)} onClick={onInviteWrite}>请对方来写</button>
+          <button type="button" disabled={Boolean(busy)} onClick={onInviteDoodle}>请对方来画</button>
         </>
       ) : null}
     </div>
