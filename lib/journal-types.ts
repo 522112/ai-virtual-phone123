@@ -4,12 +4,17 @@ export type JournalSide = "left" | "right";
 
 export type JournalStampKind = "heart" | "star" | "flower" | "arrow" | "underline" | "tape";
 
+export type JournalBrushKind = "pen" | "marker" | "pencil" | "highlighter" | "watercolor";
+
+export type JournalFontId = "hand" | "soft" | "serif" | "sans" | "mono";
+
 export type JournalStrokePoint = { x: number; y: number };
 
 export type JournalStroke = {
   points: JournalStrokePoint[];
   color: string;
   width: number;
+  brush?: JournalBrushKind;
 };
 
 export type JournalBlockAuthor = "user" | "character";
@@ -22,9 +27,12 @@ type JournalBlockBase = {
   characterId?: string;
   side: JournalSide;
   fontSize?: number;
+  fontFamily?: JournalFontId;
   x?: number;
   y?: number;
   scale?: number;
+  boxW?: number;
+  boxH?: number;
 };
 
 export type JournalBlock =
@@ -97,3 +105,31 @@ export const JOURNAL_STAMPS: JournalStampKind[] = [
   "underline",
   "tape",
 ];
+
+export const JOURNAL_BRUSHES: JournalBrushKind[] = [
+  "pen",
+  "marker",
+  "pencil",
+  "highlighter",
+  "watercolor",
+];
+
+export const JOURNAL_BRUSH_LABEL: Record<JournalBrushKind, string> = {
+  pen: "钢笔",
+  marker: "马克笔",
+  pencil: "铅笔",
+  highlighter: "荧光笔",
+  watercolor: "水彩",
+};
+
+export const JOURNAL_FONTS: Array<{ id: JournalFontId; label: string; css: string }> = [
+  { id: "hand", label: "手写", css: '"NoteWall Xiaozhitiao", "NoteWall Ximai", cursive' },
+  { id: "soft", label: "软笔", css: '"NoteWall Huiwen", "NoteWall Xiaozhitiao", cursive' },
+  { id: "serif", label: "宋体", css: '"Songti SC", "Noto Serif SC", Georgia, serif' },
+  { id: "sans", label: "黑体", css: '"PingFang SC", "Noto Sans SC", sans-serif' },
+  { id: "mono", label: "打字", css: 'ui-monospace, "Courier New", monospace' },
+];
+
+export function journalFontCss(id?: JournalFontId): string | undefined {
+  return JOURNAL_FONTS.find(item => item.id === id)?.css;
+}

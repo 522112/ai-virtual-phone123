@@ -16,7 +16,7 @@ import {
 import type { ApiConfig, PresetConfig, RegexConfig, WorldBookConfig } from "./settings-types";
 import { prepareShortTermContext } from "./short-term-assembler";
 import type { Character } from "./character-types";
-import { JOURNAL_STAMPS, type JournalDrawingSkill, type JournalStampKind } from "./journal-types";
+import { JOURNAL_STAMPS, type JournalAnnotation, type JournalBlock, type JournalDrawingSkill, type JournalStampKind } from "./journal-types";
 import type { JournalBook, JournalPage, JournalSide } from "./journal-types";
 import {
   addJournalAnnotation,
@@ -123,6 +123,7 @@ export type JournalCharacterPageDraft = {
   stampX?: number;
   stampY?: number;
   doodle?: boolean;
+  doodleHint?: string;
   skill: JournalDrawingSkill;
 };
 
@@ -134,14 +135,16 @@ function parseCharacterPageDraft(raw: string, skill: JournalDrawingSkill): Journ
   const fontSize = Number(parsed.fontSize);
   const stampX = Number(parsed.stampX);
   const stampY = Number(parsed.stampY);
+  const doodleHint = String(parsed.doodleHint ?? parsed.subject ?? "").trim();
   return {
-    text: text ? text.slice(0, 140) : undefined,
-    fontSize: Number.isFinite(fontSize) ? Math.min(22, Math.max(11, fontSize)) : undefined,
+    text: text ? text.slice(0, 180) : undefined,
+    fontSize: Number.isFinite(fontSize) ? Math.min(28, Math.max(11, fontSize)) : undefined,
     stamp,
     stampNote: String(parsed.stampNote ?? "").trim().slice(0, 16) || undefined,
     stampX: Number.isFinite(stampX) ? Math.min(80, Math.max(0, stampX)) : undefined,
     stampY: Number.isFinite(stampY) ? Math.min(80, Math.max(0, stampY)) : undefined,
     doodle: parsed.doodle === true || String(parsed.doodle).toLowerCase() === "true",
+    doodleHint: doodleHint ? doodleHint.slice(0, 24) : undefined,
     skill,
   };
 }
@@ -149,7 +152,10 @@ function parseCharacterPageDraft(raw: string, skill: JournalDrawingSkill): Journ
 function pickQuoteFromPage(page?: JournalPage, preferred?: string): string | undefined {
   const wanted = preferred?.trim();
   if (wanted) return wanted.slice(0, 48);
-  const text = page?.blocks.find(block => block.type === "text" && block.text.trim())?.text.trim() || "";
+  const written = page?.blocks.find((block): block is Extract<JournalBlock, { type: "text" }> => (
+    block.type === "text" && Boolean(block.text.trim())
+  ));
+  const text = written?.text.trim() || "";
   if (!text) return undefined;
   const slice = text.slice(0, 16).trim();
   return slice || undefined;
@@ -175,18 +181,22 @@ export async function generateJournalAnnotation(input: {
   book: JournalBook;
   page?: JournalPage;
   side?: JournalSide;
+  annotations?: JournalAnnotation[];
 }): Promise<string> {
   if (input.book.kind === "couple" && input.book.characterId !== input.characterId) {
     throw new ChatEngineError("情侣手账只能由对方批注。");
   }
   const target = input.page
-    ? (input.side ? formatJournalSidePlainText(input.page, input.side) : formatJournalPagePlainText(input.page))
+    ? (input.side
+      ? formatJournalSidePlainText(input.page, input.side, input.annotations)
+      : formatJournalPagePlainText(input.page, input.annotations))
     : formatJournalBookPlainText(input.book);
   const resolved = await resolveJournalGeneration(
     input.characterId,
     [
       "【手账划线批注】",
-      "用户把这一页手账给你看。若某一句让你有感，就划出那几个字，再写你的批注。",
+      "用户把这一页手账给你看。用户已经写过的字、画和批注你都看得见，按人设接下去。",
+      "若某一句让你有感，就划出那几个字，再写你的批注。",
       "不要改原页上的字和画，也不要复述整页。字数随心情，一两句即可。",
       "只输出 JSON：{\"quote\":\"从原文里原样摘出的短句\",\"text\":\"你的感悟\"}",
       "",
@@ -223,6 +233,7 @@ export async function generateJournalCharacterPage(input: {
   book: JournalBook;
   page: JournalPage;
   mode?: "write" | "doodle" | "together";
+  annotations?: JournalAnnotation[];
 }): Promise<JournalCharacterPageDraft> {
   const character = loadCharacters().find(item => item.id === input.characterId);
   const skill = inferJournalDrawingSkill({
@@ -233,23 +244,24 @@ export async function generateJournalCharacterPage(input: {
   });
   const mode = input.mode || "together";
   const modeHint = mode === "doodle"
-    ? "这次请画画。可以只涂两笔、盖个小章，也可以顺手写一句。画得怎样按你自己的水平来。"
+    ? "这次请画画。根据这一页已经写了什么来联想：写到吃的就画那碗东西，写到天气就画天气，不要只会画爱心星星。可以顺手写一句。"
     : mode === "write"
-      ? "这次以写为主。字数随意，写一句或写一段都行。若人设里你也爱画，可以一起画。"
-      : "写和画都可以一起做，按人设和当下心情决定：可以只写、只画，也可以又写又画。";
+      ? "这次以写为主。先看用户写了什么，再按人设接上：可以回应、补充、吐槽。若人设里你也爱画，可以一起画相关的东西。"
+      : "写和画都可以一起做。用户先写了你也能看见。按人设和当下心情决定：可以只写、只画，也可以又写又画。";
   const resolved = await resolveJournalGeneration(
     input.characterId,
     [
       mode === "doodle" ? "【情侣手账来画】" : "【情侣手账接着写】",
-      "这是一页手账。用户已经写了一些，请你接着写或画在同一页上，不要另开左右页。",
+      "这是你们一起做的一页手账。用户已经写在上面的字、画和批注你都看得见，不要装作没看见。",
+      "请接着写或画在同一页上，不要另开左右页。",
       "这一页能放下多少写多少，字不要太多。写不下就少写一点，后面还可以再写下一页。",
-      "不必编完整剧情，像一起做手账那样随意发挥。",
+      "画画时请联想具体事物，尽量画得像一点，而不是随便两笔符号。",
       drawingSkillHint(skill),
       modeHint,
-      "只输出 JSON：{\"text\":\"这一页放得下的几句，也可空\",\"fontSize\":12|14|17,\"stamp\":\"heart|star|flower|arrow|underline|tape|none\",\"stampNote\":\"不超过16字\",\"doodle\":true|false}",
+      "只输出 JSON：{\"text\":\"这一页放得下的几句，也可空\",\"fontSize\":12|14|17,\"stamp\":\"heart|star|flower|arrow|underline|tape|none\",\"stampNote\":\"不超过16字\",\"doodle\":true|false,\"doodleHint\":\"你想画的东西，一两个词，如麻辣烫、雨天、小猫\"}",
       "",
       "这一页现有的内容：",
-      formatJournalPagePlainText(input.page),
+      formatJournalPagePlainText(input.page, input.annotations),
     ].join("\n"),
   );
   const raw = await sendLLMRequest(
