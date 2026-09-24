@@ -6,6 +6,7 @@ import { DotsThree } from "@phosphor-icons/react";
 
 import { loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
+import { overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
 import { generateDiaryEntryForCharacter } from "@/lib/diary-entry-engine";
 import { useDiaryGenerating } from "@/lib/diary-generating-tracker";
 import {
@@ -241,7 +242,7 @@ export function DiaryEntriesApp({ onBack, onNotice }: DiaryEntriesAppProps) {
   }, [notify, refreshEntries]);
 
   useEffect(() => {
-    setCharacters(loadCharacters());
+    setCharacters(loadCharacters().map(overlayCharacterForDisplay));
     refreshEntries();
   }, [refreshEntries]);
 

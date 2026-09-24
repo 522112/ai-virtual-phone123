@@ -36,6 +36,7 @@ import { clearChatOfflineTurns } from "@/lib/chat-offline-storage";
 import { removeChatSessionCompletely } from "@/lib/chat-session-remove";
 import { triggerDeleteFriendReaction } from "@/lib/friend-request-engine";
 import { loadCharacters } from "@/lib/character-storage";
+import { overlayCharacterForDisplay, overlayUserIdentityForDisplay } from "@/lib/couple-avatar-storage";
 import { isAgentComputerConfigured } from "@/lib/agent-computer";
 import { CharacterComputerPage } from "./character-computer-page";
 import { resolveUserIdentity, loadBindingConfig, loadPresets, resolveBinding } from "@/lib/settings-storage";
@@ -539,7 +540,7 @@ export function ChatSettingsPanel({
 
     const [groupName, setGroupName] = useState(session.groupName || "");
 
-    const characters = loadCharacters();
+    const characters = loadCharacters().map(overlayCharacterForDisplay);
     const character = characters.find(c => c.id === session.contactId);
 
     const characterName = session.isGroup
@@ -550,7 +551,9 @@ export function ChatSettingsPanel({
     const groupChars = session.isGroup
         ? (session.participantIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean)
         : [];
-    const userIdentity = resolveUserIdentity(undefined, session.isGroup ? "group_chat" : "chat");
+    const userIdentity = session.isGroup
+        ? resolveUserIdentity(undefined, "group_chat")
+        : overlayUserIdentityForDisplay(session.contactId, resolveUserIdentity(session.contactId, "chat"));
 
     useEffect(() => {
         const characterId = offlineSettingsCharacterId || (!session.isGroup ? session.contactId : "");

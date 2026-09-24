@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { ChatFallbackAvatar } from "@/components/chat/chat-fallback-avatar";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
+import { COUPLE_AVATARS_UPDATED_EVENT, overlayCharacterForDisplay, overlayUserIdentityForDisplay } from "@/lib/couple-avatar-storage";
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import { generateListenTogetherReply, splitListenTogetherBubbles, type ListenTogetherAction } from "@/lib/listen-together-engine";
 import { getMusicControlBridge } from "@/lib/music-control-bridge";
@@ -103,9 +104,11 @@ export function ListenTogetherDuoStage({
     const refresh = () => setTick(n => n + 1);
     window.addEventListener(CHARACTERS_UPDATED_EVENT, refresh);
     window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, refresh);
+    window.addEventListener(COUPLE_AVATARS_UPDATED_EVENT, refresh);
     return () => {
       window.removeEventListener(CHARACTERS_UPDATED_EVENT, refresh);
       window.removeEventListener(USER_IDENTITIES_UPDATED_EVENT, refresh);
+      window.removeEventListener(COUPLE_AVATARS_UPDATED_EVENT, refresh);
     };
   }, []);
 
@@ -118,8 +121,11 @@ export function ListenTogetherDuoStage({
 
   if (!session) return null;
 
-  const character = loadCharacters().find(item => item.id === session.characterId) || null;
-  const identity = resolveUserIdentity(session.characterId, "chat");
+  const character = (() => {
+    const raw = loadCharacters().find(item => item.id === session.characterId) || null;
+    return raw ? overlayCharacterForDisplay(raw) : null;
+  })();
+  const identity = overlayUserIdentityForDisplay(session.characterId, resolveUserIdentity(session.characterId, "chat"));
   const userName = identity?.name || "我";
 
   return (
@@ -198,9 +204,11 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
     const refreshAvatars = () => setAvatarTick(n => n + 1);
     window.addEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
     window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
+    window.addEventListener(COUPLE_AVATARS_UPDATED_EVENT, refreshAvatars);
     return () => {
       window.removeEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
       window.removeEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
+      window.removeEventListener(COUPLE_AVATARS_UPDATED_EVENT, refreshAvatars);
     };
   }, []);
 
@@ -265,7 +273,9 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
     const activeIds = new Set(
       loadRelationshipBindings().filter(item => item.status === "active").map(item => item.characterId),
     );
-    return [...all].sort((a, b) => Number(activeIds.has(b.id)) - Number(activeIds.has(a.id)));
+    return [...all]
+      .sort((a, b) => Number(activeIds.has(b.id)) - Number(activeIds.has(a.id)))
+      .map(overlayCharacterForDisplay);
   }, [panel]);
 
   const notify = (message: string) => onNotice?.(message);
@@ -430,8 +440,9 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                 </div>
                 <div className="lt-messages" ref={listRef} data-avatar-rev={avatarTick}>
                   {session.messages.length === 0 ? <p className="lt-empty">先跟对方说一句</p> : session.messages.map(item => {
-                    const character = loadCharacters().find(entry => entry.id === session.characterId) || null;
-                    const identity = resolveUserIdentity(session.characterId, "chat");
+                    const raw = loadCharacters().find(entry => entry.id === session.characterId) || null;
+                    const character = raw ? overlayCharacterForDisplay(raw) : null;
+                    const identity = overlayUserIdentityForDisplay(session.characterId, resolveUserIdentity(session.characterId, "chat"));
                     const mine = item.author === "user";
                     const avatar = mine ? identity?.avatarUrl : character?.avatar;
                     const alt = mine ? (identity?.name || "我") : session.characterName;

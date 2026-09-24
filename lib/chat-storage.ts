@@ -133,6 +133,7 @@ export type ChatMessage = {
         | "decline_relationship"
         | "dissolve_relationship"
         | "change_avatar"
+        | "refuse_avatar"
         | "change_space_cover"
         | "relationship_space"
         | "contact_card"
@@ -396,6 +397,7 @@ export function getChatMessagePreview(msg: ChatMessage): string {
     if (msg.mediaType === "decline_relationship") return msg.content || "[拒绝关系]";
     if (msg.mediaType === "dissolve_relationship") return msg.content || "[解除关系]";
     if (msg.mediaType === "change_avatar") return msg.content || "[换上情头]";
+    if (msg.mediaType === "refuse_avatar") return msg.content || "[拒绝换头像]";
     if (msg.mediaType === "change_space_cover") return msg.content || "[设为空间背景]";
     if (msg.mediaType === "relationship_space") return msg.content || "[关系空间]";
 

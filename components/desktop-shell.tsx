@@ -131,6 +131,7 @@ import { QuickActionFloat } from "@/components/quick-action-float";
 import { CHAT_MESSAGE_PUSHED_EVENT, CHAT_REQUEST_REPLY_EVENT, hydrateChatStorage, loadChatSessions, loadChatMessages, pushChatMessage, type ChatMessage, type ChatSession } from "@/lib/chat-storage";
 import { ensureGlobalBindingDefaults, resolveUserIdentity } from "@/lib/settings-storage";
 import { loadCharacters } from "@/lib/character-storage";
+import { resolveCharacterDisplayAvatar } from "@/lib/couple-avatar-storage";
 import { generateChatCompletion, flattenCompletionResult } from "@/lib/chat-engine";
 import { parseAIResponse } from "@/lib/rich-message-parser";
 import { requestBackgroundChatReply, scheduleFollowUp } from "@/lib/follow-up-service";
@@ -1900,12 +1901,12 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
         sessionId: detail.sessionId,
         type: detail.type,
         charName,
-        charAvatar: char?.avatar || null,
+        charAvatar: resolveCharacterDisplayAvatar(char),
         isGroup,
       });
       sendBrowserNotification("来电", {
         body: `${charName} ${isGroup ? "群" : ""}${detail.type === "voice" ? "语音通话" : "视频通话"}`,
-        icon: char?.avatar || undefined,
+        icon: resolveCharacterDisplayAvatar(char) || undefined,
       });
     };
     // Chat-room dispatches this when it handles the call directly
@@ -2621,7 +2622,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
         sessionId: detail.sessionId,
         title,
         body: detail.body.trim(),
-        avatar: detail.avatar ?? char?.avatar ?? null,
+        avatar: detail.avatar ?? resolveCharacterDisplayAvatar(char) ?? null,
         isGroup,
       });
       chatMessageNoticeTimerRef.current = window.setTimeout(() => {

@@ -13,9 +13,11 @@ import { isMediaStoreRef, loadMediaBlob } from "./media-cache-storage";
 const PENDING_REPLY_PREFIX = "pending_friend_reply_";
 
 const STORAGE_KEY = "ai_phone_couple_avatars_v1";
+const WEAR_STORAGE_KEY = "ai_phone_couple_avatar_wear_v1";
 export const COUPLE_AVATARS_UPDATED_EVENT = "couple-avatars-updated";
 
 registerKvMigration(STORAGE_KEY);
+registerKvMigration(WEAR_STORAGE_KEY);
 
 export type CoupleAvatarPair = {
     id: string;
@@ -24,6 +26,14 @@ export type CoupleAvatarPair = {
     characterAvatar: string;
     label?: string;
     createdAt: string;
+};
+
+/** 按角色佩戴的情头；不写共用 UserIdentity / 不必改 Character.avatar。 */
+export type CoupleAvatarWear = {
+    characterId: string;
+    userAvatar?: string;
+    characterAvatar?: string;
+    originalCharacterAvatar?: string | null;
 };
 
 function isBrowser(): boolean {
@@ -48,6 +58,122 @@ function isValidPair(value: unknown): value is CoupleAvatarPair {
         && typeof pair.characterAvatar === "string"
         && pair.userAvatar.trim().length > 0
         && pair.characterAvatar.trim().length > 0;
+}
+
+function isValidWear(value: unknown): value is CoupleAvatarWear {
+    if (!value || typeof value !== "object") return false;
+    const wear = value as CoupleAvatarWear;
+    return typeof wear.characterId === "string" && wear.characterId.trim().length > 0;
+}
+
+function loadAllWear(): CoupleAvatarWear[] {
+    if (!isBrowser()) return [];
+    try {
+        const raw = kvGet(WEAR_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw) as unknown;
+        return Array.isArray(parsed) ? parsed.filter(isValidWear) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveAllWear(items: CoupleAvatarWear[]): void {
+    if (!isBrowser()) return;
+    kvSet(WEAR_STORAGE_KEY, JSON.stringify(items));
+}
+
+export function loadCoupleAvatarWear(characterId: string): CoupleAvatarWear | null {
+    if (!characterId) return null;
+    return loadAllWear().find(item => item.characterId === characterId) || null;
+}
+
+export function setCoupleAvatarWear(
+    characterId: string,
+    patch: Partial<Omit<CoupleAvatarWear, "characterId">>,
+): CoupleAvatarWear | null {
+    if (!characterId) return null;
+    const all = loadAllWear();
+    const index = all.findIndex(item => item.characterId === characterId);
+    const current = index >= 0 ? all[index] : { characterId };
+    const next: CoupleAvatarWear = { ...current, ...patch, characterId };
+    const hasAny = Boolean(next.userAvatar?.trim() || next.characterAvatar?.trim());
+    if (index >= 0) {
+        if (hasAny) all[index] = next;
+        else all.splice(index, 1);
+    } else if (hasAny) {
+        all.unshift(next);
+    }
+    saveAllWear(all);
+    dispatchUpdated(characterId);
+    return next;
+}
+
+export function wearUserCoupleAvatar(characterId: string, avatar: string): void {
+    const trimmed = avatar.trim();
+    if (!characterId || !trimmed) return;
+    setCoupleAvatarWear(characterId, { userAvatar: trimmed });
+}
+
+export function wearCharacterCoupleAvatar(characterId: string, avatar: string): void {
+    const trimmed = avatar.trim();
+    if (!characterId || !trimmed) return;
+    const current = loadCoupleAvatarWear(characterId);
+    const character = loadCharacters().find(item => item.id === characterId);
+    const original = current && "originalCharacterAvatar" in current
+        ? current.originalCharacterAvatar
+        : (character?.avatar ?? null);
+    setCoupleAvatarWear(characterId, {
+        characterAvatar: trimmed,
+        originalCharacterAvatar: original ?? null,
+    });
+}
+
+export function resolveCharacterDisplayAvatar(
+    character: { id: string; avatar?: string | null } | null | undefined,
+): string | null {
+    if (!character) return null;
+    const worn = loadCoupleAvatarWear(character.id)?.characterAvatar?.trim();
+    if (worn) return worn;
+    return character.avatar || null;
+}
+
+export function resolveUserDisplayAvatar(
+    characterId?: string | null,
+    appId = "chat",
+): string | null {
+    if (characterId) {
+        const worn = loadCoupleAvatarWear(characterId)?.userAvatar?.trim();
+        if (worn) return worn;
+    }
+    return resolveUserIdentity(characterId || undefined, appId)?.avatarUrl || null;
+}
+
+export function overlayCharacterForDisplay<T extends { id: string; avatar?: string | null }>(character: T): T {
+    const avatar = resolveCharacterDisplayAvatar(character);
+    if (avatar === (character.avatar || null)) return character;
+    return { ...character, avatar };
+}
+
+export function overlayUserIdentityForDisplay(
+    characterId: string | undefined,
+    identity: UserIdentity | null,
+    appId = "chat",
+): UserIdentity | null {
+    if (!identity) return identity;
+    if (!characterId) return identity;
+    const avatarUrl = resolveUserDisplayAvatar(characterId, appId);
+    if ((avatarUrl || null) === (identity.avatarUrl || null)) return identity;
+    return { ...identity, avatarUrl: avatarUrl || identity.avatarUrl };
+}
+
+export function loadCharacterForDisplay(characterId: string): ReturnType<typeof loadCharacters>[number] | null {
+    const character = loadCharacters().find(item => item.id === characterId) || null;
+    return character ? overlayCharacterForDisplay(character) : null;
+}
+
+export function loadUserIdentityForDisplay(characterId?: string, appId = "chat"): UserIdentity | null {
+    return overlayUserIdentityForDisplay(characterId, resolveUserIdentity(characterId, appId), appId);
 }
 
 function simpleHash(text: string): string {
@@ -186,10 +312,15 @@ export async function applyCharacterAvatarFromChatImage(
 ): Promise<boolean> {
     const resolved = await resolveChatImageToDataUrl(imageRef);
     if (!resolved) return false;
-    const avatar = await imageSourceToAvatarDataUrl(resolved).catch(() => resolved);
-    const changed = updateCharacterAvatar(characterId, avatar);
-    if (changed) dispatchUpdated(characterId);
-    return changed;
+    const pair = findCouplePairByUserAvatar(characterId, resolved)
+        || findCouplePairByCharacterAvatar(characterId, resolved);
+    const avatar = pair
+        ? pair.characterAvatar
+        : await imageSourceToAvatarDataUrl(resolved).catch(() => resolved);
+    const already = avatarsMatch(loadCoupleAvatarWear(characterId)?.characterAvatar, avatar);
+    if (already) return true;
+    wearCharacterCoupleAvatar(characterId, avatar);
+    return true;
 }
 
 export async function applyUserAvatarFromChatImage(
@@ -199,8 +330,7 @@ export async function applyUserAvatarFromChatImage(
     const resolved = await resolveChatImageToDataUrl(imageRef);
     if (!resolved) return false;
     const avatar = await imageSourceToAvatarDataUrl(resolved).catch(() => resolved);
-    updateResolvedUserAvatar(characterId, avatar, "chat");
-    dispatchUpdated(characterId);
+    wearUserCoupleAvatar(characterId, avatar);
     return true;
 }
 
@@ -212,17 +342,18 @@ export function buildCoupleAvatarInstruction(
     const lines = [
         "【情头】",
         "对方可能在聊天里发来情头或配套头像，也可能只是普通照片。没有单独的情头按钮，请直接看图判断。",
-        "如果那是给你换的头像，必须输出 [换上情头]。系统收到标记后才会更换你的聊天头像。只口头说换了、却不输出标记，头像不会变。",
-        "如果照片标记是「我的头像」或「我的情头」，那是对方自己戴的，不要输出 [换上情头]。",
+        "按人设决定要不要换上头像。想戴就输出 [换上情头]，系统收到标记后才会更换你这边的头像。只口头说换了、却不输出标记，头像不会变。",
+        "不想戴就输出 [拒绝换头像]，并写一句符合人设的理由（可自拟当下的原因）。",
+        "如果照片标记是「我的头像」或「我的情头」，那是对方自己戴的，不要输出 [换上情头] 或 [拒绝换头像]。",
     ];
     if (hint?.hasRecentUserImage) {
         const label = (hint.label || "").trim();
         if (looksLikeCharacterCoupleAvatarLabel(label)) {
-            lines.push("对方刚刚发来的照片就是情头。请输出 [换上情头] 换上这张头像。");
+            lines.push("对方刚刚发来的照片是想给你换的情头。按人设决定：想戴输出 [换上情头]，不想戴输出 [拒绝换头像] 并说明理由。");
         } else if (looksLikeUserCoupleAvatarLabel(label)) {
             lines.push("对方刚刚发来的是自己那张头像，不要换你的聊天头像。");
         } else {
-            lines.push("对方刚刚发来一张照片。请看图判断是不是给你换的情头，是的话必须输出 [换上情头]。");
+            lines.push("对方刚刚发来一张照片。请看图判断是不是给你换的情头。是的话按人设决定戴或拒绝，并输出对应标记。");
         }
     }
     return lines.join("\n");
@@ -291,6 +422,11 @@ export function findCouplePairByUserAvatar(characterId: string, userAvatar: stri
     return loadCoupleAvatarPairs(characterId).find(pair => avatarsMatch(pair.userAvatar, userAvatar)) || null;
 }
 
+export function findCouplePairByCharacterAvatar(characterId: string, characterAvatar: string | null | undefined): CoupleAvatarPair | null {
+    if (!characterAvatar) return null;
+    return loadCoupleAvatarPairs(characterId).find(pair => avatarsMatch(pair.characterAvatar, characterAvatar)) || null;
+}
+
 export function updateCharacterAvatar(characterId: string, avatar: string | null): boolean {
     const chars = loadCharacters();
     const index = chars.findIndex(item => item.id === characterId);
@@ -327,50 +463,47 @@ export function updateResolvedUserAvatar(characterId: string | undefined, avatar
     return created;
 }
 
-/** 在联系人页更换用户头像；若这张是已存情头，角色立刻换上配套的那张。 */
+/** 在联系人页更换「我」的头像：只戴这个角色下的用户情头，不改共用身份。 */
 export function setContactUserAvatar(characterId: string, avatarUrl: string): CoupleAvatarPair | null {
-    updateResolvedUserAvatar(characterId, avatarUrl, "chat");
-    const pair = findCouplePairByUserAvatar(characterId, avatarUrl);
-    if (pair) updateCharacterAvatar(characterId, pair.characterAvatar);
-    return pair;
+    wearUserCoupleAvatar(characterId, avatarUrl);
+    return findCouplePairByUserAvatar(characterId, avatarUrl);
 }
 
 export function setContactCharacterAvatar(characterId: string, avatarUrl: string): void {
-    updateCharacterAvatar(characterId, avatarUrl);
+    wearCharacterCoupleAvatar(characterId, avatarUrl);
 }
 
-export function applyCoupleAvatarPair(characterId: string, pairId: string): CoupleAvatarPair | null {
+function requestCharacterWearInChat(input: {
+    characterId: string;
+    pair: CoupleAvatarPair;
+}): { sessionId: string; message: ChatMessage } {
+    const session = createOrGetSession(input.characterId);
+    const message = pushChatMessage({
+        sessionId: session.id,
+        role: "user",
+        content: "",
+        mediaType: "image",
+        mediaUrl: input.pair.characterAvatar,
+        mediaData: { label: input.pair.label || "情头" },
+    });
+    if (isBrowser()) {
+        kvSet(PENDING_REPLY_PREFIX + session.id, "1");
+        window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: session.id } }));
+    }
+    return { sessionId: session.id, message };
+}
+
+/** 只戴用户那一半；角色那一半发进聊天，由人设决定接不接。 */
+export function applyCoupleAvatarPair(characterId: string, pairId: string): {
+    pair: CoupleAvatarPair;
+    sessionId: string;
+    message: ChatMessage;
+} | null {
     const pair = loadCoupleAvatarPairs(characterId).find(item => item.id === pairId) || null;
     if (!pair) return null;
-    updateResolvedUserAvatar(characterId, pair.userAvatar, "chat");
-    updateCharacterAvatar(characterId, pair.characterAvatar);
-    return pair;
-}
-
-export function applyCoupleAvatarIfUserSentPair(input: {
-    sessionId: string;
-    characterId: string;
-    userImage: string | null | undefined;
-    characterName?: string;
-}): ChatMessage | null {
-    if (!input.userImage) return null;
-    const pair = findCouplePairByUserAvatar(input.characterId, input.userImage);
-    if (!pair) return null;
-
-    const character = loadCharacters().find(item => item.id === input.characterId);
-    const alreadyWearing = avatarsMatch(character?.avatar, pair.characterAvatar);
-    if (!alreadyWearing) {
-        updateCharacterAvatar(input.characterId, pair.characterAvatar);
-    }
-
-    const name = input.characterName || character?.name || "对方";
-    return pushChatMessage({
-        sessionId: input.sessionId,
-        role: "system",
-        content: alreadyWearing
-            ? `${name}看着你发来的情头，自己也已经戴着配套的那张`
-            : `${name}察觉到你发的是情头，主动换上了配套的头像`,
-    });
+    wearUserCoupleAvatar(characterId, pair.userAvatar);
+    const sent = requestCharacterWearInChat({ characterId, pair });
+    return { pair, ...sent };
 }
 
 export function sendCoupleAvatarToChat(input: {
@@ -380,24 +513,6 @@ export function sendCoupleAvatarToChat(input: {
 }): { sessionId: string; message: ChatMessage; notice: ChatMessage | null } | null {
     const pair = loadCoupleAvatarPairs(input.characterId).find(item => item.id === input.pairId);
     if (!pair) return null;
-    const session = createOrGetSession(input.characterId);
-    const message = pushChatMessage({
-        sessionId: session.id,
-        role: "user",
-        content: "",
-        mediaType: "image",
-        mediaUrl: pair.userAvatar,
-        mediaData: { label: pair.label || "情头" },
-    });
-    const notice = applyCoupleAvatarIfUserSentPair({
-        sessionId: session.id,
-        characterId: input.characterId,
-        userImage: pair.userAvatar,
-        characterName: input.characterName,
-    });
-    if (isBrowser()) {
-        kvSet(PENDING_REPLY_PREFIX + session.id, "1");
-        window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: session.id } }));
-    }
-    return { sessionId: session.id, message, notice };
+    const sent = requestCharacterWearInChat({ characterId: input.characterId, pair });
+    return { ...sent, notice: null };
 }

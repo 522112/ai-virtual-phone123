@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { loadChatSessions, loadChatContacts, ChatSession, createOrGetSession, createGroupSession, pushChatMessage, addChatContact, loadChatMessages, getLastVisibleSessionMessage, getChatMessagePreview } from "@/lib/chat-storage";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { Character } from "@/lib/character-types";
+import { COUPLE_AVATARS_UPDATED_EVENT, overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import type { UserIdentity } from "@/components/settings/user-identity";
 import { PENDING_REPLY_PREFIX } from "@/lib/friend-request-engine";
@@ -153,11 +154,13 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
         window.addEventListener("chat-messages-updated", refreshSessions);
         window.addEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
         window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
+        window.addEventListener(COUPLE_AVATARS_UPDATED_EVENT, refreshAvatars);
         return () => {
             window.removeEventListener("weixin-messages-updated", refreshSessions);
             window.removeEventListener("chat-messages-updated", refreshSessions);
             window.removeEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
             window.removeEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
+            window.removeEventListener(COUPLE_AVATARS_UPDATED_EVENT, refreshAvatars);
         };
     }, []);
 
@@ -718,7 +721,7 @@ function MascotSessionItem({
 
 function ContactPicker({ onClose, onSelect }: { onClose: () => void; onSelect: (charId: string) => void }) {
     const contacts = loadChatContacts();
-    const chars = loadCharacters();
+    const chars = loadCharacters().map(overlayCharacterForDisplay);
 
     const enrichedContacts = contacts
         .map(c => ({ ...c, char: chars.find(ch => ch.id === c.characterId) }))
@@ -756,7 +759,7 @@ function ContactPicker({ onClose, onSelect }: { onClose: () => void; onSelect: (
 }
 
 function SessionItem({ session, onSelect, isPinned }: { session: ChatSession, onSelect: () => void, isPinned?: boolean }) {
-    const chars = loadCharacters();
+    const chars = loadCharacters().map(overlayCharacterForDisplay);
     const character = chars.find(c => c.id === session.contactId);
     const lastVisibleMessage = getLastVisibleSessionMessage(session.id);
     const lastOfflineTurn = getLastChatOfflineTurn(session.id);

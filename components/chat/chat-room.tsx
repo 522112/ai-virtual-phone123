@@ -47,11 +47,12 @@ import { deleteWeixinCloudMessagesFromCloud, emitWeixinSyncToast, syncAllWeixinB
 import { loadBindingConfig, loadPresets, loadRegexes, resolveBinding, resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import {
     applyCharacterAvatarFromChatImage,
-    applyCoupleAvatarIfUserSentPair,
     applyUserAvatarFromChatImage,
     COUPLE_AVATARS_UPDATED_EVENT,
     findLatestWearableCoupleAvatarImage,
-    looksLikeCharacterCoupleAvatarLabel,
+    loadCharacterForDisplay,
+    loadUserIdentityForDisplay,
+    overlayCharacterForDisplay,
 } from "@/lib/couple-avatar-storage";
 import { generateGroupChatCompletion, generateGroupOfflineChatCompletion, parseGroupChatResponse, buildEditableGroupRoundText } from "@/lib/group-chat-engine";
 import { appendChatOfflineTurn, deleteChatOfflineTurn, deleteChatOfflineTurnsFrom, extractThinkingTag, loadChatOfflineTurns, parseOfflineResponse, saveChatOfflineTurns, updateChatOfflineTurn, type ChatOfflineTurn } from "@/lib/chat-offline-storage";
@@ -1123,10 +1124,10 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [transientMessages, setTransientMessages] = useState<ChatMessage[]>([]);
     const [stickerReady, setStickerReady] = useState(false);
-    const [character, setCharacter] = useState<Character | null>(() => {
-        const chars = loadCharacters();
-        return chars.find(c => c.id === session.contactId) || null;
-    });
+    const [character, setCharacter] = useState<Character | null>(() =>
+        loadCharacterForDisplay(session.contactId),
+    );
+    const [avatarRevision, setAvatarRevision] = useState(0);
     const [isGenerating, setIsGenerating] = useState(false);
     const [offlineMode, setOfflineMode] = useState(false);
     const [theaterMode, setTheaterMode] = useState(() => kvGet(CHAT_THEATER_MODE_PREFIX + session.id) === "1");
@@ -1617,10 +1618,10 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         const map = new Map<string, Character>();
         for (const id of session.participantIds || []) {
             const c = chars.find(ch => ch.id === id);
-            if (c) map.set(id, c);
+            if (c) map.set(id, overlayCharacterForDisplay(c));
         }
         return map;
-    }, [session.isGroup, session.participantIds]);
+    }, [session.isGroup, session.participantIds, avatarRevision]);
 
     // Flat array of group characters for components that need it
     const groupCharacters = useMemo(() => [...groupCharMap.values()], [groupCharMap]);
@@ -1727,6 +1728,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 part.mediaType === "accept_relationship" ||
                 part.mediaType === "decline_relationship" ||
                 part.mediaType === "change_avatar" ||
+                part.mediaType === "refuse_avatar" ||
                 part.mediaType === "change_space_cover"
             ) {
                 return [];
@@ -1776,12 +1778,13 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 
     useEffect(() => {
         const refreshAvatars = () => {
+            setAvatarRevision(n => n + 1);
             if (session.isGroup) {
                 setUserIdentity(resolveUserIdentity(undefined, "group_chat"));
                 return;
             }
-            setCharacter(loadCharacters().find(item => item.id === session.contactId) || null);
-            setUserIdentity(resolveUserIdentity(session.contactId, "chat"));
+            setCharacter(loadCharacterForDisplay(session.contactId));
+            setUserIdentity(loadUserIdentityForDisplay(session.contactId, "chat"));
         };
         window.addEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
         window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
@@ -1794,7 +1797,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     }, [session.contactId, session.isGroup]);
 
     useEffect(() => {
-        setUserIdentity(resolveUserIdentity(session.contactId, "chat"));
+        setUserIdentity(loadUserIdentityForDisplay(session.contactId, "chat"));
         setTransientMessages([]);
         setOfflineMode(kvGet(CHAT_OFFLINE_MODE_PREFIX + session.id) === "1");
         setOfflineVisibleCount(OFFLINE_INITIAL_LOAD);
@@ -2179,9 +2182,10 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     });
 
     const refreshChatAvatars = () => {
+        setAvatarRevision(n => n + 1);
         if (session.isGroup) return;
-        setCharacter(loadCharacters().find(item => item.id === session.contactId) || character);
-        setUserIdentity(resolveUserIdentity(session.contactId, "chat"));
+        setCharacter(loadCharacterForDisplay(session.contactId) || character);
+        setUserIdentity(loadUserIdentityForDisplay(session.contactId, "chat"));
     };
 
     const wearCoupleAvatarFromLatestUserImage = async (charN: string) => {
@@ -2203,6 +2207,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const handleAIMediaAction = (actionType: string, charN: string, userN: string) => {
         if (actionType === "change_avatar") {
             void wearCoupleAvatarFromLatestUserImage(charN);
+            return;
+        }
+        if (actionType === "refuse_avatar") {
             return;
         }
         if (actionType === "change_space_cover") {
@@ -2986,6 +2993,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
                 || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship"
                 || p.mediaType === "change_avatar"
+                || p.mediaType === "refuse_avatar"
                 || p.mediaType === "change_space_cover") {
                 if (p.mediaType === "decline_red_packet" || p.mediaType === "decline_transfer" || p.mediaType === "decline_payment_request" || p.mediaType === "decline_relationship") {
                     hasDecline = true;
@@ -3646,30 +3654,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             mediaData: walletDebit.mediaData,
             ...(mediaUrl ? { mediaUrl } : {}),
         });
-        const coupleNotice = !session.isGroup && mediaType === "image"
-            ? applyCoupleAvatarIfUserSentPair({
-                sessionId: session.id,
-                characterId: session.contactId,
-                userImage: mediaUrl,
-                characterName: character?.name,
-            })
-            : null;
-        if (coupleNotice) {
-            refreshChatAvatars();
-        }
-        setMessages(prev => coupleNotice ? [...prev, newMsg, coupleNotice] : [...prev, newMsg]);
-        if (!coupleNotice && !session.isGroup && mediaType === "image" && mediaUrl && looksLikeCharacterCoupleAvatarLabel(mediaData?.label || content)) {
-            void applyCharacterAvatarFromChatImage(session.contactId, mediaUrl).then(ok => {
-                if (!ok) return;
-                refreshChatAvatars();
-                const notice = pushChatMessage({
-                    sessionId: session.id,
-                    role: "system",
-                    content: `${character?.name || "对方"}换上了你发来的情头`,
-                });
-                setMessages(prev => [...prev, notice]);
-            });
-        }
+        setMessages(prev => [...prev, newMsg]);
         setPendingGenerate(true);
         return true;
     };
@@ -4813,6 +4798,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     part.mediaType === "accept_relationship" ||
                     part.mediaType === "decline_relationship" ||
                     part.mediaType === "change_avatar" ||
+                    part.mediaType === "refuse_avatar" ||
                     part.mediaType === "change_space_cover"
                 )
             ) {
@@ -5655,17 +5641,21 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         const seen = new Set(sessions.map(item => item.isGroup ? item.id : item.contactId));
         const fromSessions = sessions.map(item => {
             const character = chars.find(c => c.id === item.contactId);
+            const display = character ? overlayCharacterForDisplay(character) : null;
             return {
                 sessionId: item.id,
                 contactId: item.contactId,
                 isGroup: !!item.isGroup,
                 name: item.isGroup
                     ? (item.groupName || "群聊")
-                    : (character?.name || "联系人"),
-                avatar: item.isGroup ? "" : (character?.avatar || ""),
+                    : (display?.name || "联系人"),
+                avatar: item.isGroup ? "" : (display?.avatar || ""),
                 groupAvatars: item.isGroup
                     ? (item.participantIds || [])
-                        .map(id => chars.find(c => c.id === id)?.avatar || "")
+                        .map(id => {
+                            const member = chars.find(c => c.id === id);
+                            return member ? overlayCharacterForDisplay(member).avatar || "" : "";
+                        })
                         .filter(Boolean)
                         .slice(0, 4)
                     : [],
@@ -5675,12 +5665,13 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             .filter(contact => contact.characterId !== session.contactId && !seen.has(contact.characterId))
             .map(contact => {
                 const character = chars.find(c => c.id === contact.characterId);
+                const display = character ? overlayCharacterForDisplay(character) : null;
                 return {
                     sessionId: "",
                     contactId: contact.characterId,
                     isGroup: false,
-                    name: character?.name || "联系人",
-                    avatar: character?.avatar || "",
+                    name: display?.name || "联系人",
+                    avatar: display?.avatar || "",
                     groupAvatars: [] as string[],
                 };
             });

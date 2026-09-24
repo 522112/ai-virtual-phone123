@@ -50,6 +50,7 @@ import {
 import {
     applyCharacterAvatarFromChatImage,
     findLatestWearableCoupleAvatarImage,
+    resolveCharacterDisplayAvatar,
 } from "./couple-avatar-storage";
 import {
     createPendingChatGeneratedImageData,
@@ -800,6 +801,10 @@ export function handleFollowUpMediaAction(
         return;
     }
 
+    if (actionType === "refuse_avatar") {
+        return;
+    }
+
     if (actionType === "change_space_cover") {
         const sess = loadChatSessions().find(item => item.id === sessionId);
         if (!sess || sess.isGroup) return;
@@ -1026,6 +1031,7 @@ export async function parseAndSaveResponse(
             || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
             || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship"
             || p.mediaType === "change_avatar"
+            || p.mediaType === "refuse_avatar"
             || p.mediaType === "change_space_cover") {
             handleFollowUpMediaAction(p.mediaType, sessionId, contextMessages);
             continue;
@@ -1233,9 +1239,9 @@ export async function parseAndSaveResponse(
         const isGroup = sess?.isGroup === true;
         const avatar = isGroup
             ? (options?.senderCharacterId
-                ? loadCharacters().find(c => c.id === options.senderCharacterId)?.avatar || null
+                ? resolveCharacterDisplayAvatar(loadCharacters().find(c => c.id === options.senderCharacterId))
                 : null)
-            : (sess ? loadCharacters().find(c => c.id === sess.contactId)?.avatar || null : null);
+            : (sess ? resolveCharacterDisplayAvatar(loadCharacters().find(c => c.id === sess.contactId)) : null);
         const bodyPrefix = isGroup && options?.senderName ? `${options.senderName}: ` : "";
         const partBody = (part: ParsedMessagePart) => bodyPrefix + ((part.content || "").trim()
             || (part.mediaType === "image" && part.mediaData?.label ? `发了一张照片: ${part.mediaData.label}` : "发来一条消息"));

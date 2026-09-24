@@ -15,6 +15,8 @@ import {
     addCoupleAvatarPair,
     applyCoupleAvatarPair,
     loadCoupleAvatarPairs,
+    overlayCharacterForDisplay,
+    overlayUserIdentityForDisplay,
     removeCoupleAvatarPair,
     sendCoupleAvatarToChat,
     setContactCharacterAvatar,
@@ -95,11 +97,12 @@ function AvatarSlot({
 }
 
 export function ContactProfilePage({ characterId, onBack, onSelectSession }: ContactProfilePageProps) {
-    const [character, setCharacter] = useState<Character | null>(() =>
-        loadCharacters().find(item => item.id === characterId) || null,
-    );
+    const [character, setCharacter] = useState<Character | null>(() => {
+        const raw = loadCharacters().find(item => item.id === characterId) || null;
+        return raw ? overlayCharacterForDisplay(raw) : null;
+    });
     const [identity, setIdentity] = useState<UserIdentity | null>(() =>
-        resolveUserIdentity(characterId, "chat"),
+        overlayUserIdentityForDisplay(characterId, resolveUserIdentity(characterId, "chat")),
     );
     const [pairs, setPairs] = useState<CoupleAvatarPair[]>(() => loadCoupleAvatarPairs(characterId));
     const [draftUser, setDraftUser] = useState<string | null>(null);
@@ -109,8 +112,9 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
     const [notice, setNotice] = useState<string | null>(null);
 
     const refresh = useCallback(() => {
-        setCharacter(loadCharacters().find(item => item.id === characterId) || null);
-        setIdentity(resolveUserIdentity(characterId, "chat"));
+        const raw = loadCharacters().find(item => item.id === characterId) || null;
+        setCharacter(raw ? overlayCharacterForDisplay(raw) : null);
+        setIdentity(overlayUserIdentityForDisplay(characterId, resolveUserIdentity(characterId, "chat")));
         setPairs(loadCoupleAvatarPairs(characterId));
     }, [characterId]);
 
@@ -143,8 +147,8 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
         try {
             const url = await fileToAvatarDataUrl(file);
             if (side === "user") {
-                const pair = setContactUserAvatar(characterId, url);
-                showNotice(pair ? "已换上情头，对方也换上了配套的那张" : "已更换我的头像");
+                setContactUserAvatar(characterId, url);
+                showNotice("已更换我这边的头像，只对这个角色生效");
             } else {
                 setContactCharacterAvatar(characterId, url);
                 showNotice("已更换对方头像");
@@ -193,9 +197,13 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
     };
 
     const handleApplyPair = (pairId: string) => {
-        applyCoupleAvatarPair(characterId, pairId);
-        refresh();
-        showNotice("已换上这对比对情头");
+        const applied = applyCoupleAvatarPair(characterId, pairId);
+        if (!applied) {
+            showNotice("换上失败");
+            return;
+        }
+        const session = createOrGetSession(characterId);
+        onSelectSession(session);
     };
 
     const handleSendPair = (pairId: string) => {
@@ -254,7 +262,7 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
                     发消息
                 </button>
                 <p className="couple-profile-tip">
-                    在这里保存双方情头。聊天里发出其中你的那张时，角色会主动换上配套的那张。
+                    在这里保存双方情头。换上或发给对方时，只戴你这边的头像；对方那张会发进聊天，由人设决定接不接。
                 </p>
 
                 <div className="couple-pair-section">

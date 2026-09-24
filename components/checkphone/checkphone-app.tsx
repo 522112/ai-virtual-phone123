@@ -66,6 +66,7 @@ import { CheckPhoneXPage } from "@/components/checkphone/checkphone-x-page";
 import { CheckPhoneYoutubePage } from "@/components/checkphone/checkphone-youtube-page";
 import { loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
+import { overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
 import {
   CHECKPHONE_APP_SPECS,
   isCheckPhoneAppId,
@@ -355,7 +356,7 @@ export function CheckPhoneApp({ onClose }: CheckPhoneAppProps) {
   const settingsPanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const all = loadCharacters();
+    const all = loadCharacters().map(overlayCharacterForDisplay);
     setCharacters(all);
     setCheckPhoneSettings(loadCheckPhoneSettings());
 

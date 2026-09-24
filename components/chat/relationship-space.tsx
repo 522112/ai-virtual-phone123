@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Heart, ImagePlus, MessageCircle, Trash2, X } from "lucide-react";
 import type { ChatMessage } from "@/lib/chat-storage";
 import type { Character } from "@/lib/character-types";
+import { overlayCharacterForDisplay, overlayUserIdentityForDisplay } from "@/lib/couple-avatar-storage";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { saveChatImageToIndexedDB, getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
@@ -58,7 +59,7 @@ function useRelationship(relationshipId: string) {
 
 export function RelationshipSpace({
   relationshipId,
-  character,
+  character: rawCharacter,
   messages,
   onClose,
   onNotice,
@@ -121,7 +122,8 @@ export function RelationshipSpace({
   }, [activeComposer]);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
-  const identity = resolveUserIdentity(character?.id || "", "chat");
+  const character = rawCharacter ? overlayCharacterForDisplay(rawCharacter) : null;
+  const identity = overlayUserIdentityForDisplay(character?.id, resolveUserIdentity(character?.id || "", "chat"));
 
   useEffect(() => {
     const src = binding?.coverImage;

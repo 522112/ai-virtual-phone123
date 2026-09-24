@@ -390,6 +390,10 @@ const RICH_PATTERNS: {
         build: () => ({ content: "", mediaType: "change_avatar" as const }),
     },
     {
+        regex: /\[(?:拒绝换头像|拒绝情头)\]/,
+        build: () => ({ content: "", mediaType: "refuse_avatar" as const }),
+    },
+    {
         regex: /\[(?:设为空间背景|更换空间背景|换空间背景)\]/,
         build: () => ({ content: "", mediaType: "change_space_cover" as const }),
     },

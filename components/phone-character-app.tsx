@@ -16,6 +16,7 @@ import {
 
   CHAR_BLOCKED_FIELDS,
 } from "@/lib/character-storage";
+import { COUPLE_AVATARS_UPDATED_EVENT, resolveCharacterDisplayAvatar } from "@/lib/couple-avatar-storage";
 import { generateBriefPersonaText, isBriefPersonaStale } from "@/lib/brief-persona";
 import { generateSupportingCharacters, materializeSupportingCharacter, type GeneratedSupportingCharacter } from "@/lib/npc-generator";
 import {
@@ -442,8 +443,8 @@ function FlipTransitionOverlay({ transit }: { transit: TransitionState }) {
               aspectRatio: isStart ? "1/1" : "auto",
               transition: `all ${duration} ease`
             }}>
-              {char.avatar ? (
-                <img src={char.avatar} className="char-polaroid-img" alt="" />
+              {resolveCharacterDisplayAvatar(char) ? (
+                <img src={resolveCharacterDisplayAvatar(char) || ""} className="char-polaroid-img" alt="" />
               ) : (
                 <div className="w-full h-full bg-[#9b8aaa]" />
               )}
@@ -506,6 +507,12 @@ function CharListView({
   const fileRef = useRef<HTMLInputElement>(null);
   const [showNpcGen, setShowNpcGen] = useState(false);
   const [activeMoveChar, setActiveMoveChar] = useState<Character | null>(null);
+  const [wearTick, setWearTick] = useState(0);
+  useEffect(() => {
+    const refreshWear = () => setWearTick(n => n + 1);
+    window.addEventListener(COUPLE_AVATARS_UPDATED_EVENT, refreshWear);
+    return () => window.removeEventListener(COUPLE_AVATARS_UPDATED_EVENT, refreshWear);
+  }, []);
 
   // ── 世界卷宗：当前世界派生数据 ──
   const currentGroup = worldGroups.find(g => g.id === currentWorldId)
@@ -1060,6 +1067,7 @@ function CharListView({
 
   return (
     <>
+      <span hidden data-wear-tick={wearTick} />
       <PageShell
         title={<strong style={{ fontWeight: 900, fontFamily: 'Impact, "Arial Black", sans-serif', fontSize: '1.15em', letterSpacing: '0.04em' }}>TARGET ARCHIVES</strong>}
         leftAction={
@@ -1231,8 +1239,8 @@ function CharListView({
                     </div>
                   )}
                   <div className="char-polaroid-img-wrapper" style={{ boxShadow: "inset 0 0 10px rgba(0,0,0,0.1)" }}>
-                    {char.avatar ? <img
-                      src={char.avatar}
+                    {resolveCharacterDisplayAvatar(char) ? <img
+                      src={resolveCharacterDisplayAvatar(char) || ""}
                       alt={char.name}
                       className="char-polaroid-img"
                       draggable={false}
@@ -1322,8 +1330,8 @@ function CharListView({
             {pendingPlacementChar ? (
               <div className="char-polaroid w-[100px]" style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
                 <div className="char-polaroid-img-wrapper">
-                  {pendingPlacementChar.avatar ? (
-                    <img src={pendingPlacementChar.avatar} className="char-polaroid-img" alt="" draggable={false} />
+                  {resolveCharacterDisplayAvatar(pendingPlacementChar) ? (
+                    <img src={resolveCharacterDisplayAvatar(pendingPlacementChar) || ""} className="char-polaroid-img" alt="" draggable={false} />
                   ) : (
                     <CharAvatarFallback name={pendingPlacementChar.name} size="100%" />
                   )}

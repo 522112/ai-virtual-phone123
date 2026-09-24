@@ -1255,6 +1255,8 @@ function formatRichMediaForHistoryInner(msg: ChatMessage, userName: string, char
             return "[解除关系]";
         case "change_avatar":
             return "[换上情头]";
+        case "refuse_avatar":
+            return "[拒绝换头像]";
         case "change_space_cover":
             return "[设为空间背景]";
         case "relationship_space": {

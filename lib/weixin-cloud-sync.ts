@@ -2020,6 +2020,9 @@ function importCloudAssistantMessage(
       }, strippedContent));
       return;
     }
+    if (part.mediaType === "refuse_avatar") {
+      return;
+    }
     if (part.mediaType === "change_space_cover" && !session.isGroup) {
       const result = applyCharacterSpaceCover({
         characterId: stored.characterId,

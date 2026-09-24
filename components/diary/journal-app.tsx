@@ -8,6 +8,7 @@ import { ChatFallbackAvatar } from "@/components/chat/chat-fallback-avatar";
 import { JournalDoodleSheet, JournalEditRail, JournalFlipPreview, JournalOpenBook } from "./journal-spread";
 import { loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
+import { overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
 import { collectJournalClips } from "@/lib/journal-clips";
 import {
   generateJournalAnnotation,
@@ -89,7 +90,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
   const [view, setView] = useState<JournalView>({ name: "home" });
   const [books, setBooks] = useState<JournalBook[]>(() => loadJournalBooks());
   const [annotations, setAnnotations] = useState<JournalAnnotation[]>(() => loadJournalAnnotations());
-  const [characters, setCharacters] = useState<Character[]>(() => loadCharacters());
+  const [characters, setCharacters] = useState<Character[]>(() => loadCharacters().map(overlayCharacterForDisplay));
   const [renameBookId, setRenameBookId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [shareTarget, setShareTarget] = useState<{ bookId: string; pageId?: string } | null>(null);
@@ -113,7 +114,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
   const refresh = useCallback(() => {
     setBooks(loadJournalBooks());
     setAnnotations(loadJournalAnnotations());
-    setCharacters(loadCharacters());
+    setCharacters(loadCharacters().map(overlayCharacterForDisplay));
   }, []);
 
   useEffect(() => {

@@ -6,6 +6,7 @@ import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settin
 import { PENDING_REPLY_PREFIX } from "@/lib/friend-request-engine";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { Character } from "@/lib/character-types";
+import { COUPLE_AVATARS_UPDATED_EVENT, overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
 import { ContactProfilePage } from "./contact-profile-page";
 import { loadMomentPosts } from "@/lib/moments-storage";
 import {
@@ -60,7 +61,7 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
     const [mascotAvatarUrl, setMascotAvatarUrl] = useState(mascotSettings.avatarImage || DEFAULT_MASCOT_AVATAR);
 
     const [identity, setIdentity] = useState(() => resolveUserIdentity());
-    const [chars, setChars] = useState(() => loadCharacters());
+    const [chars, setChars] = useState(() => loadCharacters().map(overlayCharacterForDisplay));
     const deferredContactFilter = useDeferredValue(contactFilter);
     const bodyRef = useRef<HTMLDivElement>(null);
     const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -77,7 +78,7 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
     // 打开添加页并预载资料（本组件仅在 tab 激活时挂载，不能直接监听事件）
     useEffect(() => {
         if (!pendingAddContactId) return;
-        const found = loadCharacters().find(c => c.id === pendingAddContactId);
+        const found = loadCharacters().map(overlayCharacterForDisplay).find(c => c.id === pendingAddContactId);
         onPendingAddContactConsumed?.();
         if (!found) return;
         addFromCardRef.current = true;
@@ -103,7 +104,7 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
     }
 
     const refresh = useCallback(() => {
-        const latestChars = loadCharacters();
+        const latestChars = loadCharacters().map(overlayCharacterForDisplay);
         setChars(latestChars);
         setIdentity(resolveUserIdentity());
         const rawContacts = loadChatContacts();
@@ -131,10 +132,12 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
         window.addEventListener("friend-requests-updated", handler);
         window.addEventListener(CHARACTERS_UPDATED_EVENT, handler);
         window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, handler);
+        window.addEventListener(COUPLE_AVATARS_UPDATED_EVENT, handler);
         return () => {
             window.removeEventListener("friend-requests-updated", handler);
             window.removeEventListener(CHARACTERS_UPDATED_EVENT, handler);
             window.removeEventListener(USER_IDENTITIES_UPDATED_EVENT, handler);
+            window.removeEventListener(COUPLE_AVATARS_UPDATED_EVENT, handler);
         };
     }, [refresh]);
 

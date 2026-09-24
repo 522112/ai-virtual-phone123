@@ -342,6 +342,7 @@ export function loadNativeTimeline(
             else if (msg.mediaType === "decline_relationship") content = "[拒绝关系]";
             else if (msg.mediaType === "dissolve_relationship") content = "[解除关系]";
             else if (msg.mediaType === "change_avatar") content = "[换上情头]";
+            else if (msg.mediaType === "refuse_avatar") content = "[拒绝换头像]";
             else if (msg.mediaType === "change_space_cover") content = "[设为空间背景]";
             else if (msg.mediaType === "relationship_space") {
                 const action = msg.mediaData?.spaceAction;
