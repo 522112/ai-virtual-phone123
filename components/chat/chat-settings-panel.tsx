@@ -540,7 +540,9 @@ export function ChatSettingsPanel({
 
     const [groupName, setGroupName] = useState(session.groupName || "");
 
-    const characters = loadCharacters().map(overlayCharacterForDisplay);
+    const characters = loadCharacters().map(item => (
+        !session.isGroup && item.id === session.contactId ? overlayCharacterForDisplay(item) : item
+    ));
     const character = characters.find(c => c.id === session.contactId);
 
     const characterName = session.isGroup

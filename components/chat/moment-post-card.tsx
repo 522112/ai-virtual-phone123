@@ -14,7 +14,6 @@ import {
     deleteMomentCommentThread,
 } from "@/lib/moments-storage";
 import { loadCharacters } from "@/lib/character-storage";
-import { overlayCharacterForDisplay, overlayUserIdentityForDisplay } from "@/lib/couple-avatar-storage";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { buildTwoLevelMomentThreads } from "@/lib/moments-comment-threading";
 import { getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
@@ -96,10 +95,10 @@ export function MomentPostCard({ post, onUpdate, onRequestDelete, onOpenCommentC
         }
     }, [post.id, post.photoUrl, post.photoGenerationStatus, photoRegenerating]);
 
-    const chars = loadCharacters().map(overlayCharacterForDisplay);
+    const chars = loadCharacters();
     // 角色帖子下，用户名用该角色绑定的用户人设；用户自己的帖子用默认人设
     const contextCharId = post.authorType === "character" ? post.authorId : undefined;
-    const userIdentity = overlayUserIdentityForDisplay(contextCharId, resolveUserIdentity(contextCharId, "chat"));
+    const userIdentity = resolveUserIdentity(contextCharId, "chat");
 
     const getCharName = (charId: string): string => {
         return chars.find(c => c.id === charId)?.name ?? "未知";

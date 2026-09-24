@@ -273,9 +273,7 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
     const activeIds = new Set(
       loadRelationshipBindings().filter(item => item.status === "active").map(item => item.characterId),
     );
-    return [...all]
-      .sort((a, b) => Number(activeIds.has(b.id)) - Number(activeIds.has(a.id)))
-      .map(overlayCharacterForDisplay);
+    return [...all].sort((a, b) => Number(activeIds.has(b.id)) - Number(activeIds.has(a.id)));
   }, [panel]);
 
   const notify = (message: string) => onNotice?.(message);

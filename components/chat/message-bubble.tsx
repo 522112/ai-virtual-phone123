@@ -10,7 +10,6 @@ import { usePhoneBack } from "@/lib/phone-navigation";
 import { resolveCloudSttConfig, transcribeAudioBlob } from "@/lib/stt-cloud";
 import { resolveContactCard } from "@/lib/contact-card";
 import { loadCharacters } from "@/lib/character-storage";
-import { resolveCharacterDisplayAvatar } from "@/lib/couple-avatar-storage";
 import { CHAT_OPEN_SESSION_EVENT, dispatchOpenAddContact } from "@/lib/chat-notification-events";
 import { ContactCardGenerateFlow } from "@/components/chat/contact-card-generate-flow";
 import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
@@ -1398,8 +1397,8 @@ function ContactCardBubble({ msg, characterId }: { msg: ChatMessage; characterId
             <div className="chat-contact-card" onClick={handleClick} role="button">
                 <div className="chat-contact-card-main">
                     <div className="chat-contact-card-avatar">
-                        {resolveCharacterDisplayAvatar(resolved.character)
-                            ? <img src={resolveCharacterDisplayAvatar(resolved.character) || ""} alt="" />
+                        {resolved.character?.avatar
+                            ? <img src={resolved.character.avatar} alt="" />
                             : <CharAvatarFallbackInline name={contactName} />}
                     </div>
                     <div className="chat-contact-card-info">

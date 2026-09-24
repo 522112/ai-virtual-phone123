@@ -28,7 +28,7 @@ export type CoupleAvatarPair = {
     createdAt: string;
 };
 
-/** 按角色佩戴的情头；不写共用 UserIdentity / 不必改 Character.avatar。 */
+/** 按角色佩戴的情头：只覆盖该角色的聊天场景，不写共用 UserIdentity / Character.avatar。 */
 export type CoupleAvatarWear = {
     characterId: string;
     userAvatar?: string;
@@ -138,6 +138,7 @@ export function resolveCharacterDisplayAvatar(
     return character.avatar || null;
 }
 
+/** 只有传入该角色 id 时才盖用户情头；A/B 共用身份时，跟 B 仍走原 avatarUrl。 */
 export function resolveUserDisplayAvatar(
     characterId?: string | null,
     appId = "chat",

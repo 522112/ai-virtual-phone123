@@ -52,7 +52,6 @@ import {
     findLatestWearableCoupleAvatarImage,
     loadCharacterForDisplay,
     loadUserIdentityForDisplay,
-    overlayCharacterForDisplay,
 } from "@/lib/couple-avatar-storage";
 import { generateGroupChatCompletion, generateGroupOfflineChatCompletion, parseGroupChatResponse, buildEditableGroupRoundText } from "@/lib/group-chat-engine";
 import { appendChatOfflineTurn, deleteChatOfflineTurn, deleteChatOfflineTurnsFrom, extractThinkingTag, loadChatOfflineTurns, parseOfflineResponse, saveChatOfflineTurns, updateChatOfflineTurn, type ChatOfflineTurn } from "@/lib/chat-offline-storage";
@@ -1618,7 +1617,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         const map = new Map<string, Character>();
         for (const id of session.participantIds || []) {
             const c = chars.find(ch => ch.id === id);
-            if (c) map.set(id, overlayCharacterForDisplay(c));
+            if (c) map.set(id, c);
         }
         return map;
     }, [session.isGroup, session.participantIds, avatarRevision]);
@@ -5641,21 +5640,17 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         const seen = new Set(sessions.map(item => item.isGroup ? item.id : item.contactId));
         const fromSessions = sessions.map(item => {
             const character = chars.find(c => c.id === item.contactId);
-            const display = character ? overlayCharacterForDisplay(character) : null;
             return {
                 sessionId: item.id,
                 contactId: item.contactId,
                 isGroup: !!item.isGroup,
                 name: item.isGroup
                     ? (item.groupName || "群聊")
-                    : (display?.name || "联系人"),
-                avatar: item.isGroup ? "" : (display?.avatar || ""),
+                    : (character?.name || "联系人"),
+                avatar: item.isGroup ? "" : (character?.avatar || ""),
                 groupAvatars: item.isGroup
                     ? (item.participantIds || [])
-                        .map(id => {
-                            const member = chars.find(c => c.id === id);
-                            return member ? overlayCharacterForDisplay(member).avatar || "" : "";
-                        })
+                        .map(id => chars.find(c => c.id === id)?.avatar || "")
                         .filter(Boolean)
                         .slice(0, 4)
                     : [],
@@ -5665,13 +5660,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             .filter(contact => contact.characterId !== session.contactId && !seen.has(contact.characterId))
             .map(contact => {
                 const character = chars.find(c => c.id === contact.characterId);
-                const display = character ? overlayCharacterForDisplay(character) : null;
                 return {
                     sessionId: "",
                     contactId: contact.characterId,
                     isGroup: false,
-                    name: display?.name || "联系人",
-                    avatar: display?.avatar || "",
+                    name: character?.name || "联系人",
+                    avatar: character?.avatar || "",
                     groupAvatars: [] as string[],
                 };
             });
