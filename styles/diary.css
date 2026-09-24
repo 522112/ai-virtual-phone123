@@ -4264,13 +4264,16 @@
 }
 
 .journal-stamp-flower {
+  width: 8px;
+  height: 8px;
+  margin: 7px;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 50%, #d7a15f 0 3px, transparent 3.2px),
-    radial-gradient(circle at 50% 18%, #d98a8a 0 5px, transparent 5.2px),
-    radial-gradient(circle at 50% 82%, #d98a8a 0 5px, transparent 5.2px),
-    radial-gradient(circle at 18% 50%, #d98a8a 0 5px, transparent 5.2px),
-    radial-gradient(circle at 82% 50%, #d98a8a 0 5px, transparent 5.2px);
+  background: #d7a15f;
+  box-shadow:
+    0 -7px 0 #d98a8a,
+    0 7px 0 #d98a8a,
+    -7px 0 0 #d98a8a,
+    7px 0 0 #d98a8a;
 }
 
 .journal-stamp-arrow::before {
