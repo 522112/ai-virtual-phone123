@@ -7226,3 +7226,172 @@
   background: currentColor;
   animation: chat-stream-cursor-blink 1s steps(2, start) infinite;
 }
+
+/* ── Contact profile / couple avatars ── */
+.couple-profile-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 20px 28px;
+}
+.couple-profile-hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 18px 8px 8px;
+}
+.couple-profile-hero-compact {
+  padding-top: 4px;
+}
+.couple-profile-heart {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ff6b8a;
+  background: color-mix(in srgb, #ff6b8a 12%, var(--c-card));
+  flex-shrink: 0;
+}
+.couple-avatar-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  min-width: 96px;
+  color: inherit;
+}
+.couple-avatar-slot-image {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--c-card);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+.couple-avatar-slot-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.couple-avatar-slot-busy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: calc(11px * var(--app-text-scale, 1));
+}
+.couple-avatar-slot-label {
+  font-size: calc(14px * var(--app-text-scale, 1));
+  font-weight: 600;
+  color: var(--c-text-title);
+}
+.couple-avatar-slot-hint {
+  font-size: calc(11px * var(--app-text-scale, 1));
+  color: var(--c-icon);
+}
+.couple-profile-meta {
+  text-align: center;
+}
+.couple-profile-tip {
+  margin: 0;
+  font-size: calc(12px * var(--app-text-scale, 1));
+  line-height: 1.6;
+  color: var(--c-text);
+  opacity: 0.78;
+}
+.couple-pair-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 8px;
+}
+.couple-pair-title {
+  font-size: calc(15px * var(--app-text-scale, 1));
+  font-weight: 700;
+  color: var(--c-text-title);
+}
+.couple-pair-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.couple-pair-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 16px;
+  background: var(--c-card);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.03);
+}
+.couple-pair-thumbs {
+  display: flex;
+  width: 72px;
+  height: 40px;
+  flex-shrink: 0;
+}
+.couple-pair-thumbs img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 2px solid var(--c-card);
+  background: var(--c-page-body-bg);
+}
+.couple-pair-thumbs img + img {
+  margin-left: -8px;
+}
+.couple-pair-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.couple-pair-name {
+  font-size: calc(13px * var(--app-text-scale, 1));
+  font-weight: 600;
+  color: var(--c-text-title);
+}
+.couple-pair-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.couple-pair-actions .ui-btn {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: calc(12px * var(--app-text-scale, 1));
+}
+.couple-pair-delete {
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--c-icon);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.couple-profile-toast {
+  position: sticky;
+  bottom: 12px;
+  align-self: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(23, 32, 51, 0.86);
+  color: #fff;
+  font-size: calc(12px * var(--app-text-scale, 1));
+}

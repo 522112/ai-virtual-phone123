@@ -85,6 +85,7 @@ const BINDINGS_KEY = "ai_phone_bindings_v1";
 const FOLLOW_UP_CONFIG_KEY = "ai_phone_follow_up_config_v1";
 const CHAT_SEND_CONFIG_KEY = "ai_phone_chat_send_config_v1";
 const USER_IDENTITIES_KEY = "ai_phone_user_identities_v1";
+export const USER_IDENTITIES_UPDATED_EVENT = "user-identities-updated";
 
 // Legacy key for migration
 const LEGACY_OVERRIDES_KEY = "ai_phone_char_settings_v1";
@@ -1180,6 +1181,7 @@ export function loadUserIdentities(): UserIdentity[] {
 export function saveUserIdentities(identities: UserIdentity[]): void {
     if (typeof window === "undefined") return;
     kvSet(USER_IDENTITIES_KEY, JSON.stringify(identities));
+    window.dispatchEvent(new CustomEvent(USER_IDENTITIES_UPDATED_EVENT));
 }
 
 /**

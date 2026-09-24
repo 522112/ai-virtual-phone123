@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useSyncExternalStore } from "react";
 import { ChevronLeft } from "lucide-react";
 import { loadChatSessions, loadChatContacts, ChatSession, createOrGetSession, createGroupSession, pushChatMessage, addChatContact, loadChatMessages, getLastVisibleSessionMessage, getChatMessagePreview } from "@/lib/chat-storage";
-import { loadCharacters } from "@/lib/character-storage";
+import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { Character } from "@/lib/character-types";
-import { resolveUserIdentity } from "@/lib/settings-storage";
+import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import type { UserIdentity } from "@/components/settings/user-identity";
 import { PENDING_REPLY_PREFIX } from "@/lib/friend-request-engine";
 import { clearRequestsForCharacter, dispatchFriendRequestUpdated } from "@/lib/friend-request-storage";
@@ -145,11 +145,19 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
 
     useEffect(() => {
         const refreshSessions = () => setSessions(loadChatSessions());
+        const refreshAvatars = () => {
+            setIdentity(resolveUserIdentity());
+            setSessions(loadChatSessions());
+        };
         window.addEventListener("weixin-messages-updated", refreshSessions);
         window.addEventListener("chat-messages-updated", refreshSessions);
+        window.addEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
+        window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
         return () => {
             window.removeEventListener("weixin-messages-updated", refreshSessions);
             window.removeEventListener("chat-messages-updated", refreshSessions);
+            window.removeEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
+            window.removeEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
         };
     }, []);
 
