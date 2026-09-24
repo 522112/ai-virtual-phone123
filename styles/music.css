@@ -1065,124 +1065,96 @@
 
 
 /* ══════════════════════════════════════════════════
-   Floating Widget — Rounded Rectangle Glassmorphism Player
+   Desktop Dynamic Island — music live activity
    ══════════════════════════════════════════════════ */
 
+.phone-shell:has(.music-float) .status-island {
+    visibility: hidden;
+}
+
 .music-float {
+    --c-music-text: #f5f5f7;
+    --c-music-accent: rgba(255, 255, 255, 0.62);
+    --c-music-accent-dim: rgba(255, 255, 255, 0.12);
+    --c-music-overlay: rgba(255, 255, 255, 0.08);
+    --c-music-surface: #0a0a0a;
+    --c-music-surface-solid: #111;
     position: absolute;
     z-index: 55;
     display: flex;
     flex-direction: column;
     justify-content: center;
     touch-action: none;
-    cursor: grab;
+    cursor: pointer;
     user-select: none;
-    transition: width 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), height 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.25s ease-out, opacity 0.25s ease-out;
-    animation: music-float-in 0.5s var(--ease-out);
+    transition:
+        width 0.38s cubic-bezier(0.32, 0.72, 0, 1),
+        height 0.38s cubic-bezier(0.32, 0.72, 0, 1),
+        border-radius 0.38s cubic-bezier(0.32, 0.72, 0, 1),
+        left 0.38s cubic-bezier(0.32, 0.72, 0, 1),
+        top 0.38s cubic-bezier(0.32, 0.72, 0, 1),
+        transform 0.25s ease-out,
+        opacity 0.25s ease-out;
+    animation: music-island-in 0.42s cubic-bezier(0.32, 0.72, 0, 1);
 
-    /* Layout */
-    width: 72px;
-    height: 72px;
-    border-radius: 36px;
+    width: 126px;
+    height: 36px;
+    border-radius: 20px;
     overflow: hidden;
+    background: #0a0a0a;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    border: 0;
+}
 
-    /* Glassmorphism Aesthetics */
-    background: var(--c-music-surface);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    box-shadow:
-        inset 0 1px 1px var(--c-music-surface-solid),
-        inset 0 -1px 1px var(--c-music-overlay),
-        0 8px 24px var(--c-music-accent-dim),
-        0 2px 8px var(--c-music-accent-dim);
-    border: 1px solid var(--c-music-surface);
+.music-float[data-dragging] {
+    cursor: grabbing;
+    transition: none;
 }
 
 .music-float[data-dismissing] {
-    transform: translateX(-120%) scale(0.8);
+    transform: translateX(-120%) scale(0.86);
     opacity: 0;
     pointer-events: none;
 }
 
 .music-float[data-expanded] {
-    width: 260px;
-    height: 84px;
-    border-radius: 24px;
+    width: min(320px, calc(100% - 24px));
+    height: 80px;
+    border-radius: 32px;
 }
 
 .music-float-inner {
     display: flex;
     align-items: center;
-    width: 260px;
+    width: 100%;
     height: 100%;
-    padding: 0 12px;
+    padding: 0 10px;
     box-sizing: border-box;
-    /* Center 56px cover in 72px outer (content area 70px after 1px border): (70-56)/2 = 7px */
-    padding-left: 7px;
-    transition: padding 0.3s;
+    gap: 8px;
 }
 
 .music-float[data-expanded] .music-float-inner {
-    padding-left: 12px;
+    padding: 0 14px;
+    gap: 10px;
 }
 
-/* ── Cover Art inside float (Mini Vinyl) ── */
 .music-float-cover-wrap {
-    width: 56px;
-    height: 56px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     flex-shrink: 0;
-    position: relative;
-    cursor: pointer;
-    background: radial-gradient(circle,
-            var(--c-music-surface) 0%,
-            var(--c-music-glass-dim) 35%,
-            var(--c-music-glass-dim) 50%,
-            var(--c-music-glass-dim) 65%,
-            var(--c-music-surface) 100%);
-    box-shadow:
-        0 0 0 1px var(--c-music-accent-dim),
-        0 4px 12px var(--c-music-accent-dim),
-        inset 0 0 8px var(--c-music-surface-solid);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.music-float-cover-wrap[data-playing] {
-    animation: music-vinyl-spin 8s linear infinite;
-}
-
-.music-float-vinyl-groove {
-    position: absolute;
-    border-radius: 50%;
-    border: 0.5px solid var(--c-music-glass-dim);
-    pointer-events: none;
-}
-
-.music-float-vinyl-groove-1 {
-    inset: 15%;
-}
-
-.music-float-vinyl-groove-2 {
-    inset: 30%;
-}
-
-.music-float-vinyl-center {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
     overflow: hidden;
-    background: var(--c-music-surface);
+    background: #1c1c1e;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: inset 0 0 4px var(--c-music-surface);
-    z-index: 2;
 }
 
+.music-float[data-expanded] .music-float-cover-wrap {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+}
 
 .music-float-cover-placeholder {
     width: 100%;
@@ -1190,64 +1162,98 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--c-music-accent);
-    opacity: 0.6;
+    color: rgba(255, 255, 255, 0.55);
 }
 
-/* ── Info Area ── */
-.music-float-info {
-    margin: 0 12px;
+.music-float-wave {
     display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    height: 14px;
+    margin-left: auto;
+    padding-right: 2px;
+}
+
+.music-float[data-expanded] .music-float-wave {
+    display: none;
+}
+
+.music-float-wave span {
+    display: block;
+    width: 3px;
+    height: 4px;
+    border-radius: 99px;
+    background: #34c759;
+}
+
+.music-float[data-playing] .music-float-wave span {
+    animation: music-island-bar 0.72s ease-in-out infinite;
+}
+
+.music-float[data-playing] .music-float-wave span:nth-child(2) {
+    animation-delay: 0.12s;
+}
+
+.music-float[data-playing] .music-float-wave span:nth-child(3) {
+    animation-delay: 0.24s;
+}
+
+.music-float[data-playing] .music-float-wave span:nth-child(4) {
+    animation-delay: 0.36s;
+}
+
+.music-float-info {
+    display: none;
+    margin: 0;
     flex-direction: column;
     justify-content: center;
     cursor: pointer;
-    opacity: 0;
-    transform: translateX(-10px);
-    transition: opacity 0.3s, transform 0.3s;
+    min-width: 0;
 }
 
 .music-float[data-expanded] .music-float-info {
-    opacity: 1;
-    transform: translateX(0);
-    transition-delay: 0.1s;
+    display: flex;
+    flex: 1;
 }
 
 .music-float-title {
-    font-size: calc(11.7px*var(--app-text-scale,1));
-    font-weight: 600;
-    letter-spacing: 0.3px;
+    font-size: calc(13px*var(--app-text-scale,1));
+    font-weight: 650;
+    letter-spacing: -0.2px;
+    color: #f5f5f7;
 }
 
+.music-float-artist {
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 3px;
+}
 
-/* ── Controls Area ── */
 .music-float-controls {
-    display: flex;
+    display: none;
     align-items: center;
     gap: 2px;
-    opacity: 0;
-    transform: translateX(10px);
-    transition: opacity 0.3s, transform 0.3s;
+    flex-shrink: 0;
 }
 
 .music-float[data-expanded] .music-float-controls {
-    opacity: 1;
-    transform: translateX(0);
-    transition-delay: 0.15s;
+    display: flex;
 }
 
 .music-float-btn {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
+    color: #f5f5f7;
 }
 
 .music-float-btn:active {
-    background: var(--c-music-accent-dim);
-    color: var(--c-music-accent);
-    transform: scale(0.9);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    transform: scale(0.92);
 }
 
 .music-float-btn-play {
-    color: var(--c-music-accent);
+    color: #fff;
 }
 
 
@@ -1323,6 +1329,29 @@
     to {
         opacity: 1;
         transform: scale(1);
+    }
+}
+
+@keyframes music-island-in {
+    from {
+        opacity: 0;
+        transform: scaleX(0.72) scaleY(0.86);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes music-island-bar {
+    0%,
+    100% {
+        height: 4px;
+    }
+
+    50% {
+        height: 14px;
     }
 }
 
@@ -3977,12 +4006,8 @@
 }
 
 .music-float {
-    box-shadow:
-        inset 0 1px 1px rgba(255, 255, 255, 0.12),
-        inset 0 -1px 1px var(--c-music-overlay),
-        0 8px 24px rgba(0, 0, 0, 0.45),
-        0 0 24px rgba(140, 170, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    border: 0;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -4327,28 +4352,21 @@
 }
 
 /* ═══════════════════════════════════════════════════════
-   悬浮球独立配色 — 桌面浮球回归原浅色玻璃，不随App暗色主题
+   桌面灵动岛独立配色 — 黑色胶囊，不随音乐 App 主题
    ═══════════════════════════════════════════════════════ */
 
 .music-float {
-    /* Scoped token overrides: the ball lives on the (light) home screen,
-       so it keeps the original Spring-Light glass palette. */
-    --c-music-surface: rgba(255, 255, 255, 0.3);
-    --c-music-surface-solid: rgba(255, 255, 255, 0.55);
+    --c-music-surface: #0a0a0a;
+    --c-music-surface-solid: #111;
     --c-music-glass-dim: rgba(255, 255, 255, 0.08);
-    --c-music-accent: #5b7b64;
-    --c-music-accent-dim: rgba(106, 141, 115, 0.15);
-    --c-music-text: #2b3d31;
-    --c-music-overlay: rgba(0, 0, 0, 0.25);
-    --c-music-gold: rgba(212, 168, 83, 0.3);
-
-    background: var(--c-music-surface);
-    border: 1px solid var(--c-music-surface);
-    box-shadow:
-        inset 0 1px 1px var(--c-music-surface-solid),
-        inset 0 -1px 1px var(--c-music-overlay),
-        0 8px 24px var(--c-music-accent-dim),
-        0 2px 8px var(--c-music-accent-dim);
+    --c-music-accent: rgba(255, 255, 255, 0.62);
+    --c-music-accent-dim: rgba(255, 255, 255, 0.12);
+    --c-music-text: #f5f5f7;
+    --c-music-overlay: rgba(255, 255, 255, 0.08);
+    --c-music-gold: rgba(255, 255, 255, 0.2);
+    background: #0a0a0a;
+    border: 0;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
 
 /* ═══════════════════════════════════════════════════════

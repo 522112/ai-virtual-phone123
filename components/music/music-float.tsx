@@ -1,4 +1,4 @@
-// components/music/music-float.tsx — Floating music control widget (draggable vinyl)
+// components/music/music-float.tsx — Desktop Dynamic Island music widget
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,11 +10,24 @@ const SWIPE_DISMISS_SPEED = 1.5; // px/ms
 const SWIPE_DISMISS_ARMING_X = 88;
 const SWIPE_INERTIA_MS = 140;
 const SWIPE_VELOCITY_RECENT_MS = 180;
+const ISLAND_TOP = 12;
+const COMPACT_WIDTH = 126;
+
+function placeIsland(el: HTMLElement | null, width = COMPACT_WIDTH) {
+    const parent = el?.closest("[data-ui='phone-screen']") as HTMLElement | null;
+    const screenWidth = parent?.clientWidth || 390;
+    return {
+        x: Math.max(0, (screenWidth - width) / 2),
+        y: ISLAND_TOP,
+    };
+}
 
 export default function MusicFloat({ hidden }: { hidden?: boolean }) {
     const player = useMusicControlsOptional();
     const floatRef = useRef<HTMLDivElement>(null);
-    const [pos, setPos] = useState({ x: 310, y: 680 });
+    const [pos, setPos] = useState(() => placeIsland(null));
+    const [userMoved, setUserMoved] = useState(false);
+    const [dragging, setDragging] = useState(false);
     const dragRef = useRef<{
         pointerId: number | null; active: boolean;
         startX: number; startY: number; origX: number; origY: number;
@@ -53,6 +66,12 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
         };
     }, []);
 
+    const snapToIsland = useCallback(() => {
+        const el = floatRef.current;
+        if (!el) return;
+        setPos(placeIsland(el, el.offsetWidth));
+    }, []);
+
     const dismissFloat = useCallback(() => {
         if (!player) return;
         if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
@@ -61,6 +80,7 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
             player.dismissFloat();
             setDismissing(false);
             setExpanded(false);
+            setUserMoved(false);
             dismissTimerRef.current = null;
         }, 250);
     }, [player]);
@@ -68,6 +88,12 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
     useEffect(() => () => {
         if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
     }, []);
+
+    useEffect(() => {
+        if (hidden || !player?.currentTrack || player.floatDismissed || userMoved) return;
+        const frame = requestAnimationFrame(() => snapToIsland());
+        return () => cancelAnimationFrame(frame);
+    }, [expanded, hidden, player?.currentTrack, player?.floatDismissed, snapToIsland, userMoved]);
 
     const handlePointerDown = useCallback((e: React.PointerEvent) => {
         const target = e.target as HTMLElement;
@@ -109,6 +135,7 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
             }
             d.lastX = e.clientX;
             d.lastTime = now;
+            setDragging(true);
             setPos(nextPos);
         }
     }, [clampPos]);
@@ -121,6 +148,7 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
         }
         d.active = false;
         d.pointerId = null;
+        setDragging(false);
         const dx = e.clientX - d.startX;
         const dy = e.clientY - d.startY;
         const finalPos = clampPos(d.origX + dx, d.origY + dy);
@@ -142,6 +170,7 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
         }
 
         if (d.moved) {
+            setUserMoved(true);
             setPos(finalPos);
             return;
         }
@@ -153,11 +182,19 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
             }
 
             setExpanded(prev => {
-                requestAnimationFrame(() => setPos(p => clampPos(p.x, p.y)));
+                requestAnimationFrame(() => {
+                    const el = floatRef.current;
+                    if (!el) return;
+                    if (userMoved) {
+                        setPos(p => clampPos(p.x, p.y));
+                        return;
+                    }
+                    setPos(placeIsland(el, el.offsetWidth));
+                });
                 return !prev;
             });
         }
-    }, [player, clampPos, dismissFloat]);
+    }, [player, clampPos, dismissFloat, userMoved]);
 
     const handlePointerUp = useCallback((e: React.PointerEvent) => finishPointer(e), [finishPointer]);
     const handlePointerCancel = useCallback((e: React.PointerEvent) => finishPointer(e), [finishPointer]);
@@ -170,8 +207,12 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
         <div
             ref={floatRef}
             className="music-float"
+            data-island=""
+            aria-label="音乐灵动岛"
             {...(expanded ? { "data-expanded": "" } : {})}
             {...(dismissing ? { "data-dismissing": "" } : {})}
+            {...(dragging ? { "data-dragging": "" } : {})}
+            {...(player.isPlaying ? { "data-playing": "" } : {})}
             style={{ left: pos.x, top: pos.y }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
@@ -179,49 +220,46 @@ export default function MusicFloat({ hidden }: { hidden?: boolean }) {
             onPointerCancel={handlePointerCancel}
         >
             <div className="music-float-inner">
-                {/* Cover art */}
-                <div className="music-float-cover-wrap" {...(player.isPlaying ? { "data-playing": "" } : {})}>
-                    <div className="music-float-vinyl-groove music-float-vinyl-groove-1" />
-                    <div className="music-float-vinyl-groove music-float-vinyl-groove-2" />
-                    <div className="music-float-vinyl-center">
-                        {track.coverUrl ? (
-                            <img src={track.coverUrl} alt="" className="music-float-cover-img" draggable={false} />
-                        ) : (
-                            <div className="music-float-cover-placeholder">
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                    <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
-                                </svg>
-                            </div>
-                        )}
-                    </div>
+                <div className="music-float-cover-wrap">
+                    {track.coverUrl ? (
+                        <img src={track.coverUrl} alt="" className="music-float-cover-img" draggable={false} />
+                    ) : (
+                        <div className="music-float-cover-placeholder">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                            </svg>
+                        </div>
+                    )}
                 </div>
 
-                {/* Track Info */}
+                <div className="music-float-wave" aria-hidden>
+                    <span /><span /><span /><span />
+                </div>
+
                 <div className="music-float-info">
                     <div className="music-float-title">{track.title}</div>
                     <div className="music-float-artist">{track.artist}</div>
                 </div>
 
-                {/* Compact Controls */}
                 <div className="music-float-controls">
-                    <button className="music-float-btn" onClick={(e) => { e.stopPropagation(); player.prev(); }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <button className="music-float-btn" onClick={(e) => { e.stopPropagation(); player.prev(); }} aria-label="上一首">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
                         </svg>
                     </button>
-                    <button className="music-float-btn music-float-btn-play" onClick={(e) => { e.stopPropagation(); player.togglePlay(); }}>
+                    <button className="music-float-btn music-float-btn-play" onClick={(e) => { e.stopPropagation(); player.togglePlay(); }} aria-label={player.isPlaying ? "暂停" : "播放"}>
                         {player.isPlaying ? (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M6 4h4v16H6zm8 0h4v16h-4z" />
                             </svg>
                         ) : (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M8 5v14l11-7z" />
                             </svg>
                         )}
                     </button>
-                    <button className="music-float-btn" onClick={(e) => { e.stopPropagation(); player.next(); }}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <button className="music-float-btn" onClick={(e) => { e.stopPropagation(); player.next(); }} aria-label="下一首">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M6 18l8.5-6L6 6v12zm8.5 0h2V6h-2v12z" />
                         </svg>
                     </button>
