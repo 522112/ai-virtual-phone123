@@ -7763,11 +7763,19 @@
 }
 
 .rel-invite-overlay,
-.rel-space,
 .rel-compose {
   position: absolute;
   inset: 0;
   z-index: 80;
+}
+
+.rel-space {
+  position: absolute;
+  top: calc(var(--page-header-safe-top, 48px) + var(--page-header-content-height, 54px));
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 8;
 }
 
 .rel-invite-overlay {
@@ -7900,12 +7908,69 @@
   font-weight: 750;
 }
 
+.rel-space-text-btn:disabled {
+  opacity: 0.38;
+}
+
+.rel-space input.hidden {
+  display: none;
+}
+
 .rel-space-hero {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px 16px;
+  min-height: 168px;
+  padding: 28px 16px 18px;
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--rel-accent) 28%, #fff) 0%, transparent 62%),
+    linear-gradient(180deg, color-mix(in srgb, var(--rel-accent) 10%, #fff) 0%, var(--c-page-body-bg, #fff) 100%);
+  background-size: cover;
+  background-position: center;
+}
+
+.rel-space-hero[data-has-cover] {
+  color: #fff;
+}
+
+.rel-space-hero[data-has-cover]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(18, 12, 16, 0.18), rgba(18, 12, 16, 0.58));
+}
+
+.rel-space-hero > * {
+  position: relative;
+}
+
+.rel-space-cover-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(255, 255, 255, 0.78);
+  color: inherit;
+  font-size: calc(11px * var(--app-text-scale, 1));
+  cursor: pointer;
+}
+
+.rel-space-hero[data-has-cover] .rel-space-cover-btn {
+  background: rgba(0, 0, 0, 0.34);
+  color: #fff;
+}
+
+.rel-space-cover-credit {
+  font-size: calc(11px * var(--app-text-scale, 1));
+  opacity: 0.78;
 }
 
 .rel-space-avatars {
@@ -7922,7 +7987,7 @@
 
 .rel-space-avatar + .rel-space-avatar {
   margin-left: -12px;
-  box-shadow: 0 0 0 3px var(--c-page-body-bg, #fff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, #fff 70%, transparent);
 }
 
 .rel-space-avatar img {
@@ -8009,17 +8074,98 @@
   opacity: 0.5;
 }
 
-.rel-feed-compose {
+.rel-feed-composer-card {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  margin: 0 0 4px;
-  padding: 10px 16px 6px;
+  gap: 10px;
+  width: calc(100% - 32px);
+  margin: 10px 16px 14px;
+  padding: 10px 12px;
   border: 0;
-  background: none;
-  color: var(--c-text-title, inherit);
-  font-size: calc(15px * var(--app-text-scale, 1));
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rel-feed-composer-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--c-input, #eee);
+  flex: 0 0 auto;
+}
+
+.rel-feed-composer-avatar img,
+.rel-feed-composer-avatar .chat-fallback-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rel-feed-composer-placeholder {
+  flex: 1;
+  min-width: 0;
+  color: var(--c-icon, #999);
+  font-size: calc(14px * var(--app-text-scale, 1));
+}
+
+.rel-feed-composer-cam {
+  color: var(--rel-accent, #ff5c8a);
+  display: inline-flex;
+}
+
+.rel-compose-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-page-body-bg, #fff);
+}
+
+.rel-compose-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 20px;
+}
+
+.rel-compose-photo {
+  position: relative;
+  width: 120px;
+}
+
+.rel-compose-photo img {
+  display: block;
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.rel-compose-photo .rel-space-icon-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.rel-compose-add-photo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--c-text) 6%, transparent);
+  color: inherit;
   cursor: pointer;
 }
 

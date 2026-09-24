@@ -1239,6 +1239,8 @@ export function formatRichMediaForHistory(msg: ChatMessage, userName: string, ch
             return "[拒绝关系]";
         case "change_avatar":
             return "[换上情头]";
+        case "change_space_cover":
+            return "[设为空间背景]";
         case "relationship_space": {
             const action = d?.spaceAction;
             const label = d?.label || "";

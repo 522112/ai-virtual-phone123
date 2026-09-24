@@ -111,6 +111,7 @@ import {
     parseRelationshipKindLabel,
     relationshipKindLabel,
     materializeRelationshipSpacePart,
+    applyCharacterSpaceCover,
 } from "@/lib/relationship-storage";
 import type { RelationshipKind } from "@/lib/relationship-types";
 
@@ -1728,7 +1729,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 part.mediaType === "decline_payment_request" ||
                 part.mediaType === "accept_relationship" ||
                 part.mediaType === "decline_relationship" ||
-                part.mediaType === "change_avatar"
+                part.mediaType === "change_avatar" ||
+                part.mediaType === "change_space_cover"
             ) {
                 return [];
             }
@@ -2204,6 +2206,23 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const handleAIMediaAction = (actionType: string, charN: string, userN: string) => {
         if (actionType === "change_avatar") {
             void wearCoupleAvatarFromLatestUserImage(charN);
+            return;
+        }
+        if (actionType === "change_space_cover") {
+            const latest = loadChatMessages(session.id);
+            const result = applyCharacterSpaceCover({
+                characterId: session.contactId,
+                characterName: charN,
+                messages: latest.length ? latest : messages,
+            });
+            if (!result.applied) return;
+            const notice = pushChatMessage({
+                sessionId: session.id,
+                role: "system",
+                content: result.notice,
+                ...buildAssistantActionEditMeta("[设为空间背景]"),
+            });
+            setMessages(prev => [...prev, notice]);
             return;
         }
         if (actionType === "accept_relationship" || actionType === "decline_relationship") {
@@ -2969,7 +2988,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 || p.mediaType === "accept_transfer" || p.mediaType === "decline_transfer"
                 || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
                 || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship"
-                || p.mediaType === "change_avatar") {
+                || p.mediaType === "change_avatar"
+                || p.mediaType === "change_space_cover") {
                 if (p.mediaType === "decline_red_packet" || p.mediaType === "decline_transfer" || p.mediaType === "decline_payment_request" || p.mediaType === "decline_relationship") {
                     hasDecline = true;
                 }
@@ -4758,7 +4778,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     part.mediaType === "decline_payment_request" ||
                     part.mediaType === "accept_relationship" ||
                     part.mediaType === "decline_relationship" ||
-                    part.mediaType === "change_avatar"
+                    part.mediaType === "change_avatar" ||
+                    part.mediaType === "change_space_cover"
                 )
             ) {
                 return [];

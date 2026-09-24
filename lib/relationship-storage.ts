@@ -1,4 +1,6 @@
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
+import { findLatestUserChatImage } from "./couple-avatar-storage";
+import { loadMomentPosts } from "./moments-storage";
 import {
   RELATIONSHIP_KIND_META,
   isRelationshipKind,
@@ -148,6 +150,98 @@ export function declineRelationship(relationshipId: string): RelationshipBinding
   const next = items.map(item => item.id === relationshipId ? { ...item, status: "declined" as const } : item);
   saveBindings(next);
   return next.find(item => item.id === relationshipId) || null;
+}
+
+export function updateRelationshipCover(
+  relationshipId: string,
+  coverImage: string,
+  updatedBy: "user" | "character",
+): RelationshipBinding | null {
+  const image = coverImage.trim();
+  if (!image) return null;
+  const items = loadRelationshipBindings();
+  let updated: RelationshipBinding | null = null;
+  const next = items.map(item => {
+    if (item.id !== relationshipId) return item;
+    updated = {
+      ...item,
+      coverImage: image,
+      coverUpdatedBy: updatedBy,
+      coverUpdatedAt: new Date().toISOString(),
+    };
+    return updated;
+  });
+  if (updated) saveBindings(next);
+  return updated;
+}
+
+type SpaceCoverPhotoLike = {
+  role?: string;
+  mediaType?: string;
+  mediaUrl?: string;
+  content?: string;
+  createdAt?: string;
+  mediaData?: { fileType?: string; label?: string };
+};
+
+function isUserChatPhoto(msg: SpaceCoverPhotoLike): boolean {
+  if (msg.role !== "user" || !msg.mediaUrl) return false;
+  if (msg.mediaType === "image") return true;
+  return msg.mediaType === "media_file" && msg.mediaData?.fileType === "image";
+}
+
+export function findLatestUserPhotoForSpaceCover(input: {
+  messages?: SpaceCoverPhotoLike[];
+  relationshipId?: string;
+}): string | null {
+  const candidates: { src: string; at: number; order: number }[] = [];
+  let order = 0;
+  for (const msg of input.messages || []) {
+    if (!isUserChatPhoto(msg) || !msg.mediaUrl) continue;
+    candidates.push({ src: msg.mediaUrl, at: Date.parse(msg.createdAt || "") || 0, order: order++ });
+  }
+  if (input.relationshipId) {
+    for (const post of loadRelationshipPosts(input.relationshipId)) {
+      if (post.authorType !== "user" || !post.photoAssetId) continue;
+      candidates.push({ src: post.photoAssetId, at: Date.parse(post.createdAt) || 0, order: order++ });
+    }
+  }
+  try {
+    for (const post of loadMomentPosts()) {
+      if (post.authorType !== "user" || !post.photoUrl) continue;
+      candidates.push({ src: post.photoUrl, at: Date.parse(post.createdAt) || 0, order: order++ });
+    }
+  } catch {
+    // Moments cache may not be ready yet.
+  }
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.at - a.at || b.order - a.order);
+  return candidates[0].src;
+}
+
+export function applyCharacterSpaceCover(input: {
+  characterId: string;
+  characterName: string;
+  messages?: SpaceCoverPhotoLike[];
+  imageRef?: string | null;
+}): { notice: string; applied: boolean } {
+  const binding = getRelationshipByCharacter(input.characterId);
+  if (!binding || binding.status !== "active") {
+    return { notice: `${input.characterName}想换空间背景，但你们还没有绑定关系`, applied: false };
+  }
+  const src = (input.imageRef || "").trim() || findLatestUserPhotoForSpaceCover({
+    messages: input.messages,
+    relationshipId: binding.id,
+  });
+  if (!src) {
+    return { notice: `${input.characterName}想换空间背景，但最近没有可用的照片`, applied: false };
+  }
+  updateRelationshipCover(binding.id, src, "character");
+  const label = relationshipKindLabel(binding.kind);
+  return {
+    notice: `${input.characterName}把你发的照片设成了${label}空间的背景`,
+    applied: true,
+  };
 }
 
 export function dissolveRelationship(relationshipId: string): RelationshipBinding | null {
@@ -484,7 +578,11 @@ export function materializeRelationshipSpacePart(input: {
   });
 }
 
-export function buildRelationshipSpaceInstruction(characterId: string | undefined, isGroup?: boolean): string {
+export function buildRelationshipSpaceInstruction(
+  characterId: string | undefined,
+  isGroup?: boolean,
+  messages?: SpaceCoverPhotoLike[],
+): string {
   if (isGroup || !characterId) return "";
   const binding = getRelationshipByCharacter(characterId);
   const inviteHint = "若想邀请对方，输出 [关系邀请:情侣]（或闺蜜/死党/基友）。邀请后对方会收到待接收卡片。同一角色同时只能有一份关系申请。";
@@ -514,7 +612,11 @@ export function buildRelationshipSpaceInstruction(characterId: string | undefine
     `[关系回评:对方名字:内容] — 回复某人的评论`,
     `[关系打卡] 或 [关系打卡:一句话] — 今日打卡`,
     `[关系纪念日:名称:YYYY-MM-DD] — 添加纪念日`,
-  ].join("\n");
+    `[设为空间背景] — 把对方最近发来的照片（聊天随手发的自拍，或动态/空间里的图）设成空间背景。只在人设真的被打动、觉得适合当背景时使用，不要每张图都换。`,
+    findLatestUserChatImage(messages || [])
+      ? "对方最近发来一张照片。若人设会觉得好看、想用来布置空间，可输出 [设为空间背景]。"
+      : "",
+  ].filter(Boolean).join("\n");
 }
 
 export { relationshipKindLabel, RELATIONSHIP_KIND_META };

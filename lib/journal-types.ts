@@ -14,11 +14,17 @@ export type JournalStroke = {
 
 export type JournalBlockAuthor = "user" | "character";
 
+export type JournalDrawingSkill = "poor" | "ok" | "good";
+
 type JournalBlockBase = {
   id: string;
   author: JournalBlockAuthor;
   characterId?: string;
   side: JournalSide;
+  fontSize?: number;
+  x?: number;
+  y?: number;
+  scale?: number;
 };
 
 export type JournalBlock =
