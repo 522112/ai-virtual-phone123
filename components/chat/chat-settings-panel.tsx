@@ -220,6 +220,9 @@ const SEARCH_MEDIA_BUBBLE_TYPES = new Set<SearchResultMediaType>([
     "music_share",
     "xiaohongshu_note_share",
     "media_file",
+    "relationship_invite",
+    "accept_relationship",
+    "decline_relationship",
 ]);
 
 const SEARCH_VISUAL_MEDIA_TYPES = new Set<SearchResultMediaType>([

@@ -106,6 +106,9 @@ function partToWeixinText(part: ParsedMessagePart, charName: string): string | n
     });
     if (part.mediaType === "accept_payment_request") return `${charName}接受了代付`;
     if (part.mediaType === "decline_payment_request") return `${charName}拒绝了代付`;
+    if (part.mediaType === "relationship_invite") return `${charName}发来了关系邀请`;
+    if (part.mediaType === "accept_relationship") return `${charName}同意了关系邀请`;
+    if (part.mediaType === "decline_relationship") return `${charName}拒绝了关系邀请`;
 
     return content || null;
 }
@@ -965,7 +968,8 @@ async function handleIncomingMessage(
         if (p.mediaType === "voice_call" || p.mediaType === "video_call") continue;
         if (p.mediaType === "accept_red_packet" || p.mediaType === "decline_red_packet"
             || p.mediaType === "accept_transfer" || p.mediaType === "decline_transfer"
-            || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request") continue;
+            || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
+            || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship") continue;
         if (p.mediaType === "poke") {
             const pokeSender = (p.mediaData?.pokeSender === "我" ? charName : p.mediaData?.pokeSender) || charName;
             const pokeTarget = p.mediaData?.pokeTarget || "你";

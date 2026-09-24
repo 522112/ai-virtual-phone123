@@ -1231,6 +1231,12 @@ export function formatRichMediaForHistory(msg: ChatMessage, userName: string, ch
         case "decline_payment_request":
             if (isGroup && d?.claimer && d?.owner) return `[${d.claimer}拒绝了${d.owner}的代付]`;
             return "[拒绝代付]";
+        case "relationship_invite":
+            return `[关系邀请:${d?.label || "关系"}]`;
+        case "accept_relationship":
+            return "[同意关系]";
+        case "decline_relationship":
+            return "[拒绝关系]";
         default:
             return msg.content;
     }

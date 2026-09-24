@@ -39,6 +39,14 @@ import { bgSetInterval, bgSetTimeout } from "./bg-timer";
 import { dispatchChatMessageNotice } from "./chat-notification-events";
 import { settleShoppingPaymentRequest } from "./shopping-payment-request";
 import {
+    acceptRelationship,
+    attachInviteMessageId,
+    createIncomingInvite,
+    declineRelationship,
+    parseRelationshipKindLabel,
+    relationshipKindLabel,
+} from "./relationship-storage";
+import {
     createPendingChatGeneratedImageData,
     generateAndApplyChatGeneratedImage,
     isPendingChatGeneratedImageMessage,
@@ -769,6 +777,41 @@ export function handleFollowUpMediaAction(
     sessionId: string,
     contextMessages: ChatMessage[],
 ) {
+    if (actionType === "accept_relationship" || actionType === "decline_relationship") {
+        const targetInvite = [...contextMessages].reverse().find(
+            m => m.role === "user" && m.mediaType === "relationship_invite" && m.mediaData?.status === "pending"
+        );
+        if (!targetInvite) return;
+        const accept = actionType === "accept_relationship";
+        const relId = targetInvite.mediaData?.relationshipId;
+        const kind = targetInvite.mediaData?.relationshipKind || parseRelationshipKindLabel(targetInvite.mediaData?.label) || "couple";
+        if (relId) {
+            if (accept) acceptRelationship(relId);
+            else declineRelationship(relId);
+        }
+        updateMessageMediaData(targetInvite.id, {
+            ...targetInvite.mediaData,
+            status: accept ? "received" : "declined",
+        });
+        const charName = resolveFollowUpSenderName(sessionId);
+        const label = relationshipKindLabel(kind);
+        pushChatMessage({
+            sessionId,
+            role: "assistant",
+            content: accept ? `${charName}同意成为你的${label}` : `${charName}拒绝了${label}邀请`,
+            mediaType: actionType,
+            mediaData: {
+                relationshipKind: kind,
+                relationshipId: relId,
+                label,
+                status: accept ? "received" : "declined",
+            },
+            responseBatchId: createResponseBatchId(),
+            rawResponseText: accept ? "[同意关系]" : "[拒绝关系]",
+        });
+        return;
+    }
+
     const targetMediaType = actionType.includes("payment_request")
         ? "payment_request"
         : actionType.includes("red_packet") ? "red_packet" : "transfer";
@@ -943,8 +986,28 @@ export async function parseAndSaveResponse(
         }
         if (p.mediaType === "accept_red_packet" || p.mediaType === "decline_red_packet"
             || p.mediaType === "accept_transfer" || p.mediaType === "decline_transfer"
-            || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request") {
+            || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
+            || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship") {
             handleFollowUpMediaAction(p.mediaType, sessionId, contextMessages);
+            continue;
+        }
+        if (p.mediaType === "relationship_invite" && sess && !sess.isGroup) {
+            const kind = parseRelationshipKindLabel(p.mediaData?.label) || "couple";
+            const created = createIncomingInvite(sess.contactId, kind);
+            if ("error" in created) {
+                filteredParts.push({ content: `${charName}想邀请你成为${relationshipKindLabel(kind)}，但${created.error}` });
+                continue;
+            }
+            filteredParts.push({
+                content: "",
+                mediaType: "relationship_invite",
+                mediaData: {
+                    label: relationshipKindLabel(kind),
+                    relationshipKind: kind,
+                    relationshipId: created.id,
+                    status: "pending",
+                },
+            });
             continue;
         }
         if (p.mediaType === "poke") {

@@ -31,6 +31,7 @@ import { formatShoppingPaymentRequestHistory } from "@/lib/shopping-payment-requ
 import { toCustomAppIconId } from "@/lib/custom-app-types";
 import { ChatPluginSlot } from "@/components/chat/chat-plugin-slot";
 import { CHAT_PLUGIN_SLOTS_CHANGED_EVENT, getChatPluginRuntime } from "@/lib/chat-plugin-runtime";
+import { RELATIONSHIP_KIND_META, parseRelationshipKindLabel, relationshipKindLabel } from "@/lib/relationship-storage";
 
 interface MessageBubbleProps {
     msg: ChatMessage;
@@ -43,6 +44,7 @@ interface MessageBubbleProps {
     characterId?: string;
     onMusicPlay?: (title: string, artist?: string) => void;
     onActionSelect?: (text: string) => void;
+    onRelationshipAction?: (msg: ChatMessage, action: "accept" | "decline" | "open") => void;
     displayContent?: string;
     defaultTranslationExpanded?: boolean;
 }
@@ -88,7 +90,7 @@ function PluginKindBubble({ msg, kind }: { msg: ChatMessage; kind: string }) {
  * Renders a message bubble based on its mediaType.
  * Falls back to ReactMarkdown for plain text messages.
  */
-export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charName, userName, onSystemMessage, groupSize, onShowDetail, characterId, onMusicPlay, onActionSelect, displayContent, defaultTranslationExpanded = false }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charName, userName, onSystemMessage, groupSize, onShowDetail, characterId, onMusicPlay, onActionSelect, onRelationshipAction, displayContent, defaultTranslationExpanded = false }: MessageBubbleProps) {
     switch (msg.mediaType) {
         case "red_packet":
             return <RedPacketBubble msg={msg} charName={charName} userName={userName} groupSize={groupSize} onShowDetail={onShowDetail} />;
@@ -96,6 +98,10 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
             return <TransferBubble msg={msg} charName={charName} userName={userName} onShowDetail={onShowDetail} />;
         case "gift":
             return <GiftBubble msg={msg} />;
+        case "relationship_invite":
+        case "accept_relationship":
+        case "decline_relationship":
+            return <RelationshipInviteBubble msg={msg} charName={charName} userName={userName} onAction={onRelationshipAction} />;
         case "contact_card":
             return <ContactCardBubble msg={msg} characterId={characterId} />;
         case "payment_request":
@@ -162,6 +168,7 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
     if (prev.characterId !== next.characterId) return false;
     if (prev.displayContent !== next.displayContent) return false;
     if (prev.defaultTranslationExpanded !== next.defaultTranslationExpanded) return false;
+    if (prev.onRelationshipAction !== next.onRelationshipAction) return false;
     return true;
 });
 
@@ -730,6 +737,73 @@ function TransferBubble({ msg, charName, userName, onShowDetail }: {
                 <span>微信转账</span>
                 {isReceived && <span>已收款</span>}
                 {isDeclined && <span>已退回</span>}
+            </div>
+        </div>
+    );
+}
+
+function RelationshipInviteBubble({
+    msg,
+    charName,
+    userName,
+    onAction,
+}: {
+    msg: ChatMessage;
+    charName?: string;
+    userName?: string;
+    onAction?: (msg: ChatMessage, action: "accept" | "decline" | "open") => void;
+}) {
+    const kind = msg.mediaData?.relationshipKind
+        || parseRelationshipKindLabel(msg.mediaData?.label)
+        || "couple";
+    const meta = RELATIONSHIP_KIND_META[kind];
+    const status = msg.mediaType === "accept_relationship"
+        ? "received"
+        : msg.mediaType === "decline_relationship"
+            ? "declined"
+            : (msg.mediaData?.status || "pending");
+    const incoming = msg.role === "assistant" && status === "pending" && msg.mediaType === "relationship_invite";
+    const sender = msg.role === "user" ? (userName || "我") : (msg.senderName || charName || "对方");
+    const title = msg.mediaType === "accept_relationship"
+        ? `已成为${relationshipKindLabel(kind)}`
+        : msg.mediaType === "decline_relationship"
+            ? `已拒绝${relationshipKindLabel(kind)}邀请`
+            : meta.inviteTitle;
+    const desc = msg.mediaType === "accept_relationship"
+        ? "点卡片进入双方空间，可以发动态、评论、打卡和纪念日。"
+        : msg.mediaType === "decline_relationship"
+            ? "这次邀约没有达成。"
+            : `${sender} 邀请绑定「${meta.label}」。一个人只能同时拥有一段关系。`;
+    const statusText = status === "received"
+        ? "已同意"
+        : status === "declined"
+            ? "已拒绝"
+            : incoming ? "待接收" : "等待对方接受";
+
+    return (
+        <div
+            className="chat-rel-card"
+            data-status={status}
+            style={{ "--rel-accent": meta.accent } as React.CSSProperties}
+            onClick={() => {
+                if (status === "received" || msg.mediaType === "accept_relationship") onAction?.(msg, "open");
+            }}
+        >
+            <div className="chat-rel-card-body">
+                <div className="chat-rel-card-kicker">{meta.emoji} 关系邀约</div>
+                <div className="chat-rel-card-title">{title}</div>
+                <div className="chat-rel-card-desc">{desc}</div>
+            </div>
+            <div className="chat-rel-card-foot">
+                <span className="chat-rel-card-status">{statusText}</span>
+                {incoming ? (
+                    <div className="chat-rel-card-actions">
+                        <button type="button" className="chat-rel-card-btn chat-rel-card-btn-decline" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "decline"); }}>拒绝</button>
+                        <button type="button" className="chat-rel-card-btn chat-rel-card-btn-accept" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "accept"); }}>同意</button>
+                    </div>
+                ) : status === "received" || msg.mediaType === "accept_relationship" ? (
+                    <button type="button" className="chat-rel-card-btn chat-rel-card-btn-accept" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "open"); }}>进入空间</button>
+                ) : null}
             </div>
         </div>
     );

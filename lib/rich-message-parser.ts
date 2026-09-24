@@ -369,6 +369,22 @@ const RICH_PATTERNS: {
         regex: /\[拒绝代付\]/,
         build: () => ({ content: "", mediaType: "decline_payment_request" as const }),
     },
+    {
+        regex: /\[关系邀请[：:]([^\]]+)\]/,
+        build: (m) => ({
+            content: "",
+            mediaType: "relationship_invite" as const,
+            mediaData: { label: m[1]?.trim() || "关系", status: "pending" as const },
+        }),
+    },
+    {
+        regex: /\[(?:同意|接受)关系\]/,
+        build: () => ({ content: "", mediaType: "accept_relationship" as const }),
+    },
+    {
+        regex: /\[拒绝关系\]/,
+        build: () => ({ content: "", mediaType: "decline_relationship" as const }),
+    },
 ];
 
 type RichPatternCandidate = {

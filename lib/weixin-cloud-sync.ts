@@ -1977,6 +1977,8 @@ function importCloudAssistantMessage(
     && part.mediaType !== "decline_transfer"
     && part.mediaType !== "accept_payment_request"
     && part.mediaType !== "decline_payment_request"
+    && part.mediaType !== "accept_relationship"
+    && part.mediaType !== "decline_relationship"
   );
 
   const messages: ChatMessage[] = [];

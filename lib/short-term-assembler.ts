@@ -329,6 +329,9 @@ export function loadNativeTimeline(
             else if (msg.mediaType === "decline_transfer") content = "[拒收转账]";
             else if (msg.mediaType === "accept_payment_request") content = "[接受代付]";
             else if (msg.mediaType === "decline_payment_request") content = "[拒绝代付]";
+            else if (msg.mediaType === "relationship_invite") content = `[关系邀请:${msg.mediaData?.label || "关系"}]`;
+            else if (msg.mediaType === "accept_relationship") content = "[同意关系]";
+            else if (msg.mediaType === "decline_relationship") content = "[拒绝关系]";
             else if (msg.mediaType === "poke") content = `[我拍了拍${msg.mediaData?.pokeTarget || ""}]`;
             // Represent rich media as text when content is empty
             else if (!content && msg.mediaType) {
