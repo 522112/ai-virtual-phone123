@@ -5703,7 +5703,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 : (msg.senderName || character?.name || "对方");
             return toForwardedChatItem(msg, originalName);
         });
-        const title = buildForwardedChatTitle(items.map(item => item.name));
+        const titleNames = items.map(item => item.name);
+        const selfName = userIdentity?.name || "我";
+        const otherName = character?.name || "对方";
+        if (!titleNames.includes(selfName)) titleNames.unshift(selfName);
+        if (!session.isGroup && !titleNames.includes(otherName)) titleNames.push(otherName);
+        const title = buildForwardedChatTitle(titleNames);
         const preview = buildForwardedRecordPreview(items);
         pushChatMessage({
             sessionId: dest,
