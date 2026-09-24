@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, Plus } from "lucide-react";
+import { AlertCircle, ChevronLeft, Plus } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/modal";
 
 import { ChatFallbackAvatar } from "@/components/chat/chat-fallback-avatar";
 import { JournalDoodleSheet, JournalEditRail, JournalFlipPreview, JournalOpenBook } from "./journal-spread";
@@ -46,6 +47,11 @@ type JournalView =
   | { name: "books"; kind: JournalBookKind }
   | { name: "book"; bookId: string }
   | { name: "page"; bookId: string; pageId: string };
+
+type JournalDeleteConfirm =
+  | { kind: "book"; bookId: string; title: string }
+  | { kind: "page"; bookId: string; pageId: string; title: string }
+  | { kind: "block"; bookId: string; pageId: string; blockId: string };
 
 function CharacterPicker({
   characters,
@@ -97,6 +103,8 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
   const [clips, setClips] = useState<JournalClipCandidate[]>([]);
   const [clipOpen, setClipOpen] = useState(false);
   const [createCoupleOpen, setCreateCoupleOpen] = useState(false);
+  const [focusBlockId, setFocusBlockId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<JournalDeleteConfirm | null>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const coverBookIdRef = useRef<string | null>(null);
@@ -333,7 +341,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
                 <button type="button" onClick={() => { setRenameBookId(book.id); setRenameValue(book.title); }}>重命名</button>
                 <button type="button" onClick={() => { coverBookIdRef.current = book.id; coverInputRef.current?.click(); }}>换封面</button>
                 <button type="button" onClick={() => setShareTarget({ bookId: book.id })}>分享</button>
-                <button type="button" onClick={() => { deleteJournalBook(book.id); refresh(); }}>删除</button>
+                <button type="button" onClick={() => setDeleteConfirm({ kind: "book", bookId: book.id, title: book.title })}>删除</button>
               </div>
             </div>
           </article>
@@ -415,10 +423,12 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           book={book}
           page={page}
           annotations={pageAnnotations}
+          focusBlockId={focusBlockId}
+          onFocusConsumed={() => setFocusBlockId(null)}
           onChangeBlock={block => {
             updatePageBlocks(page.blocks.map(item => item.id === block.id ? block : item));
           }}
-          onRemoveBlock={blockId => updatePageBlocks(page.blocks.filter(item => item.id !== blockId))}
+          onRemoveBlock={blockId => setDeleteConfirm({ kind: "block", bookId: book.id, pageId: page.id, blockId })}
           onAnnotateBlock={block => openUserNote(book, page, block)}
         />
       </div>
@@ -428,8 +438,9 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         open={railOpen}
         onToggle={() => setRailOpen(current => !current)}
         onAddText={() => {
+          const id = createJournalBlockId();
           addSideBlock({
-            id: createJournalBlockId(),
+            id,
             type: "text",
             text: "",
             author: "user",
@@ -441,6 +452,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
             boxW: 72,
             boxH: 26,
           });
+          setFocusBlockId(id);
           setRailOpen(false);
         }}
         onAddImage={() => {
@@ -452,8 +464,9 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           setDoodleOpen(true);
         }}
         onDrawOnPage={() => {
+          const id = createJournalBlockId();
           addSideBlock({
-            id: createJournalBlockId(),
+            id,
             type: "doodle",
             strokes: [],
             author: "user",
@@ -463,6 +476,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
             boxW: 70,
             boxH: 32,
           });
+          setFocusBlockId(id);
           setRailOpen(false);
         }}
         onAddStamp={stamp => {
@@ -512,11 +526,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         }}
         onPreview={() => setPreviewTarget({ bookId: book.id, pageId: page.id })}
         onShare={() => setShareTarget({ bookId: book.id, pageId: page.id })}
-        onDelete={() => {
-          deleteJournalPage(book.id, page.id);
-          refresh();
-          setView({ name: "book", bookId: book.id });
-        }}
+        onDelete={() => setDeleteConfirm({ kind: "page", bookId: book.id, pageId: page.id, title: page.title || "这一页" })}
         canPrev={pageIndex > 0}
         canNext={pageIndex >= 0 && pageIndex < book.pages.length - 1}
       />
@@ -583,8 +593,9 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           event.target.value = "";
           if (!file) return;
           const src = await imageFileToJournalDataUrl(file);
+          const id = createJournalBlockId();
           addSideBlock({
-            id: createJournalBlockId(),
+            id,
             type: "image",
             src,
             author: "user",
@@ -594,6 +605,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
             boxW: 58,
             boxH: 28,
           });
+          setFocusBlockId(id);
         }}
       />
 
@@ -678,8 +690,9 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         <JournalDoodleSheet
           onClose={() => setDoodleOpen(false)}
           onApply={strokes => {
+            const id = createJournalBlockId();
             addSideBlock({
-              id: createJournalBlockId(),
+              id,
               type: "doodle",
               strokes,
               author: "user",
@@ -690,6 +703,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
               boxH: 30,
               scale: 1,
             });
+            setFocusBlockId(id);
             setDoodleOpen(false);
           }}
         />
@@ -763,6 +777,54 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           </div>
         </div>
       )}
+
+      {deleteConfirm ? (
+        <ConfirmDialog
+          title={
+            deleteConfirm.kind === "book"
+              ? `删除「${deleteConfirm.title}」？`
+              : deleteConfirm.kind === "page"
+                ? `删除「${deleteConfirm.title}」？`
+                : "删除这块内容？"
+          }
+          message={
+            deleteConfirm.kind === "book"
+              ? "这册手账和里面的页都会被删掉。"
+              : deleteConfirm.kind === "page"
+                ? "这一页上的字、图和涂鸦都会被删掉。"
+                : "删掉后不能再改回这一块。"
+          }
+          icon={AlertCircle}
+          variant="danger"
+          confirmLabel="删除"
+          cancelLabel="取消"
+          onCancel={() => setDeleteConfirm(null)}
+          onConfirm={() => {
+            if (deleteConfirm.kind === "book") {
+              const existing = getJournalBook(deleteConfirm.bookId);
+              deleteJournalBook(deleteConfirm.bookId);
+              refresh();
+              if ((view.name === "book" || view.name === "page") && view.bookId === deleteConfirm.bookId) {
+                setView(existing ? { name: "books", kind: existing.kind } : { name: "home" });
+              }
+            } else if (deleteConfirm.kind === "page") {
+              deleteJournalPage(deleteConfirm.bookId, deleteConfirm.pageId);
+              refresh();
+              setView({ name: "book", bookId: deleteConfirm.bookId });
+            } else {
+              const book = getJournalBook(deleteConfirm.bookId);
+              const page = book?.pages.find(item => item.id === deleteConfirm.pageId);
+              if (page) {
+                updateJournalPage(deleteConfirm.bookId, deleteConfirm.pageId, {
+                  blocks: page.blocks.filter(item => item.id !== deleteConfirm.blockId),
+                });
+                refresh();
+              }
+            }
+            setDeleteConfirm(null);
+          }}
+        />
+      ) : null}
     </section>
   );
 }

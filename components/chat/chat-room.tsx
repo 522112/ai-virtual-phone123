@@ -1,14 +1,14 @@
 "use client";
 
 import { forwardRef, Fragment, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChatSession, ChatMessage, CHAT_APP_SETTINGS_UPDATED_EVENT, CHAT_INITIAL_VISIBLE_MESSAGE_COUNT, CHAT_LOAD_MORE_MESSAGE_COUNT, CHAT_REQUEST_REPLY_EVENT, loadChatAppSettings, loadChatMessages, loadChatContacts, loadChatSessions, createOrGetSession, saveChatSessions, pushChatMessage, updateChatMessage, deleteChatMessage, deleteChatMessagesFrom, deleteChatMessagesByIds, retractChatMessage, editChatMessage, updateMessageMediaData, replaceResponseBatchWithParts, replaceGroupResponseRound, isReadingDiscussMessage, isSystemInstructionMessage, createResponseBatchId, createResponseRoundId, getLatestStateValues, getLatestCharacterStateValues, compareChatMessages, isSessionStreamingEnabled } from "@/lib/chat-storage";
+import { ChatSession, ChatMessage, CHAT_APP_SETTINGS_UPDATED_EVENT, CHAT_INITIAL_VISIBLE_MESSAGE_COUNT, CHAT_LOAD_MORE_MESSAGE_COUNT, CHAT_REQUEST_REPLY_EVENT, loadChatAppSettings, loadChatMessages, loadChatContacts, loadChatSessions, createOrGetSession, saveChatSessions, pushChatMessage, updateChatMessage, deleteChatMessage, deleteChatMessagesFrom, deleteChatMessagesByIds, retractChatMessage, editChatMessage, updateMessageMediaData, replaceResponseBatchWithParts, replaceGroupResponseRound, isReadingDiscussMessage, isSystemInstructionMessage, createResponseBatchId, createResponseRoundId, getLatestStateValues, getLatestCharacterStateValues, compareChatMessages, isSessionStreamingEnabled, classifyForwardedKind, buildForwardedPreview } from "@/lib/chat-storage";
 import { cleanStreamText, splitStreamPreviewSegments, stripLiteralTexts, stripXmlTagBlocks } from "@/lib/stream-preview";
 import type { StateValue } from "@/lib/chat-storage";
 import { parseStateValues, mergeStateValues } from "@/lib/state-value-parser";
 import { parseAIResponse, type ParsedMessagePart } from "@/lib/rich-message-parser";
 import { isKnownStickerLabel } from "@/lib/sticker-data";
 import { translateReasoningText } from "@/lib/reasoning-translate";
-import { MessageBubble, MediaDetailModal, prewarmStickerCache, BilingualTextBlock, isStandaloneHtmlPreviewContent, normalizeTextBubbleContent } from "./message-bubble";
+import { MessageBubble, MediaDetailModal, ForwardDetailOverlay, prewarmStickerCache, BilingualTextBlock, isStandaloneHtmlPreviewContent, normalizeTextBubbleContent } from "./message-bubble";
 import { GeneratedImageErrorDialog } from "./generated-image-error-dialog";
 import { PhotoInputModal, TextPhotoModal, VoiceRecordModal, RedPacketModal, LocationInputModal, SystemInstructionModal, CoupleAvatarModal } from "./rich-input-modals";
 import { EmojiPanel, StickerPanel } from "./emoji-panel";
@@ -5630,22 +5630,37 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         const chars = loadCharacters();
         const sessions = loadChatSessions().filter(item => item.id !== session.id);
         const seen = new Set(sessions.map(item => item.isGroup ? item.id : item.contactId));
-        const fromSessions = sessions.map(item => ({
-            sessionId: item.id,
-            contactId: item.contactId,
-            isGroup: !!item.isGroup,
-            name: item.isGroup
-                ? (item.groupName || "群聊")
-                : (chars.find(c => c.id === item.contactId)?.name || "联系人"),
-        }));
+        const fromSessions = sessions.map(item => {
+            const character = chars.find(c => c.id === item.contactId);
+            return {
+                sessionId: item.id,
+                contactId: item.contactId,
+                isGroup: !!item.isGroup,
+                name: item.isGroup
+                    ? (item.groupName || "群聊")
+                    : (character?.name || "联系人"),
+                avatar: item.isGroup ? "" : (character?.avatar || ""),
+                groupAvatars: item.isGroup
+                    ? (item.participantIds || [])
+                        .map(id => chars.find(c => c.id === id)?.avatar || "")
+                        .filter(Boolean)
+                        .slice(0, 4)
+                    : [],
+            };
+        });
         const fromContacts = loadChatContacts()
             .filter(contact => contact.characterId !== session.contactId && !seen.has(contact.characterId))
-            .map(contact => ({
-                sessionId: "",
-                contactId: contact.characterId,
-                isGroup: false,
-                name: chars.find(c => c.id === contact.characterId)?.name || "联系人",
-            }));
+            .map(contact => {
+                const character = chars.find(c => c.id === contact.characterId);
+                return {
+                    sessionId: "",
+                    contactId: contact.characterId,
+                    isGroup: false,
+                    name: character?.name || "联系人",
+                    avatar: character?.avatar || "",
+                    groupAvatars: [] as string[],
+                };
+            });
         return [...fromSessions, ...fromContacts];
     }, [showForwardPicker, session.id, session.contactId]);
 
@@ -5659,8 +5674,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             return;
         }
         const dest = target.sessionId || createOrGetSession(target.contactId).id;
-        const fromName = userIdentity?.name || "我";
         for (const msg of selected) {
+            const originalName = msg.role === "user"
+                ? (userIdentity?.name || "我")
+                : (msg.senderName || character?.name || "对方");
+            const kind = classifyForwardedKind(msg);
             pushChatMessage({
                 sessionId: dest,
                 role: "user",
@@ -5669,8 +5687,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 mediaUrl: msg.mediaUrl,
                 mediaData: {
                     ...msg.mediaData,
-                    forwardedFromName: fromName,
+                    forwardedFromName: originalName,
                     forwardedFromSessionId: session.id,
+                    forwardedKind: kind,
+                    forwardedPreview: buildForwardedPreview(msg),
+                    forwardedVoiceText: kind === "voice" ? (msg.mediaData?.label || msg.mediaData?.forwardedVoiceText) : undefined,
                 },
             });
         }
@@ -5680,7 +5701,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         }
         showChatToast(`已转发给 ${target.name}`);
         cancelMultiSelect();
-    }, [cancelMultiSelect, selectedMessageIds, session.id, userIdentity?.name]);
+    }, [cancelMultiSelect, character?.name, selectedMessageIds, session.id, userIdentity?.name]);
 
     const toggleMultiSelectedMessage = useCallback((messageId: string) => {
         setSelectedMessageIds(prev => {
@@ -6217,7 +6238,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     const cardStateValues = msg.freshStateValues ?? msg.stateValues;
                     const isSilentThought = !visibleContent && !renderMsg.mediaType && hasFoldedPanel && msg.role !== "user";
                     const isStandaloneHtmlPreview = !renderMsg.mediaType && isStandaloneHtmlPreviewContent(bubbleDisplayContent);
-                    const isMediaBubble = (renderMsg.mediaType && CHAT_MEDIA_BUBBLE_TYPES.has(renderMsg.mediaType)) || isStandaloneHtmlPreview;
+                    const isForwardCard = Boolean(renderMsg.mediaData?.forwardedFromName);
+                    const isMediaBubble = (renderMsg.mediaType && CHAT_MEDIA_BUBBLE_TYPES.has(renderMsg.mediaType)) || isStandaloneHtmlPreview || isForwardCard;
                     // Empty bubble: no visible content AND no visual media AND no folded panel.
                     const isEmptyBubble = !isVisualMedia && !visibleContent && uiRole(msg) !== "system" && !hasFoldedPanel;
                     const selectableStoredId = getSelectableStoredMessageId(msg);
@@ -6419,7 +6441,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                 },
                                                 onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); openMessageContextMenu(msg.id, { x: e.clientX, y: e.clientY }); },
                                             } : {})}
-                                            className={`chat-bubble-role-${msg.role} ${isMediaBubble ? "chat-bubble-media" : ""} ${isStandaloneHtmlPreview ? "chat-bubble-html-preview" : ""} ${renderMsg.mediaType === "music_share" ? "chat-bubble-music-share" : ""} ${renderMsg.mediaType === "gift" || renderMsg.mediaType === "image" || isStandaloneHtmlPreview ? "rounded-none" : "rounded-md"} break-words relative cursor-pointer select-none`}
+                                            className={`chat-bubble-role-${msg.role} ${isMediaBubble ? "chat-bubble-media" : ""} ${isStandaloneHtmlPreview ? "chat-bubble-html-preview" : ""} ${renderMsg.mediaType === "music_share" ? "chat-bubble-music-share" : ""} ${isForwardCard ? "chat-bubble-forward" : ""} ${renderMsg.mediaType === "gift" || renderMsg.mediaType === "image" || isStandaloneHtmlPreview || isForwardCard ? "rounded-none" : "rounded-md"} break-words relative cursor-pointer select-none`}
                                             style={isStandaloneHtmlPreview ? STANDALONE_CARD_BUBBLE_STYLE : undefined}
                                             data-ui={msg.role === "user" ? "bubble-user" : "bubble-bot"}
                                             data-msg-id={msg.id}
@@ -6428,9 +6450,6 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                             {/* Message Actions Popup */}
                                             {activeMessageId === msg.id && renderBubbleContextMenu(msg)}
 
-                                            {renderMsg.mediaData?.forwardedFromName ? (
-                                                <div className="chat-forward-kicker">转发自 {renderMsg.mediaData.forwardedFromName}</div>
-                                            ) : null}
                                             <MessageBubble
                                                 msg={renderMsg}
                                                 displayContent={msg.displayProjected ? undefined : bubbleDisplayContent}
@@ -6637,7 +6656,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             {showForwardPicker && (
                 <div className="chat-forward-overlay" onClick={() => setShowForwardPicker(false)}>
                     <div className="chat-forward-sheet" onClick={e => e.stopPropagation()}>
-                        <div className="chat-forward-head">转发给</div>
+                        <div className="chat-forward-head">选择一个聊天</div>
                         <div className="chat-forward-list">
                             {forwardTargets.length === 0 ? (
                                 <p className="chat-forward-empty">还没有其他联系人</p>
@@ -6648,7 +6667,18 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                     className="chat-forward-item"
                                     onClick={() => forwardSelectedTo(target)}
                                 >
-                                    {target.name}
+                                    <span className={`chat-forward-avatar${target.isGroup ? " is-group" : ""}`}>
+                                        {target.isGroup ? (
+                                            (target.groupAvatars.length > 0 ? target.groupAvatars : [""]).slice(0, 4).map((src, index) => (
+                                                src ? <img key={`${src}-${index}`} src={src} alt="" /> : <ChatFallbackAvatar key={`empty-${index}`} />
+                                            ))
+                                        ) : target.avatar ? (
+                                            <img src={target.avatar} alt="" />
+                                        ) : (
+                                            <ChatFallbackAvatar />
+                                        )}
+                                    </span>
+                                    <span className="chat-forward-name">{target.name}</span>
                                 </button>
                             ))}
                         </div>
@@ -7048,7 +7078,14 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             )}
 
             {/* Red Packet / Transfer Detail Modal */}
-            {mediaDetailMsg && (
+            {mediaDetailMsg?.mediaData?.forwardedFromName ? (
+                <ForwardDetailOverlay
+                    msg={mediaDetailMsg}
+                    characterId={mediaDetailMsg.senderCharacterId || session.contactId}
+                    onClose={() => setMediaDetailMsg(null)}
+                    onUpdate={(updated) => setMessages(prev => prev.map(item => item.id === updated.id ? updated : item))}
+                />
+            ) : mediaDetailMsg ? (
                 <MediaDetailModal
                     msg={mediaDetailMsg}
                     userName={userIdentity?.name || "你"}
@@ -7070,7 +7107,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     }}
                     onClose={() => setMediaDetailMsg(null)}
                 />
-            )}
+            ) : null}
 
             {editingOfflineTarget && (
                 <div className="chat-html-overlay" onClick={() => { setEditingOfflineTarget(null); setEditingOfflineContent(""); }}>

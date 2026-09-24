@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useRef, useMemo, memo } from "react";
 import { findCustomStickerByName, resolveCustomStickerUrl } from "@/lib/custom-sticker-storage";
 import { isMediaStoreRef, loadMediaObjectUrl } from "@/lib/media-cache-storage";
 import { getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
-import { ChatMessage, createOrGetSession, updateMessageMediaStatus, updateMessageMediaData } from "@/lib/chat-storage";
+import { ChatMessage, classifyForwardedKind, createOrGetSession, updateMessageMediaStatus, updateMessageMediaData } from "@/lib/chat-storage";
+import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import { resolveCloudSttConfig, transcribeAudioBlob } from "@/lib/stt-cloud";
 import { resolveContactCard } from "@/lib/contact-card";
 import { loadCharacters } from "@/lib/character-storage";
 import { CHAT_OPEN_SESSION_EVENT, dispatchOpenAddContact } from "@/lib/chat-notification-events";
@@ -92,6 +94,9 @@ function PluginKindBubble({ msg, kind }: { msg: ChatMessage; kind: string }) {
  * Falls back to ReactMarkdown for plain text messages.
  */
 export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charName, userName, onSystemMessage, groupSize, onShowDetail, characterId, onMusicPlay, onActionSelect, onRelationshipAction, displayContent, defaultTranslationExpanded = false }: MessageBubbleProps) {
+    if (msg.mediaData?.forwardedFromName) {
+        return <ForwardCardBubble msg={msg} displayContent={displayContent} onOpen={() => onShowDetail?.(msg)} />;
+    }
     switch (msg.mediaType) {
         case "red_packet":
             return <RedPacketBubble msg={msg} charName={charName} userName={userName} groupSize={groupSize} onShowDetail={onShowDetail} />;
@@ -155,6 +160,9 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
         if (prev.msg.isTyping !== next.msg.isTyping) return false;
         if (prev.msg.mediaData?.status !== next.msg.mediaData?.status) return false;
         if (prev.msg.mediaData?.label !== next.msg.mediaData?.label) return false;
+        if (prev.msg.mediaData?.forwardedFromName !== next.msg.mediaData?.forwardedFromName) return false;
+        if (prev.msg.mediaData?.forwardedPreview !== next.msg.mediaData?.forwardedPreview) return false;
+        if (prev.msg.mediaData?.forwardedVoiceText !== next.msg.mediaData?.forwardedVoiceText) return false;
         if (prev.msg.mediaData?.claimedBy?.length !== next.msg.mediaData?.claimedBy?.length) return false;
         if (prev.msg.mediaData?.appName !== next.msg.mediaData?.appName) return false;
         if (prev.msg.mediaData?.appCardTitle !== next.msg.mediaData?.appCardTitle) return false;
@@ -174,6 +182,177 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
     if (prev.onRelationshipAction !== next.onRelationshipAction) return false;
     return true;
 });
+
+function useResolvedMediaUrl(raw?: string) {
+    const [url, setUrl] = useState(raw && !isMediaStoreRef(raw) ? raw : "");
+    useEffect(() => {
+        if (!raw) {
+            setUrl("");
+            return;
+        }
+        if (!isMediaStoreRef(raw)) {
+            setUrl(raw);
+            return;
+        }
+        let revoke = "";
+        loadMediaObjectUrl(raw).then(objUrl => {
+            if (objUrl) {
+                setUrl(objUrl);
+                revoke = objUrl;
+            }
+        });
+        return () => { if (revoke) URL.revokeObjectURL(revoke); };
+    }, [raw]);
+    return url;
+}
+
+function ForwardCardBubble({
+    msg,
+    displayContent,
+    onOpen,
+}: {
+    msg: ChatMessage;
+    displayContent?: string;
+    onOpen: () => void;
+}) {
+    const kind = msg.mediaData?.forwardedKind || classifyForwardedKind(msg);
+    const title = msg.mediaData?.forwardedFromName || "聊天记录";
+    const preview = msg.mediaData?.forwardedPreview
+        || (kind === "text" ? (displayContent || msg.content || "") : "")
+        || (kind === "voice" ? (msg.mediaData?.label || "[语音]") : "")
+        || (kind === "image" ? "[图片]" : "")
+        || (kind === "album" ? "[一组照片]" : "")
+        || (kind === "video" ? "[视频]" : "[聊天记录]");
+    const thumbRaw = kind === "image" || kind === "album" || kind === "video"
+        ? (msg.mediaUrl || msg.mediaData?.albumUrls?.[0] || "")
+        : "";
+    const thumb = useResolvedMediaUrl(thumbRaw);
+
+    return (
+        <button type="button" className="chat-forward-card" onClick={event => { event.stopPropagation(); onOpen(); }}>
+            <div className="chat-forward-card-title">{title}</div>
+            <div className="chat-forward-card-body">
+                {thumb && kind !== "video" ? <img src={thumb} alt="" className="chat-forward-card-thumb" /> : null}
+                {thumb && kind === "video" ? (
+                    <span className="chat-forward-card-video">
+                        <img src={thumb} alt="" />
+                        <span>视频</span>
+                    </span>
+                ) : null}
+                <p>{preview}</p>
+            </div>
+            <div className="chat-forward-card-foot">聊天记录</div>
+        </button>
+    );
+}
+
+export function ForwardDetailOverlay({
+    msg,
+    characterId,
+    onClose,
+    onUpdate,
+}: {
+    msg: ChatMessage;
+    characterId?: string;
+    onClose: () => void;
+    onUpdate?: (updated: ChatMessage) => void;
+}) {
+    const kind = msg.mediaData?.forwardedKind || classifyForwardedKind(msg);
+    const urls = [msg.mediaUrl, ...(msg.mediaData?.albumUrls || [])].filter(Boolean) as string[];
+    const firstUrl = useResolvedMediaUrl(urls[0]);
+    const [albumUrls, setAlbumUrls] = useState<string[]>([]);
+    const [voiceText, setVoiceText] = useState(msg.mediaData?.forwardedVoiceText || msg.mediaData?.label || "");
+    const [voiceBusy, setVoiceBusy] = useState(false);
+    const [voiceError, setVoiceError] = useState("");
+
+    useEffect(() => {
+        let cancelled = false;
+        const resolved: string[] = [];
+        const revokes: string[] = [];
+        Promise.all(urls.map(async raw => {
+            if (!isMediaStoreRef(raw)) return raw;
+            const obj = await loadMediaObjectUrl(raw);
+            if (obj) revokes.push(obj);
+            return obj || "";
+        })).then(items => {
+            if (!cancelled) setAlbumUrls(items.filter(Boolean));
+        });
+        return () => {
+            cancelled = true;
+            revokes.forEach(item => URL.revokeObjectURL(item));
+        };
+    }, [msg.id, msg.mediaUrl, msg.mediaData?.albumUrls?.join("|")]);
+
+    useEffect(() => {
+        if (kind !== "voice" || voiceText || voiceBusy || voiceError) return;
+        const raw = msg.mediaUrl;
+        if (!raw) {
+            setVoiceError("这条语音没有可识别的音频");
+            return;
+        }
+        const config = resolveCloudSttConfig(characterId);
+        if (!config) {
+            setVoiceError("还没有配置语音转文字");
+            return;
+        }
+        let cancelled = false;
+        setVoiceBusy(true);
+        (async () => {
+            const src = isMediaStoreRef(raw) ? await loadMediaObjectUrl(raw) : raw;
+            if (!src) throw new Error("音频失效了");
+            const blob = await fetch(src).then(res => res.blob());
+            const text = await transcribeAudioBlob(blob, config);
+            if (cancelled) return;
+            const next = text.trim();
+            setVoiceText(next || "没有听清");
+            setVoiceBusy(false);
+            if (next && onUpdate) {
+                const mediaData = { ...msg.mediaData, forwardedVoiceText: next, label: msg.mediaData?.label || next };
+                updateMessageMediaData(msg.id, mediaData);
+                onUpdate({ ...msg, mediaData });
+            }
+        })().catch(error => {
+            if (cancelled) return;
+            setVoiceBusy(false);
+            setVoiceError(error instanceof Error ? error.message : "转文字失败");
+        });
+        return () => { cancelled = true; };
+    }, [characterId, kind, msg.id, msg.mediaUrl, onUpdate, voiceBusy, voiceError, voiceText]);
+
+    return (
+        <div className="chat-forward-detail-overlay" data-ui="modal" onClick={onClose}>
+            <div className="chat-forward-detail" data-ui="modal-dialog" onClick={event => event.stopPropagation()}>
+                <header className="chat-forward-detail-head">
+                    <button type="button" onClick={onClose}>返回</button>
+                    <strong>聊天记录</strong>
+                    <span />
+                </header>
+                <div className="chat-forward-detail-body">
+                    <div className="chat-forward-detail-meta">
+                        <span className="chat-forward-detail-avatar"><ChatFallbackAvatar alt={msg.mediaData?.forwardedFromName || "对方"} /></span>
+                        <b>{msg.mediaData?.forwardedFromName || "聊天记录"}</b>
+                    </div>
+                    {kind === "text" || (!kind && msg.content) ? (
+                        <p className="chat-forward-detail-text">{msg.content}</p>
+                    ) : null}
+                    {(kind === "image" || kind === "album") && (albumUrls.length > 0 ? albumUrls : firstUrl ? [firstUrl] : []).map((url, index) => (
+                        <img key={`${url}-${index}`} src={url} alt="" className="chat-forward-detail-photo" />
+                    ))}
+                    {kind === "video" && (firstUrl || albumUrls[0]) ? (
+                        <video className="chat-forward-detail-video" src={firstUrl || albumUrls[0]} controls playsInline />
+                    ) : null}
+                    {kind === "voice" ? (
+                        <div className="chat-forward-detail-voice">
+                            {msg.mediaUrl ? <audio src={firstUrl || msg.mediaUrl} controls /> : null}
+                            <p>{voiceBusy ? "正在转成文字…" : (voiceText || voiceError || "语音")}</p>
+                        </div>
+                    ) : null}
+                    {kind === "file" && msg.content ? <p className="chat-forward-detail-text">{msg.content}</p> : null}
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // ── Text Bubble (default) ─────────────────────────────
 

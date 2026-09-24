@@ -254,6 +254,9 @@ export type ChatMessage = {
         albumUrls?: string[];
         forwardedFromName?: string;
         forwardedFromSessionId?: string;
+        forwardedPreview?: string;
+        forwardedKind?: "text" | "image" | "video" | "voice" | "album" | "file";
+        forwardedVoiceText?: string;
     };
     isTyping?: boolean; // temporary flag for UI rendering
     statusPanel?: string; // AI display-only status content from [状态栏] tags
@@ -348,6 +351,11 @@ export function getChatMessagePreview(msg: ChatMessage): string {
 
     // Retracted: "你/对方撤回了一条消息"
     if (msg.isRetracted) return (msg.role === "user" ? "你" : "对方") + "撤回了一条消息";
+
+    if (msg.mediaData?.forwardedFromName) {
+        const preview = msg.mediaData.forwardedPreview || msg.content || classifyForwardedKindLabel(msg);
+        return `[转发] ${preview}`.trim();
+    }
 
     if (msg.mediaType === "tool_result" || msg.mediaType === "tool_call") return "";
     if (msg.mediaType === "quote" && msg.content) return msg.content;
@@ -460,6 +468,33 @@ export function getChatMessagePreview(msg: ChatMessage): string {
     }
 
     return msg.content;
+}
+
+export function classifyForwardedKind(msg: Pick<ChatMessage, "mediaType" | "mediaData">): NonNullable<ChatMessage["mediaData"]>["forwardedKind"] {
+    if (msg.mediaType === "audio") return "voice";
+    if (msg.mediaType === "image") return (msg.mediaData?.albumUrls?.length || 0) > 0 ? "album" : "image";
+    if (msg.mediaType === "video") return "video";
+    if (msg.mediaType === "media_file") {
+        if (msg.mediaData?.fileType === "video") return "video";
+        if (msg.mediaData?.fileType === "image") return "image";
+        return "file";
+    }
+    if (msg.mediaType) return "file";
+    return "text";
+}
+
+function classifyForwardedKindLabel(msg: Pick<ChatMessage, "mediaType" | "mediaData" | "content">): string {
+    const kind = classifyForwardedKind(msg);
+    if (kind === "voice") return msg.mediaData?.label || "[语音]";
+    if (kind === "image") return msg.mediaData?.label ? `[图片] ${msg.mediaData.label}` : "[图片]";
+    if (kind === "album") return "[一组照片]";
+    if (kind === "video") return "[视频]";
+    if (kind === "file") return MEDIA_PREVIEW_MAP[msg.mediaType || ""] || "[聊天记录]";
+    return (msg.content || "").replace(/\s+/g, " ").slice(0, 48) || "[聊天记录]";
+}
+
+export function buildForwardedPreview(msg: Pick<ChatMessage, "mediaType" | "mediaData" | "content">): string {
+    return msg.mediaData?.forwardedPreview || classifyForwardedKindLabel(msg);
 }
 
 function hasPreviewText(text: string | undefined): boolean {

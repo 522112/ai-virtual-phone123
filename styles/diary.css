@@ -4728,6 +4728,15 @@
   outline-offset: 2px;
 }
 
+.journal-block.is-editing {
+  outline: 1.5px solid rgba(122, 82, 62, 0.42);
+  outline-offset: 2px;
+}
+
+.journal-block.is-locked {
+  opacity: 0.72;
+}
+
 .journal-block-move,
 .journal-user-note-btn {
   position: absolute;

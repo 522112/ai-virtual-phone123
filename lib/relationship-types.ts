@@ -95,6 +95,8 @@ export type RelationshipComment = {
   authorId: string;
   content: string;
   replyToCommentId?: string;
+  replyToAuthorId?: string;
+  replyToAuthorType?: "user" | "character";
   replyToAuthorName?: string;
   createdAt: string;
 };

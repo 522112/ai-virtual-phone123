@@ -414,6 +414,20 @@ export function loadRelationshipPosts(relationshipId: string): RelationshipPost[
   return items.filter(item => item.relationshipId === relationshipId);
 }
 
+export function canCharacterSeeRelationshipPost(post: RelationshipPost, characterId: string): boolean {
+  const binding = getRelationshipById(post.relationshipId);
+  if (!binding || binding.characterId !== characterId) return false;
+  if (binding.status !== "active" && binding.status !== "pending") return false;
+  if (post.authorType === "user") return true;
+  return post.authorId === characterId;
+}
+
+export function loadVisibleRelationshipPostsForCharacter(characterId: string): RelationshipPost[] {
+  const binding = getRelationshipByCharacter(characterId);
+  if (!binding) return [];
+  return loadRelationshipPosts(binding.id).filter(post => canCharacterSeeRelationshipPost(post, characterId));
+}
+
 export function addRelationshipPost(input: Omit<RelationshipPost, "id" | "likes" | "createdAt">): RelationshipPost {
   const post: RelationshipPost = {
     ...input,
@@ -785,7 +799,9 @@ export function applyCharacterSpaceAction(input: {
       authorId: input.characterId,
       content,
       replyToCommentId: replyTo?.id,
-      replyToAuthorName: replyName || undefined,
+      replyToAuthorId: replyTo?.authorId,
+      replyToAuthorType: replyTo?.authorType,
+      replyToAuthorName: replyName || replyTo?.replyToAuthorName,
     });
     return { notice: replyName ? `${input.characterName}回复了${replyName}` : `${input.characterName}评论了空间动态`, cards: [] };
   }
@@ -884,6 +900,19 @@ export function buildRelationshipSpaceInstruction(
     needsCheckinRelight(binding)
       ? `[关系打卡重燃] — 这段关系是重建的，旧打卡还在但连续天数已暂停。若人设愿意重续，先输出这个标记，重燃后才能继续旧连续。未重燃时不要用普通打卡去接旧记录。`
       : "",
+    (() => {
+      const recent = loadRelationshipPosts(binding.id).slice(0, 6);
+      if (recent.length === 0) return "";
+      const lines = recent.map(post => {
+        const who = post.authorType === "user" ? "对方" : "你";
+        const text = (post.content || (post.photoAssetId ? "[图片]" : "")).replace(/\s+/g, " ").slice(0, 80);
+        return `- ${who}：${text || "一条动态"}`;
+      });
+      return [
+        "最近的空间动态只有你们两人可见。对方发的动态只有你知道，不要转告别的角色，也不要当成朋友圈。",
+        ...lines,
+      ].join("\n");
+    })(),
     `[设为空间背景] — 把对方最近发来的照片（聊天随手发的自拍，或动态/空间里的图）设成空间背景。只在人设真的被打动、觉得适合当背景时使用，不要每张图都换。`,
     findLatestUserChatImage(messages || [])
       ? "对方最近发来一张照片。若人设会觉得好看、想用来布置空间，可输出 [设为空间背景]。"
