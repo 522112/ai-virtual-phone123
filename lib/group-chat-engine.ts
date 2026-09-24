@@ -77,6 +77,7 @@ import { findEnabledToolForSchema, getEnabledTools } from "./tool-storage";
 import { formatToolsForPrompt, formatGroupToolsForPrompt, formatToolSchema } from "./tool-prompt";
 import { parseToolCalls, parseToolFetches, executeToolCalls, formatToolResults, type ToolCall } from "./tool-executor";
 import { stripStateAndInnerForPrompt } from "./prompt-sanitizer";
+import { resolveOfflineOutputSettings } from "./offline-output-settings";
 import { buildGroupRosterMacro } from "./group-admin";
 import { parseOfflineResponse, extractThinkingTag, type ParsedOfflineResponse } from "./chat-offline-storage";
 import { buildProviderRequest, nativeToolProtocolForConfig, toLlmRequestMessages, type LlmRequestMessage, type LlmToolCall } from "./llm-provider-adapter";
@@ -452,7 +453,18 @@ async function buildGroupChatPromptMessages(
         "group",
         session.offlineBilingualTranslationPrompt,
     );
-    const offlineOutputInstruction = buildOfflineOutputInstruction(session);
+    const offlineOutputInstruction = (() => {
+        const memberLines = (session.participantIds || []).map(id => {
+            const inst = buildOfflineOutputInstruction(resolveOfflineOutputSettings(id));
+            if (!inst) return "";
+            const name = members.find(item => item.character.id === id)?.character.name
+                || loadCharacters().find(item => item.id === id)?.name
+                || id;
+            return `${name}：\n${inst}`;
+        }).filter(Boolean);
+        if (memberLines.length === 0) return buildOfflineOutputInstruction(session);
+        return ["每个角色的线下字数与文风各自独立，互不影响。写到某角色时必须遵守该角色自己的约束：", ...memberLines].join("\n\n");
+    })();
     const groupRoster = buildGroupRosterMacro(
         session,
         members.map(m => ({ id: m.character.id, name: m.character.name })),
@@ -506,6 +518,9 @@ async function buildGroupChatPromptMessages(
             role: "system",
             content: "本次自定义 APP AI 任务只输出严格 JSON。不要输出 Markdown 代码块、解释文字或聊天富媒体指令。",
         });
+    }
+    if (activeAppTags.includes("offline") && offlineOutputInstruction) {
+        llmMessages.push({ role: "system", content: offlineOutputInstruction });
     }
     appendEmptyGenerateGuardMessage(llmMessages, config, history);
 

@@ -2,6 +2,13 @@
 
 import { createSseJsonParser } from "./sse-json";
 import { maybeAppendShortcutCapability } from "./offline-shortcut-capability";
+import {
+    countOfflineContentChars,
+    getOfflineOutputRange,
+    isOfflineContentInRange,
+    resolveOfflineOutputSettings,
+    type OfflineOutputSettings,
+} from "./offline-output-settings";
 import { loadCharacters } from "./character-storage";
 import { buildScreenEffectPromptHint } from "./chat-screen-effects";
 import { emitChatPluginEvent, runChatPluginTransform } from "./chat-plugin-hooks";
@@ -1529,11 +1536,6 @@ export const OFFLINE_WRITING_STYLE_OPTIONS: OfflineWritingStyleOption[] = [
     { id: OFFLINE_WRITING_STYLE_CUSTOM, label: "自定义", instruction: "" },
 ];
 
-type OfflineOutputSettings = Pick<
-    ChatSession,
-    "offlineOutputMinChars" | "offlineOutputMaxChars" | "offlineWritingStyleId" | "offlineWritingStyleCustom"
->;
-
 export function parseOfflineOutputCharInput(value: unknown): { ok: true; value?: number } | { ok: false } {
     if (value === undefined || value === null) return { ok: true };
     const raw = String(value).trim();
@@ -1575,33 +1577,36 @@ function resolveOfflineWritingStyleInstruction(session: OfflineOutputSettings): 
 export function buildOfflineOutputInstruction(session: OfflineOutputSettings): string {
     const minParsed = parseOfflineOutputCharInput(session.offlineOutputMinChars);
     const maxParsed = parseOfflineOutputCharInput(session.offlineOutputMaxChars);
-    let minChars = minParsed.ok ? minParsed.value : undefined;
-    let maxChars = maxParsed.ok ? maxParsed.value : undefined;
-    if (minChars != null && maxChars != null && minChars > maxChars) {
-        const swapped = minChars;
-        minChars = maxChars;
-        maxChars = swapped;
-    }
+    const range = getOfflineOutputRange({
+        offlineOutputMinChars: minParsed.ok ? minParsed.value : undefined,
+        offlineOutputMaxChars: maxParsed.ok ? maxParsed.value : undefined,
+        offlineWritingStyleId: session.offlineWritingStyleId,
+        offlineWritingStyleCustom: session.offlineWritingStyleCustom,
+    });
+    const minChars = range?.min;
+    const maxChars = range?.max;
 
     const parts: string[] = [];
     if (minChars != null && maxChars != null) {
         parts.push(
-            `本轮 <content> 正文的汉字字数必须落在 ${minChars}–${maxChars} 字之间。按汉字计数（每个汉字、标点与空白各计 1 字）。不要为了凑字灌水，也不要无故截断情节。`,
+            `【线下字数硬约束】本轮 <content> 正文必须落在 ${minChars}–${maxChars} 字。计数：去掉空白后，每个汉字与标点各计 1 字。不要写成默认长文，也不要为了凑字灌水或无故截断。`,
         );
     } else if (minChars != null) {
         parts.push(
-            `本轮 <content> 正文的汉字字数不少于 ${minChars} 字。按汉字计数（每个汉字、标点与空白各计 1 字）。不要为了凑字灌水。`,
+            `【线下字数硬约束】本轮 <content> 正文不少于 ${minChars} 字。计数：去掉空白后，每个汉字与标点各计 1 字。不要为了凑字灌水。`,
         );
     } else if (maxChars != null) {
         parts.push(
-            `本轮 <content> 正文的汉字字数不超过 ${maxChars} 字。按汉字计数（每个汉字、标点与空白各计 1 字）。不要无故截断情节。`,
+            `【线下字数硬约束】本轮 <content> 正文不超过 ${maxChars} 字。计数：去掉空白后，每个汉字与标点各计 1 字。不要无故截断情节。`,
         );
     }
 
     const styleInstruction = resolveOfflineWritingStyleInstruction(session);
     if (styleInstruction) {
-        parts.push(styleInstruction);
-        parts.push("必须仍服从角色卡与线下 XML 格式，只输出 <content> 与摘要字段。");
+        parts.push(`【线下文风硬约束】${styleInstruction}`);
+    }
+    if (parts.length) {
+        parts.push("必须仍服从角色卡与线下 XML 格式，只输出 <content> 与摘要字段。字数和文风以用户为本角色单独设定的规则为准，不要套用其他角色的格式。");
     }
 
     return parts.join("\n");
@@ -2017,7 +2022,8 @@ export async function buildChatPromptMessages(
             session.offlineBilingualTranslationPrompt,
         )
         : "";
-    const offlineOutputInstruction = buildOfflineOutputInstruction(session);
+    const offlineOutputSettings = resolveOfflineOutputSettings(character.id, session);
+    const offlineOutputInstruction = buildOfflineOutputInstruction(offlineOutputSettings);
 
     const llmMessages = assemblePromptPayload({
         character,
@@ -2084,6 +2090,9 @@ export async function buildChatPromptMessages(
     );
     if (coupleAvatarInstruction) {
         llmMessages.push({ role: "system", content: coupleAvatarInstruction });
+    }
+    if (isOfflineMode && offlineOutputInstruction) {
+        llmMessages.push({ role: "system", content: offlineOutputInstruction });
     }
     appendEmptyGenerateGuardMessage(llmMessages, config, historyForPrompt);
 
@@ -2218,6 +2227,49 @@ export async function generateOfflineChatCompletion(
         if (retried.summary.trim()) {
             parsed = { ...parsed, summary: retried.summary.trim() };
             break;
+        }
+    }
+
+    const offlineSettings = resolveOfflineOutputSettings(character.id, session);
+    const range = getOfflineOutputRange(offlineSettings);
+    const styleLine = resolveOfflineWritingStyleInstruction(offlineSettings);
+    const MAX_LENGTH_RETRY = range || styleLine ? 2 : 0;
+    for (let attempt = 0; attempt < MAX_LENGTH_RETRY; attempt += 1) {
+        if (isOfflineContentInRange(parsed.content, offlineSettings)) break;
+        if (!parsed.content.trim()) break;
+        const count = countOfflineContentChars(parsed.content);
+        const rangeLabel = range?.min != null && range.max != null
+            ? `${range.min}–${range.max} 字`
+            : range?.min != null
+                ? `不少于 ${range.min} 字`
+                : range?.max != null
+                    ? `不超过 ${range.max} 字`
+                    : "用户设定的字数";
+        const retryMessages: LLMMessage[] = [
+            ...(llmMessages[0]?.role === "system" ? [llmMessages[0]] : []),
+            ...(lastUserMessage ? [lastUserMessage] : []),
+            { role: "assistant", content: rawOutput },
+            {
+                role: "user",
+                content: [
+                    `刚才 <content> 实际 ${count} 字，不符合本角色线下设定（${rangeLabel}${styleLine ? `；${styleLine}` : ""}）。`,
+                    "请按同一情节改写，严格遵守该角色自己的字数与文风，不要套用其他角色的格式。",
+                    `只输出 <content> 和 <${summaryTag}>，不要其他说明。`,
+                ].join(""),
+            },
+        ];
+        throwIfAborted(options?.signal);
+        const retryRaw = stripPresetTexts(await sendLLMRequest(config, preset, retryMessages, regexes, meta, { ...requestOptions, onReasoning: undefined }), preset);
+        const retried = parseOfflineResponse(retryRaw, summaryTag);
+        if (retried.content.trim()) {
+            parsed = {
+                ...parsed,
+                content: retried.content.trim(),
+                summary: retried.summary.trim() || parsed.summary,
+                rawText: retryRaw,
+            };
+            rawOutput = retryRaw;
+            if (isOfflineContentInRange(parsed.content, offlineSettings)) break;
         }
     }
 

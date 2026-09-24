@@ -17,6 +17,7 @@ import type { ApiConfig, PresetConfig, RegexConfig, WorldBookConfig } from "./se
 import { prepareShortTermContext } from "./short-term-assembler";
 import type { Character } from "./character-types";
 import type { ListenTogetherSession, ListenTogetherTrack } from "./listen-together-types";
+import { parseChatBubbleDisplay, sanitizeListenTogetherText } from "./chat-message-display";
 
 type ResolvedListenGeneration = {
   character: Character;
@@ -38,11 +39,17 @@ export type ListenTogetherReply = {
   actions: ListenTogetherAction[];
 };
 
-export function splitListenTogetherBubbles(text: string): string[] {
+export function splitListenTogetherBubbles(text: string, knownNames: string[] = []): string[] {
   const normalized = (text || "").replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
   const parts = normalized.split(/\n\n+/).map(item => item.trim()).filter(Boolean);
-  return parts.length ? parts : [normalized];
+  const source = parts.length ? parts : [normalized];
+  return source.map(part => {
+    const cleaned = sanitizeListenTogetherText(part, knownNames);
+    const parsed = parseChatBubbleDisplay(part, knownNames);
+    if (parsed.whisper && cleaned) return `【私聊】\n${cleaned}`;
+    return cleaned;
+  }).filter(Boolean);
 }
 
 async function resolveListenGeneration(
@@ -203,7 +210,8 @@ export async function generateListenTogetherReply(input: {
       "【一起听】",
       "你们正在同一首歌里听歌聊天，像网易云一起听那样随口说话。",
       "按人设回，长短随人设，不要固定字数，不要凑字数，也不要写成一整段小作文。",
-      "一条气泡说完一件事。多句就空一行，系统会拆成多条消息。保持聊天格式。",
+      "【输出格式】气泡里只能出现聊天正文。不要注释、说明、括号备注、标题、复述提示词，也不要写角色名：或用户说：。",
+      "一条气泡说完一件事。多句就空一行，系统会拆成多条消息。",
       "若要私聊，【私聊】单独占一行，下一行再写正文。",
       "你听得见正在放的歌词，但要像这个人正在听歌：可以走神、接话、吐槽、哼一句，也可以聊别的。不必句句围着歌转。",
       input.opening
@@ -223,7 +231,7 @@ export async function generateListenTogetherReply(input: {
       '[执行动作:切换音乐({"action":"next"})] 或 prev',
       "[执行动作:结束一起听]",
       "[执行动作:拒绝一起听]",
-      "不要向用户解释这些标记。",
+      "动作标记单独一行，不要写进气泡，也不要向用户解释这些标记。",
     ].filter(Boolean).join("\n"),
   );
   const raw = await sendLLMRequest(
@@ -235,6 +243,8 @@ export async function generateListenTogetherReply(input: {
     { appId: "music", appTags: ["music", "listen_together"] },
   );
   const parsed = parseListenTogetherActions(raw);
+  const knownNames = [resolved.character.name, resolved.userName, "我", "用户"];
+  parsed.text = splitListenTogetherBubbles(parsed.text, knownNames).join("\n\n");
   if (!parsed.text && parsed.actions.length === 0) throw new ChatEngineError("对方这句没有发出去。");
   return parsed;
 }

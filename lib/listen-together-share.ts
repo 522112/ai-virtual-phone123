@@ -1,4 +1,5 @@
 import { addChatContact, createOrGetSession, pushChatMessage } from "./chat-storage";
+import { sanitizeListenTogetherText } from "./chat-message-display";
 import { PENDING_REPLY_PREFIX } from "./friend-request-engine";
 import { kvSet } from "./kv-db";
 import { formatListenDuration } from "./listen-together-storage";
@@ -55,7 +56,9 @@ export function sendListenTogetherRefuse(input: {
 }): { sessionId: string; messageIds: string[] } {
   addChatContact(input.characterId);
   const chat = createOrGetSession(input.characterId);
-  const parts = input.texts.map(item => item.trim()).filter(Boolean);
+  const parts = input.texts
+    .map(item => sanitizeListenTogetherText(item, [input.characterName, "我", "用户"]))
+    .filter(Boolean);
   if (parts.length === 0) parts.push("这会儿不太方便一起听。");
   const messageIds = parts.map(text => pushChatMessage({
     sessionId: chat.id,

@@ -58,6 +58,12 @@ import {
     normalizeOfflineWritingStyleId,
     parseOfflineOutputCharInput,
 } from "@/lib/chat-engine";
+import {
+    hasOfflineOutputSettings,
+    loadOfflineOutputSettings,
+    saveOfflineOutputSettingsForCharacter,
+    sessionOfflineOutputSettings,
+} from "@/lib/offline-output-settings";
 
 // 自定义状态栏预填模板：微博主页（契约=「状态栏」章节整段正文，含【逻辑】【格式】与包裹要求）
 // 预览用的默认示例数据：契约没有自带示例时兜底，字段与下面的微博模板对应
@@ -407,18 +413,13 @@ export function ChatSettingsPanel({
     // 流式生成：按会话区分（线上/线下），存 ChatSession 字段，默认关
     const [streamOnline, setStreamOnline] = useState(session.streamOnline === true);
     const [streamOffline, setStreamOffline] = useState(session.streamOffline === true);
-    const [offlineOutputMinChars, setOfflineOutputMinChars] = useState(
-        session.offlineOutputMinChars != null ? String(session.offlineOutputMinChars) : "",
-    );
-    const [offlineOutputMaxChars, setOfflineOutputMaxChars] = useState(
-        session.offlineOutputMaxChars != null ? String(session.offlineOutputMaxChars) : "",
-    );
-    const [offlineWritingStyleId, setOfflineWritingStyleId] = useState(
-        normalizeOfflineWritingStyleId(session.offlineWritingStyleId),
-    );
-    const [offlineWritingStyleCustom, setOfflineWritingStyleCustom] = useState(
-        session.offlineWritingStyleCustom || "",
-    );
+    const [offlineSettingsCharacterId, setOfflineSettingsCharacterId] = useState(() => (
+        session.isGroup ? (session.participantIds?.[0] || "") : session.contactId
+    ));
+    const [offlineOutputMinChars, setOfflineOutputMinChars] = useState("");
+    const [offlineOutputMaxChars, setOfflineOutputMaxChars] = useState("");
+    const [offlineWritingStyleId, setOfflineWritingStyleId] = useState(normalizeOfflineWritingStyleId("none"));
+    const [offlineWritingStyleCustom, setOfflineWritingStyleCustom] = useState("");
     const [offlineOutputHint, setOfflineOutputHint] = useState("");
     const selectedOfflineStyle = describeOfflineWritingStyle(offlineWritingStyleId, offlineWritingStyleCustom);
     const defaultBilingualPrompt = session.isGroup ? DEFAULT_GROUP_CHAT_BILINGUAL_PROMPT : DEFAULT_CHAT_BILINGUAL_PROMPT;
@@ -550,6 +551,23 @@ export function ChatSettingsPanel({
         ? (session.participantIds || []).map(id => characters.find(c => c.id === id)).filter(Boolean)
         : [];
     const userIdentity = resolveUserIdentity(undefined, session.isGroup ? "group_chat" : "chat");
+
+    useEffect(() => {
+        const characterId = offlineSettingsCharacterId || (!session.isGroup ? session.contactId : "");
+        if (!characterId) return;
+        let settings = loadOfflineOutputSettings(characterId);
+        if (!hasOfflineOutputSettings(settings) && !session.isGroup && characterId === session.contactId) {
+            const fromSession = sessionOfflineOutputSettings(session);
+            if (hasOfflineOutputSettings(fromSession)) {
+                settings = saveOfflineOutputSettingsForCharacter(characterId, fromSession);
+            }
+        }
+        setOfflineOutputMinChars(settings.offlineOutputMinChars != null ? String(settings.offlineOutputMinChars) : "");
+        setOfflineOutputMaxChars(settings.offlineOutputMaxChars != null ? String(settings.offlineOutputMaxChars) : "");
+        setOfflineWritingStyleId(normalizeOfflineWritingStyleId(settings.offlineWritingStyleId));
+        setOfflineWritingStyleCustom(settings.offlineWritingStyleCustom || "");
+        setOfflineOutputHint("");
+    }, [offlineSettingsCharacterId, session.contactId, session.isGroup]);
 
     // ── Group member management ──
     const [, setRosterVersion] = useState(0); // bump to re-render after admin actions
@@ -723,12 +741,21 @@ export function ChatSettingsPanel({
         const custom = offlineWritingStyleCustom.trim();
         setOfflineWritingStyleId(styleId);
         setOfflineWritingStyleCustom(custom);
-        updateSession({
+        const targetId = offlineSettingsCharacterId || session.contactId;
+        saveOfflineOutputSettingsForCharacter(targetId, {
             offlineOutputMinChars: minChars,
             offlineOutputMaxChars: maxChars,
             offlineWritingStyleId: styleId,
             offlineWritingStyleCustom: custom,
         });
+        if (!session.isGroup && targetId === session.contactId) {
+            updateSession({
+                offlineOutputMinChars: minChars,
+                offlineOutputMaxChars: maxChars,
+                offlineWritingStyleId: styleId,
+                offlineWritingStyleCustom: custom,
+            });
+        }
         const rangeLabel = minChars != null && maxChars != null
             ? `${minChars}–${maxChars} 字`
             : minChars != null
@@ -1207,10 +1234,24 @@ export function ChatSettingsPanel({
                                 <ChatInfoIcon icon={MessageSquare} color={CONTENT_APP_ACCENTS.chat} />
                                 <div className="menu-label-group">
                                     <span className="menu-label">线下输出</span>
-                                    <span className="menu-desc">仅当前会话：约束线下 &lt;content&gt; 汉字字数区间与文风；留空或不限制则不追加指令</span>
+                                    <span className="menu-desc">按角色单独保存字数和文风，不会带到其他角色；线下输出必须按该角色自己的范围来写</span>
                                 </div>
                             </div>
                             <div className="chat-offline-output-fields">
+                                {session.isGroup && groupChars.length > 0 ? (
+                                    <label className="chat-offline-output-box">
+                                        <span className="chat-offline-output-field-label">角色</span>
+                                        <select
+                                            className="ui-input chat-offline-output-number"
+                                            value={offlineSettingsCharacterId}
+                                            onChange={event => setOfflineSettingsCharacterId(event.target.value)}
+                                        >
+                                            {groupChars.map(item => item ? (
+                                                <option key={item.id} value={item.id}>{item.name}</option>
+                                            ) : null)}
+                                        </select>
+                                    </label>
+                                ) : null}
                                 <div className="chat-offline-output-range">
                                     <label className="chat-offline-output-box">
                                         <span className="chat-offline-output-field-label">最小字数</span>

@@ -52,6 +52,7 @@ import {
   buildOfflineBilingualInstruction,
   buildOfflineOutputInstruction,
 } from "./chat-engine";
+import { resolveOfflineOutputSettings } from "./offline-output-settings";
 import { nativeToolProtocolForConfig } from "./llm-provider-adapter";
 import { stripHallucinatedTimestamps } from "./api-helpers";
 import { getEnabledTools } from "./tool-storage";
@@ -1166,7 +1167,9 @@ async function buildWeixinCloudPromptContext(params: {
         "single",
         params.session.offlineBilingualTranslationPrompt,
       ),
-    offlineOutputInstruction: buildOfflineOutputInstruction(params.session),
+    offlineOutputInstruction: buildOfflineOutputInstruction(
+      resolveOfflineOutputSettings(params.session.isGroup ? undefined : params.session.contactId, params.session),
+    ),
     offlineSummaryTag: params.preset?.story_summary_tag?.trim() || "summary",
     enableVision: params.apiConfig.enableImageRecognition === true,
     mediaReply: true,

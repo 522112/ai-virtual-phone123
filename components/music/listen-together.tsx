@@ -18,11 +18,12 @@ import {
   endListenTogetherSession,
   formatListenDuration,
   getActiveListenTogetherSession,
+  getListenTogetherSession,
   loadListenTogetherSessions,
   startListenTogetherSession,
 } from "@/lib/listen-together-storage";
 import type { ListenTogetherSession, ListenTogetherTrack } from "@/lib/listen-together-types";
-import { parseChatBubbleDisplay } from "@/lib/chat-message-display";
+import { parseChatBubbleDisplay, sanitizeListenTogetherText } from "@/lib/chat-message-display";
 import { loadRelationshipBindings } from "@/lib/relationship-storage";
 
 type ListenTogetherControlsProps = {
@@ -175,7 +176,10 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
   }, []);
 
   const appendBubbles = useCallback(async (sessionId: string, author: "user" | "character", text: string) => {
-    const parts = splitListenTogetherBubbles(text);
+    const current = getListenTogetherSession(sessionId);
+    const identity = current ? resolveUserIdentity(current.characterId, "chat") : null;
+    const names = [current?.characterName || "", identity?.name || "", "我", "用户"];
+    const parts = splitListenTogetherBubbles(text, names);
     for (let index = 0; index < parts.length; index += 1) {
       appendListenTogetherMessage(sessionId, { author, text: parts[index] });
       refresh();
@@ -431,7 +435,9 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                     const mine = item.author === "user";
                     const avatar = mine ? identity?.avatarUrl : character?.avatar;
                     const alt = mine ? (identity?.name || "我") : session.characterName;
-                    const parsed = parseChatBubbleDisplay(item.text, [session.characterName, identity?.name || "", "我", "用户"]);
+                    const names = [session.characterName, identity?.name || "", "我", "用户"];
+                    const parsed = parseChatBubbleDisplay(item.text, names);
+                    const body = sanitizeListenTogetherText(parsed.body, names);
                     return (
                       <div key={item.id} className={`lt-row${mine ? " is-me" : ""}`}>
                         <span className="lt-row-avatar">
@@ -439,7 +445,7 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                         </span>
                         <div className="lt-msg-col">
                           {parsed.whisper ? <span className="lt-whisper">【私聊】</span> : null}
-                          {parsed.body ? <div className={`lt-bubble${mine ? " is-me" : ""}`}>{parsed.body}</div> : null}
+                          {body ? <div className={`lt-bubble${mine ? " is-me" : ""}`}>{body}</div> : null}
                         </div>
                       </div>
                     );
