@@ -66,6 +66,14 @@ export type ChatSession = {
      * 关掉就只调一次 API，那一轮没摘要（不进短期记忆的事件流）。按次计费的接口想省一半调用时关它。
      */
     offlineSummaryRetry?: boolean;
+    /** 线下 <content> 汉字字数下限；未填则不限制 */
+    offlineOutputMinChars?: number;
+    /** 线下 <content> 汉字字数上限；未填则不限制 */
+    offlineOutputMaxChars?: number;
+    /** 线下文风：none / 预设 id / custom */
+    offlineWritingStyleId?: string;
+    /** 线下自定义文风说明 */
+    offlineWritingStyleCustom?: string;
     // Group chat fields
     isGroup?: boolean;
     groupName?: string;

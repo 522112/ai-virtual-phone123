@@ -1483,6 +1483,116 @@ export function buildOfflineBilingualInstruction(
     );
 }
 
+export const OFFLINE_WRITING_STYLE_NONE = "none";
+export const OFFLINE_WRITING_STYLE_CUSTOM = "custom";
+
+export type OfflineWritingStyleOption = {
+    id: string;
+    label: string;
+    instruction: string;
+};
+
+export const OFFLINE_WRITING_STYLE_OPTIONS: OfflineWritingStyleOption[] = [
+    { id: OFFLINE_WRITING_STYLE_NONE, label: "不限制", instruction: "" },
+    {
+        id: "literary",
+        label: "细腻文学",
+        instruction: "文风为细腻文学：环境、动作与心理描写可以写细，整体偏连续小说段落，节奏舒缓，感官细节充分，但仍要推进本轮互动。",
+    },
+    {
+        id: "restrained",
+        label: "克制白描",
+        instruction: "文风为克制白描：少用形容词和抒情铺陈，重点写清楚动作与对白，句子干净，不过度渲染氛围。",
+    },
+    {
+        id: "colloquial",
+        label: "轻松口语",
+        instruction: "文风为轻松口语：叙事生活化，对白偏口语，像日常相处，不要书面腔或过度修辞。",
+    },
+    {
+        id: "tension",
+        label: "暧昧拉扯",
+        instruction: "文风为暧昧拉扯：抓住情绪张力与潜台词，欲说还休，不要把关系或心意写得太直白。",
+    },
+    {
+        id: "detached",
+        label: "冷静疏离",
+        instruction: "文风为冷静疏离：语气克制，少外露情绪，内心可以有波澜但表面冷静，不要煽情。",
+    },
+    {
+        id: "humorous",
+        label: "幽默轻松",
+        instruction: "文风为幽默轻松：节奏轻快，可以带一点吐槽或玩笑，但不要变成段子手。",
+    },
+    { id: OFFLINE_WRITING_STYLE_CUSTOM, label: "自定义", instruction: "" },
+];
+
+type OfflineOutputSettings = Pick<
+    ChatSession,
+    "offlineOutputMinChars" | "offlineOutputMaxChars" | "offlineWritingStyleId" | "offlineWritingStyleCustom"
+>;
+
+export function parseOfflineOutputCharInput(value: unknown): { ok: true; value?: number } | { ok: false } {
+    if (value === undefined || value === null) return { ok: true };
+    const raw = String(value).trim();
+    if (raw === "") return { ok: true };
+    if (!/^\d+$/.test(raw)) return { ok: false };
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 1) return { ok: false };
+    return { ok: true, value: Math.floor(parsed) };
+}
+
+export function normalizeOfflineWritingStyleId(value: unknown): string {
+    const id = typeof value === "string" ? value.trim() : "";
+    if (!id) return OFFLINE_WRITING_STYLE_NONE;
+    if (OFFLINE_WRITING_STYLE_OPTIONS.some(option => option.id === id)) return id;
+    return OFFLINE_WRITING_STYLE_NONE;
+}
+
+function resolveOfflineWritingStyleInstruction(session: OfflineOutputSettings): string {
+    const styleId = normalizeOfflineWritingStyleId(session.offlineWritingStyleId);
+    if (styleId === OFFLINE_WRITING_STYLE_NONE) return "";
+    if (styleId === OFFLINE_WRITING_STYLE_CUSTOM) {
+        return session.offlineWritingStyleCustom?.trim() || "";
+    }
+    return OFFLINE_WRITING_STYLE_OPTIONS.find(option => option.id === styleId)?.instruction || "";
+}
+
+export function buildOfflineOutputInstruction(session: OfflineOutputSettings): string {
+    const minParsed = parseOfflineOutputCharInput(session.offlineOutputMinChars);
+    const maxParsed = parseOfflineOutputCharInput(session.offlineOutputMaxChars);
+    let minChars = minParsed.ok ? minParsed.value : undefined;
+    let maxChars = maxParsed.ok ? maxParsed.value : undefined;
+    if (minChars != null && maxChars != null && minChars > maxChars) {
+        const swapped = minChars;
+        minChars = maxChars;
+        maxChars = swapped;
+    }
+
+    const parts: string[] = [];
+    if (minChars != null && maxChars != null) {
+        parts.push(
+            `本轮 <content> 正文的汉字字数必须落在 ${minChars}–${maxChars} 字之间。按汉字计数（每个汉字、标点与空白各计 1 字）。不要为了凑字灌水，也不要无故截断情节。`,
+        );
+    } else if (minChars != null) {
+        parts.push(
+            `本轮 <content> 正文的汉字字数不少于 ${minChars} 字。按汉字计数（每个汉字、标点与空白各计 1 字）。不要为了凑字灌水。`,
+        );
+    } else if (maxChars != null) {
+        parts.push(
+            `本轮 <content> 正文的汉字字数不超过 ${maxChars} 字。按汉字计数（每个汉字、标点与空白各计 1 字）。不要无故截断情节。`,
+        );
+    }
+
+    const styleInstruction = resolveOfflineWritingStyleInstruction(session);
+    if (styleInstruction) {
+        parts.push(styleInstruction);
+        parts.push("必须仍服从角色卡与线下 XML 格式，只输出 <content> 与摘要字段。");
+    }
+
+    return parts.join("\n");
+}
+
 export type NativeChatToolBundle = {
     definitions: LlmToolDefinition[];
     nameMap: Map<string, string>;
@@ -1893,6 +2003,7 @@ export async function buildChatPromptMessages(
             session.offlineBilingualTranslationPrompt,
         )
         : "";
+    const offlineOutputInstruction = buildOfflineOutputInstruction(session);
 
     const llmMessages = assemblePromptPayload({
         character,
@@ -1934,6 +2045,7 @@ export async function buildChatPromptMessages(
         statusRegionComposition: resolveStatusRegionComposition(statusRegionCfg),
         statusRegionFullExample: resolveStatusRegionFullExample(statusRegionCfg),
         offlineBilingualInstruction,
+        offlineOutputInstruction,
         offlineSummaryTag: preset?.story_summary_tag?.trim() || "summary",
         nativeToolHistory: usesNativeActions,
     });

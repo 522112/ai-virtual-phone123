@@ -93,6 +93,7 @@ export interface AssemblerInput {
     statusRegionComposition?: string;        // {{statusRegionComposition}} — 文字聊天模式【输出构成】行
     statusRegionFullExample?: string;        // {{statusRegionFullExample}} — 完整示例中的状态值+内心行
     offlineBilingualInstruction?: string;    // offline-mode bilingual output rule for {{offlineBilingualInstruction}}
+    offlineOutputInstruction?: string;       // session offline length/style rule for {{offlineOutputInstruction}}
     offlineSummaryTag?: string;              // XML tag used for offline-mode summary output
     checkPhoneBilingualInstruction?: string; // checkphone bilingual output rule for {{checkPhoneBilingualInstruction}}
     xiaohongshuBilingualInstruction?: string; // independent Xiaohongshu bilingual output rule for {{xiaohongshuBilingualInstruction}}
@@ -686,6 +687,7 @@ export function assemblePromptPayload(input: AssemblerInput): LLMMessage[] {
         engine.statusRegionComposition = input.statusRegionComposition ?? "";
         engine.statusRegionFullExample = input.statusRegionFullExample ?? "";
         engine.offlineBilingualInstruction = input.offlineBilingualInstruction ?? "";
+        engine.offlineOutputInstruction = input.offlineOutputInstruction ?? "";
         engine.offlineSummaryTag = input.offlineSummaryTag ?? "summary";
         engine.checkPhoneBilingualInstruction = input.checkPhoneBilingualInstruction ?? "";
         engine.xiaohongshuBilingualInstruction = input.xiaohongshuBilingualInstruction ?? "";
@@ -1618,6 +1620,7 @@ export interface GroupAssemblerInput {
     statusRegionComposition?: string;
     statusRegionFullExample?: string;
     offlineBilingualInstruction?: string;
+    offlineOutputInstruction?: string;
     offlineSummaryTag?: string;
     checkPhoneBilingualInstruction?: string;
     xiaohongshuBilingualInstruction?: string;
@@ -1873,6 +1876,7 @@ export function assembleGroupPromptPayload(input: GroupAssemblerInput): LLMMessa
         engine.statusRegionComposition = input.statusRegionComposition ?? "";
         engine.statusRegionFullExample = input.statusRegionFullExample ?? "";
         engine.offlineBilingualInstruction = input.offlineBilingualInstruction ?? "";
+        engine.offlineOutputInstruction = input.offlineOutputInstruction ?? "";
         engine.offlineSummaryTag = input.offlineSummaryTag ?? "summary";
         engine.checkPhoneBilingualInstruction = input.checkPhoneBilingualInstruction ?? "";
         engine.xiaohongshuBilingualInstruction = input.xiaohongshuBilingualInstruction ?? "";
@@ -2007,6 +2011,7 @@ export function assembleGroupPromptPayload(input: GroupAssemblerInput): LLMMessa
         groupEngine.statusRegionComposition = input.statusRegionComposition ?? "";
         groupEngine.statusRegionFullExample = input.statusRegionFullExample ?? "";
         groupEngine.offlineBilingualInstruction = input.offlineBilingualInstruction ?? "";
+        groupEngine.offlineOutputInstruction = input.offlineOutputInstruction ?? "";
         groupEngine.offlineSummaryTag = input.offlineSummaryTag ?? "summary";
 
         let afterChatHistory = false;

@@ -49,6 +49,7 @@ import {
   buildMusicCloudMacro,
   buildMusicLocalMacro,
   buildOfflineBilingualInstruction,
+  buildOfflineOutputInstruction,
 } from "./chat-engine";
 import { nativeToolProtocolForConfig } from "./llm-provider-adapter";
 import { stripHallucinatedTimestamps } from "./api-helpers";
@@ -158,6 +159,7 @@ export type WeixinCloudPromptContext = {
   tools: string;
   chatBilingualInstruction: string;
   offlineBilingualInstruction: string;
+  offlineOutputInstruction: string;
   offlineSummaryTag: string;
   enableVision: boolean;
   /** 云端助手是否发送媒体回复（生图/表情包/语音卡）；核心模块按此开关执行 */
@@ -742,6 +744,7 @@ export function buildWeixinCloudPromptMessages(
     tools: context.tools,
     chatBilingualInstruction: context.chatBilingualInstruction,
     offlineBilingualInstruction: context.offlineBilingualInstruction,
+    offlineOutputInstruction: context.offlineOutputInstruction,
     offlineSummaryTag: context.offlineSummaryTag,
     nativeToolHistory: context.nativeToolHistory,
   });
@@ -1136,6 +1139,7 @@ async function buildWeixinCloudPromptContext(params: {
         "single",
         params.session.offlineBilingualTranslationPrompt,
       ),
+    offlineOutputInstruction: buildOfflineOutputInstruction(params.session),
     offlineSummaryTag: params.preset?.story_summary_tag?.trim() || "summary",
     enableVision: params.apiConfig.enableImageRecognition === true,
     mediaReply: true,
