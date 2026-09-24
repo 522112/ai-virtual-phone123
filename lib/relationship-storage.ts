@@ -181,8 +181,61 @@ type SpaceCoverPhotoLike = {
   mediaUrl?: string;
   content?: string;
   createdAt?: string;
-  mediaData?: { fileType?: string; label?: string };
+  mediaData?: {
+    fileType?: string;
+    label?: string;
+    relationshipKind?: string;
+    relationshipId?: string;
+  };
 };
+
+function isRelationshipPromptEvent(msg: { mediaType?: string; content?: string }): boolean {
+  const type = msg.mediaType || "";
+  if (
+    type === "dissolve_relationship"
+    || type === "accept_relationship"
+    || type === "decline_relationship"
+    || type === "relationship_invite"
+  ) {
+    return true;
+  }
+  const content = msg.content || "";
+  return /\[解除关系\]|\[同意关系\]|\[拒绝关系\]|\[关系邀请/.test(content);
+}
+
+function isDissolvePromptEvent(msg: { mediaType?: string; content?: string }): boolean {
+  return msg.mediaType === "dissolve_relationship" || /\[解除关系\]/.test(msg.content || "");
+}
+
+function dissolveLabelFromHistory(msg: { content?: string; mediaData?: { label?: string; relationshipKind?: string } }): string {
+  if (msg.mediaData?.label) return msg.mediaData.label;
+  if (msg.mediaData?.relationshipKind) return relationshipKindLabel(msg.mediaData.relationshipKind);
+  return "关系";
+}
+
+function findJustDissolvedLabel(
+  characterId: string,
+  messages?: SpaceCoverPhotoLike[],
+): string | null {
+  if (!messages?.length) return null;
+  let sawAssistantAfter = false;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === "assistant") {
+      sawAssistantAfter = true;
+      continue;
+    }
+    if (!isRelationshipPromptEvent(msg)) continue;
+    if (!isDissolvePromptEvent(msg) || sawAssistantAfter) return null;
+    const fromMsg = dissolveLabelFromHistory(msg);
+    if (fromMsg !== "关系") return fromMsg;
+    const dissolved = loadRelationshipBindings()
+      .filter(item => item.characterId === characterId && item.status === "dissolved")
+      .sort((a, b) => (b.dissolvedAt || "").localeCompare(a.dissolvedAt || ""))[0];
+    return dissolved ? relationshipKindLabel(dissolved.kind) : fromMsg;
+  }
+  return null;
+}
 
 function isUserChatPhoto(msg: SpaceCoverPhotoLike): boolean {
   if (msg.role !== "user" || !msg.mediaUrl) return false;
@@ -587,6 +640,16 @@ export function buildRelationshipSpaceInstruction(
   const binding = getRelationshipByCharacter(characterId);
   const inviteHint = "若想邀请对方，输出 [关系邀请:情侣]（或闺蜜/死党/基友）。邀请后对方会收到待接收卡片。同一角色同时只能有一份关系申请。";
   if (!binding) {
+    const dissolvedLabel = findJustDissolvedLabel(characterId, messages);
+    if (dissolvedLabel) {
+      return [
+        `【关系空间】`,
+        `对方刚解除了你们的「${dissolvedLabel}」关系，双方空间已经关闭。`,
+        `请根据角色卡、性格和你们一直以来的相处，用这个人会说的话做出反应。难过、冷静、释然或生气都可以，但必须像这个人，不要套模板。`,
+        `不要再以${dissolvedLabel}身份说话，也不要继续使用关系空间相关标记。`,
+        `现在不要立刻再发 [关系邀请]，除非人设会马上求复合。`,
+      ].join("\n");
+    }
     return `【关系空间】\n${inviteHint}`;
   }
   const label = relationshipKindLabel(binding.kind);

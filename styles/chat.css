@@ -7762,6 +7762,25 @@
   opacity: 0.92;
 }
 
+.chat-rel-card[data-status="dissolved"] .chat-rel-card-body {
+  filter: grayscale(0.55);
+  opacity: 0.8;
+}
+
+.chat-rel-card[data-status="dissolved"] .chat-rel-card-mark {
+  position: relative;
+}
+
+.chat-rel-card[data-status="dissolved"] .chat-rel-card-mark::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-top: 2px solid #fff;
+  transform: rotate(-38deg);
+  transform-origin: center;
+  opacity: 0.92;
+}
+
 .rel-invite-overlay,
 .rel-compose {
   position: absolute;

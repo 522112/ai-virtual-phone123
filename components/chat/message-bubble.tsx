@@ -102,6 +102,7 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
         case "relationship_invite":
         case "accept_relationship":
         case "decline_relationship":
+        case "dissolve_relationship":
             return <RelationshipInviteBubble msg={msg} charName={charName} userName={userName} onAction={onRelationshipAction} />;
         case "contact_card":
             return <ContactCardBubble msg={msg} characterId={characterId} />;
@@ -758,33 +759,44 @@ function RelationshipInviteBubble({
         || parseRelationshipKindLabel(msg.mediaData?.label)
         || "couple";
     const meta = RELATIONSHIP_KIND_META[kind];
-    const status = msg.mediaType === "accept_relationship"
-        ? "received"
-        : msg.mediaType === "decline_relationship"
-            ? "declined"
-            : (msg.mediaData?.status || "pending");
+    const dissolved = msg.mediaType === "dissolve_relationship";
+    const status = dissolved
+        ? "dissolved"
+        : msg.mediaType === "accept_relationship"
+            ? "received"
+            : msg.mediaType === "decline_relationship"
+                ? "declined"
+                : (msg.mediaData?.status || "pending");
     const incoming = msg.role === "assistant" && status === "pending" && msg.mediaType === "relationship_invite";
     const sender = msg.role === "user" ? (userName || "我") : (msg.senderName || charName || "对方");
-    const title = msg.mediaType === "accept_relationship"
-        ? `已成为${relationshipKindLabel(kind)}`
-        : msg.mediaType === "decline_relationship"
-            ? `已拒绝成为${relationshipKindLabel(kind)}`
-            : meta.inviteTitle;
-    const desc = msg.mediaType === "accept_relationship"
-        ? "点卡片进入双方空间"
-        : msg.mediaType === "decline_relationship"
-            ? `${sender}没有接受这次邀约`
-            : `${sender}邀请绑定${meta.label}`;
-    const statusText = status === "received"
-        ? "已同意"
-        : status === "declined"
-            ? "已拒绝"
-            : incoming ? "待接收" : "等待对方接受";
-    const kicker = msg.mediaType === "decline_relationship"
-        ? "关系拒绝"
+    const title = dissolved
+        ? `已解除${relationshipKindLabel(kind)}关系`
         : msg.mediaType === "accept_relationship"
-            ? "关系确认"
-            : "关系邀约";
+            ? `已成为${relationshipKindLabel(kind)}`
+            : msg.mediaType === "decline_relationship"
+                ? `已拒绝成为${relationshipKindLabel(kind)}`
+                : meta.inviteTitle;
+    const desc = dissolved
+        ? "双方空间已关闭"
+        : msg.mediaType === "accept_relationship"
+            ? "点卡片进入双方空间"
+            : msg.mediaType === "decline_relationship"
+                ? `${sender}没有接受这次邀约`
+                : `${sender}邀请绑定${meta.label}`;
+    const statusText = dissolved
+        ? "已解除"
+        : status === "received"
+            ? "已同意"
+            : status === "declined"
+                ? "已拒绝"
+                : incoming ? "待接收" : "等待对方接受";
+    const kicker = dissolved
+        ? "关系解除"
+        : msg.mediaType === "decline_relationship"
+            ? "关系拒绝"
+            : msg.mediaType === "accept_relationship"
+                ? "关系确认"
+                : "关系邀约";
 
     return (
         <div
@@ -792,6 +804,7 @@ function RelationshipInviteBubble({
             data-status={status}
             style={{ "--rel-accent": meta.accent } as React.CSSProperties}
             onClick={() => {
+                if (dissolved) return;
                 if (status === "received" || msg.mediaType === "accept_relationship") onAction?.(msg, "open");
             }}
         >

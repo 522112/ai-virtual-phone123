@@ -1237,6 +1237,8 @@ export function formatRichMediaForHistory(msg: ChatMessage, userName: string, ch
             return "[同意关系]";
         case "decline_relationship":
             return "[拒绝关系]";
+        case "dissolve_relationship":
+            return "[解除关系]";
         case "change_avatar":
             return "[换上情头]";
         case "change_space_cover":
