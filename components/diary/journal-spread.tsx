@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 
 import { JournalDoodlePad } from "./journal-doodle-pad";
@@ -17,8 +17,15 @@ const STAMP_LABEL: Record<JournalStampKind, string> = {
   tape: "贴",
 };
 
+const FONT_SIZES = [12, 14, 17] as const;
+const FONT_SIZE_LABEL: Record<number, string> = { 12: "小", 14: "中", 17: "大" };
+
 export function JournalStampMark({ stamp }: { stamp: JournalStampKind }) {
   return <span className={`journal-stamp journal-stamp-${stamp}`} aria-hidden="true" />;
+}
+
+function isFloated(block: JournalBlock): boolean {
+  return typeof block.x === "number" && typeof block.y === "number";
 }
 
 export function JournalBlockView({
@@ -32,23 +39,106 @@ export function JournalBlockView({
   onChange: (block: JournalBlock) => void;
   onRemove: () => void;
 }) {
+  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const floated = isFloated(block);
+  const fontSize = block.fontSize || 14;
+  const scale = block.scale || 1;
+
+  const beginDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!editable || (block.type !== "image" && block.type !== "stamp")) return;
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const parent = event.currentTarget.closest(".journal-leaf-body");
+    const rect = parent?.getBoundingClientRect();
+    dragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: typeof block.x === "number" ? block.x : rect
+        ? ((event.currentTarget.getBoundingClientRect().left - rect.left) / rect.width) * 100
+        : 8,
+      originY: typeof block.y === "number" ? block.y : rect
+        ? ((event.currentTarget.getBoundingClientRect().top - rect.top) / rect.height) * 100
+        : 8,
+    };
+  };
+
+  const moveDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    const parent = event.currentTarget.closest(".journal-leaf-body");
+    const rect = parent?.getBoundingClientRect();
+    if (!rect) return;
+    const nextX = dragRef.current.originX + ((event.clientX - dragRef.current.startX) / rect.width) * 100;
+    const nextY = dragRef.current.originY + ((event.clientY - dragRef.current.startY) / rect.height) * 100;
+    onChange({
+      ...block,
+      x: Math.min(86, Math.max(0, nextX)),
+      y: Math.min(86, Math.max(0, nextY)),
+    });
+  };
+
+  const endDrag = () => {
+    dragRef.current = null;
+  };
+
   return (
-    <div className={`journal-block journal-block-${block.type}${block.author === "character" ? " is-char" : ""}`}>
+    <div
+      className={`journal-block journal-block-${block.type}${block.author === "character" ? " is-char" : ""}${floated ? " is-float" : ""}`}
+      style={floated ? {
+        left: `${block.x}%`,
+        top: `${block.y}%`,
+        transform: `scale(${scale})`,
+      } : undefined}
+      onPointerDown={beginDrag}
+      onPointerMove={moveDrag}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+    >
       {block.type === "text" ? (
-        <textarea
-          value={block.text}
-          readOnly={!editable}
-          placeholder={block.author === "character" ? "对方写在这一页" : "写在这一页上"}
-          onChange={event => {
-            if (!editable || block.type !== "text") return;
-            onChange({ ...block, text: event.target.value });
-          }}
-        />
+        <>
+          {editable ? (
+            <div className="journal-font-row" onPointerDown={event => event.stopPropagation()}>
+              {FONT_SIZES.map(size => (
+                <button
+                  key={size}
+                  type="button"
+                  data-active={fontSize === size ? "" : undefined}
+                  onClick={() => onChange({ ...block, fontSize: size })}
+                >
+                  {FONT_SIZE_LABEL[size]}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <textarea
+            value={block.text}
+            readOnly={!editable}
+            placeholder={block.author === "character" ? "对方写在这一页" : "写在这一页上"}
+            style={{ fontSize: `calc(${fontSize}px * var(--app-text-scale, 1))` }}
+            onChange={event => {
+              if (!editable || block.type !== "text") return;
+              onChange({ ...block, text: event.target.value });
+            }}
+          />
+        </>
       ) : null}
       {block.type === "image" ? (
         <figure>
           <img src={block.src} alt="" />
           {block.caption ? <figcaption>{block.caption}</figcaption> : null}
+          {editable ? (
+            <div className="journal-font-row" onPointerDown={event => event.stopPropagation()}>
+              {[0.75, 1, 1.25].map(value => (
+                <button
+                  key={value}
+                  type="button"
+                  data-active={(block.scale || 1) === value ? "" : undefined}
+                  onClick={() => onChange({ ...block, scale: value })}
+                >
+                  {value === 0.75 ? "小" : value === 1 ? "中" : "大"}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </figure>
       ) : null}
       {block.type === "doodle" ? (

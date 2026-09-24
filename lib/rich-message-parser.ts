@@ -390,6 +390,10 @@ const RICH_PATTERNS: {
         build: () => ({ content: "", mediaType: "change_avatar" as const }),
     },
     {
+        regex: /\[(?:设为空间背景|更换空间背景|换空间背景)\]/,
+        build: () => ({ content: "", mediaType: "change_space_cover" as const }),
+    },
+    {
         regex: new RegExp(`\\[关系动态感触${C}([^\\]]+)\\]`),
         build: (m) => ({
             content: "",

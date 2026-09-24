@@ -111,6 +111,7 @@ function partToWeixinText(part: ParsedMessagePart, charName: string): string | n
     if (part.mediaType === "accept_relationship") return `${charName}同意了关系邀请`;
     if (part.mediaType === "decline_relationship") return `${charName}拒绝了关系邀请`;
     if (part.mediaType === "change_avatar") return `${charName}换上了你发来的情头`;
+    if (part.mediaType === "change_space_cover") return `${charName}把你发的照片设成了空间背景`;
     if (part.mediaType === "relationship_space") {
         const action = data.spaceAction;
         if (action === "comment" || action === "reply") return `${charName}评论了关系空间动态`;
@@ -975,7 +976,7 @@ async function handleIncomingMessage(
         if (outgoing) weixinOutbox.push(outgoing);
 
         if (p.mediaType === "voice_call" || p.mediaType === "video_call") continue;
-        if (p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship" || p.mediaType === "change_avatar") {
+        if (p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship" || p.mediaType === "change_avatar" || p.mediaType === "change_space_cover") {
             handleFollowUpMediaAction(p.mediaType, session.id, loadChatMessages(session.id));
             continue;
         }

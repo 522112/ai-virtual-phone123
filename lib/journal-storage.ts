@@ -4,6 +4,7 @@ import type {
   JournalBlock,
   JournalBook,
   JournalBookKind,
+  JournalDrawingSkill,
   JournalPage,
   JournalSide,
   JournalStampKind,
@@ -72,6 +73,21 @@ function normalizeStroke(value: unknown): JournalStroke | null {
   };
 }
 
+function clampLayout(value: unknown, min: number, max: number): number | undefined {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return undefined;
+  return Math.min(max, Math.max(min, num));
+}
+
+function layoutFields(item: Partial<JournalBlock>) {
+  return {
+    fontSize: clampLayout(item.fontSize, 11, 22),
+    x: clampLayout(item.x, 0, 86),
+    y: clampLayout(item.y, 0, 86),
+    scale: clampLayout(item.scale, 0.55, 1.8),
+  };
+}
+
 function normalizeBlock(value: unknown): JournalBlock | null {
   if (!value || typeof value !== "object") return null;
   const item = value as Partial<JournalBlock> & { id?: string; type?: string };
@@ -81,8 +97,9 @@ function normalizeBlock(value: unknown): JournalBlock | null {
   const side: JournalSide = item.side === "right" || item.side === "left"
     ? item.side
     : author === "character" ? "right" : "left";
+  const layout = layoutFields(item);
   if (item.type === "text" && typeof item.text === "string") {
-    return { id: item.id, type: "text", text: item.text, author, characterId, side };
+    return { id: item.id, type: "text", text: item.text, author, characterId, side, ...layout };
   }
   if (item.type === "image" && typeof item.src === "string" && item.src.trim()) {
     return {
@@ -93,11 +110,12 @@ function normalizeBlock(value: unknown): JournalBlock | null {
       author,
       characterId,
       side,
+      ...layout,
     };
   }
   if (item.type === "doodle") {
     const strokes = Array.isArray(item.strokes) ? item.strokes.map(normalizeStroke).filter(Boolean) as JournalStroke[] : [];
-    return { id: item.id, type: "doodle", strokes, author, characterId, side };
+    return { id: item.id, type: "doodle", strokes, author, characterId, side, ...layout };
   }
   if (item.type === "stamp" && isStamp(item.stamp)) {
     return {
@@ -108,6 +126,7 @@ function normalizeBlock(value: unknown): JournalBlock | null {
       author,
       characterId,
       side,
+      ...layout,
     };
   }
   if (item.type === "clip" && typeof item.text === "string") {
@@ -121,6 +140,7 @@ function normalizeBlock(value: unknown): JournalBlock | null {
       author,
       characterId,
       side,
+      ...layout,
     };
   }
   return null;
@@ -313,37 +333,103 @@ function strokeFromPoints(points: Array<[number, number]>, color: string, width 
   };
 }
 
-export function createCharacterDoodleStrokes(stamp: JournalStampKind, color = "#8a5a4a"): JournalStroke[] {
+function hashSeed(text: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function inferJournalDrawingSkill(input: {
+  persona?: string;
+  personality?: string;
+  name?: string;
+  id?: string;
+}): JournalDrawingSkill {
+  const text = `${input.persona || ""} ${input.personality || ""}`;
+  if (/画渣|不会画|手残|画得(很|好)?丑|涂鸦很烂|完全不会画|画画很差/.test(text)) return "poor";
+  if (/画家|插画|美术|绘画|画师|素描|水彩|漫画|设计师|艺术生|会画画|画得很好|擅长画画/.test(text)) return "good";
+  const n = hashSeed(input.id || input.name || text || "journal") % 10;
+  if (n < 3) return "poor";
+  if (n < 7) return "ok";
+  return "good";
+}
+
+function jitterStrokes(strokes: JournalStroke[], skill: JournalDrawingSkill, seed: string): JournalStroke[] {
+  if (skill === "good") {
+    return strokes.map(stroke => ({
+      ...stroke,
+      points: stroke.points.map(point => ({
+        x: Math.min(1, Math.max(0, point.x + ((hashSeed(`${seed}:${point.x}`) % 7) - 3) * 0.0015)),
+        y: Math.min(1, Math.max(0, point.y + ((hashSeed(`${seed}:${point.y}`) % 7) - 3) * 0.0015)),
+      })),
+    }));
+  }
+  const amount = skill === "poor" ? 0.045 : 0.018;
+  const next = strokes.map((stroke, index) => {
+    const widthJitter = skill === "poor" ? 0.55 + ((hashSeed(`${seed}:w:${index}`) % 80) / 100) : 1;
+    return {
+      ...stroke,
+      width: Math.max(0.8, stroke.width * widthJitter),
+      points: stroke.points.map((point, pointIndex) => {
+        const dx = ((hashSeed(`${seed}:x:${index}:${pointIndex}`) % 21) - 10) / 10 * amount;
+        const dy = ((hashSeed(`${seed}:y:${index}:${pointIndex}`) % 21) - 10) / 10 * amount;
+        return {
+          x: Math.min(1, Math.max(0, point.x + dx)),
+          y: Math.min(1, Math.max(0, point.y + dy)),
+        };
+      }),
+    };
+  });
+  if (skill !== "poor") return next;
+  return [
+    ...next,
+    strokeFromPoints([
+      [0.12 + ((hashSeed(`${seed}:scrib1`) % 8) / 100), 0.78],
+      [0.22, 0.86],
+      [0.34, 0.80],
+    ], "#8a5a4a", 1.1),
+  ];
+}
+
+export function createCharacterDoodleStrokes(
+  stamp: JournalStampKind,
+  options?: { color?: string; skill?: JournalDrawingSkill; seed?: string } | string,
+): JournalStroke[] {
+  const color = typeof options === "string" ? options : (options?.color || "#8a5a4a");
+  const skill = typeof options === "string" ? "ok" : (options?.skill || "ok");
+  const seed = typeof options === "string" ? stamp : (options?.seed || stamp);
+  let strokes: JournalStroke[];
   if (stamp === "heart") {
-    return [strokeFromPoints([
+    strokes = [strokeFromPoints([
       [0.50, 0.72], [0.28, 0.48], [0.24, 0.32], [0.36, 0.22], [0.50, 0.30],
       [0.64, 0.22], [0.76, 0.32], [0.72, 0.48], [0.50, 0.72],
     ], color)];
-  }
-  if (stamp === "star") {
-    return [strokeFromPoints([
+  } else if (stamp === "star") {
+    strokes = [strokeFromPoints([
       [0.50, 0.16], [0.58, 0.40], [0.82, 0.40], [0.62, 0.56], [0.70, 0.80],
       [0.50, 0.64], [0.30, 0.80], [0.38, 0.56], [0.18, 0.40], [0.42, 0.40], [0.50, 0.16],
     ], color, 1.8)];
-  }
-  if (stamp === "flower") {
-    return [
+  } else if (stamp === "flower") {
+    strokes = [
       strokeFromPoints([[0.50, 0.28], [0.42, 0.18], [0.50, 0.12], [0.58, 0.18], [0.50, 0.28]], color, 1.7),
       strokeFromPoints([[0.50, 0.28], [0.64, 0.24], [0.74, 0.32], [0.64, 0.38], [0.50, 0.28]], color, 1.7),
       strokeFromPoints([[0.50, 0.28], [0.36, 0.24], [0.26, 0.32], [0.36, 0.38], [0.50, 0.28]], color, 1.7),
       strokeFromPoints([[0.50, 0.28], [0.50, 0.78]], color, 1.6),
     ];
+  } else if (stamp === "arrow") {
+    strokes = [strokeFromPoints([[0.18, 0.62], [0.72, 0.28], [0.58, 0.28], [0.72, 0.28], [0.72, 0.42]], color, 2)];
+  } else if (stamp === "underline") {
+    strokes = [strokeFromPoints([[0.16, 0.62], [0.34, 0.70], [0.58, 0.60], [0.84, 0.68]], color, 2.4)];
+  } else {
+    strokes = [
+      strokeFromPoints([[0.22, 0.28], [0.78, 0.22], [0.74, 0.70], [0.26, 0.76], [0.22, 0.28]], color, 2.2),
+      strokeFromPoints([[0.30, 0.36], [0.70, 0.32]], color, 1.4),
+    ];
   }
-  if (stamp === "arrow") {
-    return [strokeFromPoints([[0.18, 0.62], [0.72, 0.28], [0.58, 0.28], [0.72, 0.28], [0.72, 0.42]], color, 2)];
-  }
-  if (stamp === "underline") {
-    return [strokeFromPoints([[0.16, 0.62], [0.34, 0.70], [0.58, 0.60], [0.84, 0.68]], color, 2.4)];
-  }
-  return [
-    strokeFromPoints([[0.22, 0.28], [0.78, 0.22], [0.74, 0.70], [0.26, 0.76], [0.22, 0.28]], color, 2.2),
-    strokeFromPoints([[0.30, 0.36], [0.70, 0.32]], color, 1.4),
-  ];
+  return jitterStrokes(strokes, skill, seed);
 }
 
 export function blocksOnSide(page: JournalPage, side: JournalSide): JournalBlock[] {

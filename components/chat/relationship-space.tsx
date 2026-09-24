@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Heart, MessageCircle, Plus, Trash2, X } from "lucide-react";
+import { Heart, ImagePlus, MessageCircle, Trash2, X } from "lucide-react";
 import type { ChatMessage } from "@/lib/chat-storage";
 import type { Character } from "@/lib/character-types";
 import { resolveUserIdentity } from "@/lib/settings-storage";
@@ -21,6 +21,7 @@ import {
   daysTogether,
   dissolveRelationship,
   getRelationshipById,
+  updateRelationshipCover,
   hasCheckedInToday,
   loadAnniversaries,
   loadCheckins,
@@ -67,7 +68,30 @@ export function RelationshipSpace({
   const { binding, posts, tick } = useRelationship(relationshipId);
   const [tab, setTab] = useState<TabKey>("feed");
   const [composing, setComposing] = useState(false);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const identity = resolveUserIdentity(character?.id || "", "chat");
+
+  useEffect(() => {
+    const src = binding?.coverImage;
+    if (!src) {
+      setCoverUrl(null);
+      return;
+    }
+    if (src.startsWith("data:") || src.startsWith("http") || src.startsWith("blob:")) {
+      setCoverUrl(src);
+      return;
+    }
+    let cancelled = false;
+    getChatImageFromIndexedDB(src.startsWith("asset://") ? src.slice("asset://".length) : src)
+      .then(url => {
+        if (!cancelled) setCoverUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setCoverUrl(src);
+      });
+    return () => { cancelled = true; };
+  }, [binding?.coverImage]);
 
   if (!binding || binding.status !== "active") {
     return (
@@ -108,7 +132,33 @@ export function RelationshipSpace({
         </button>
       </header>
 
-      <section className="rel-space-hero">
+      <section
+        className="rel-space-hero"
+        data-has-cover={coverUrl ? "" : undefined}
+        style={coverUrl ? { backgroundImage: `url(${coverUrl})` } : undefined}
+      >
+        <button
+          type="button"
+          className="rel-space-cover-btn"
+          onClick={() => coverInputRef.current?.click()}
+        >
+          <ImagePlus size={15} strokeWidth={1.75} />
+          <span>{binding.coverImage ? "换背景" : "上传背景"}</span>
+        </button>
+        <input
+          ref={coverInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={async e => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            const assetId = await saveChatImageToIndexedDB(file);
+            updateRelationshipCover(binding.id, assetId, "user");
+            onNotice("已更新空间背景");
+          }}
+        />
         <div className="rel-space-avatars">
           <span className="rel-space-avatar">
             {identity?.avatarUrl ? <img src={identity.avatarUrl} alt="" /> : <ChatFallbackAvatar alt={identity?.name || "我"} />}
@@ -124,6 +174,11 @@ export function RelationshipSpace({
           <RelationshipKindIcon kind={binding.kind} size="sm" />
           <span>{meta.label} · 第 {together} 天</span>
         </div>
+        {binding.coverUpdatedBy === "character" ? (
+          <div className="rel-space-cover-credit">{character?.name || "对方"}设的背景</div>
+        ) : binding.coverUpdatedBy === "user" ? (
+          <div className="rel-space-cover-credit">我设的背景</div>
+        ) : null}
       </section>
 
       <nav className="rel-space-tabs">
@@ -223,9 +278,14 @@ function RelationshipFeed({
 }) {
   return (
     <div className="rel-feed">
-      <button type="button" className="rel-feed-compose" onClick={onCompose}>
-        <Plus size={16} strokeWidth={1.75} />
-        <span>发布动态</span>
+      <button type="button" className="rel-feed-composer-card" onClick={onCompose}>
+        <span className="rel-feed-composer-avatar">
+          <RelAvatar src={userAvatar} alt={userName} />
+        </span>
+        <span className="rel-feed-composer-placeholder">写点什么...</span>
+        <span className="rel-feed-composer-cam" aria-hidden="true">
+          <ImagePlus size={18} strokeWidth={1.7} />
+        </span>
       </button>
       {posts.length === 0 ? (
         <div className="rel-space-empty">还没有动态。可以写此刻的感触，也可以随手发一条。</div>
@@ -478,75 +538,63 @@ function RelationshipCompose({
   };
 
   return (
-    <div className="modal-overlay" data-ui="modal" role="presentation" onClick={onClose}>
-      <div
-        className="compose-modal"
-        data-ui="modal-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="新动态"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="compose-modal-header">
-          <button type="button" onClick={onClose} className="compose-header-icon" aria-label="取消">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-          <span className="compose-modal-title">新动态</span>
-          <button type="button" onClick={handlePublish} disabled={!canPublish} className="compose-header-icon compose-header-send" aria-label="发表">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
-          </button>
-        </div>
-        <div className="compose-modal-body">
-          <div className="compose-top-area">
-            <textarea
-              ref={textareaRef}
-              value={text}
-              onChange={e => setText(e.target.value)}
-              placeholder="这一刻的想法..."
-              className="compose-textarea"
-            />
-            <div className="compose-media-grid">
-              {photoPreview ? (
-                <div className="compose-photo-block-preview">
-                  <img src={photoPreview} alt="" />
-                  <button
-                    type="button"
-                    onClick={() => { setPhotoAssetId(null); setPhotoPreview(null); }}
-                    className="ui-close-sm compose-photo-remove"
-                  >
-                    ×
-                  </button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => fileRef.current?.click()} className="compose-photo-block">
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                </button>
-              )}
+    <div className="rel-compose-overlay" role="dialog" aria-modal="true" aria-label="新动态">
+      <header className="rel-space-nav">
+        <button type="button" className="rel-space-text-btn" onClick={onClose}>取消</button>
+        <span>新动态</span>
+        <button
+          type="button"
+          className="rel-space-text-btn"
+          data-primary=""
+          disabled={!canPublish}
+          onClick={handlePublish}
+        >
+          发表
+        </button>
+      </header>
+      <div className="rel-compose-body">
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder="这一刻的想法..."
+          className="rel-compose-text"
+        />
+        <div className="rel-compose-tools">
+          {photoPreview ? (
+            <div className="rel-compose-photo">
+              <img src={photoPreview} alt="" />
+              <button
+                type="button"
+                className="rel-space-icon-btn"
+                aria-label="去掉图片"
+                onClick={() => { setPhotoAssetId(null); setPhotoPreview(null); }}
+              >
+                <X size={16} />
+              </button>
             </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={async e => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (!file) return;
-                const assetId = await saveChatImageToIndexedDB(file);
-                const preview = await getChatImageFromIndexedDB(assetId);
-                setPhotoAssetId(assetId);
-                setPhotoPreview(preview);
-              }}
-            />
-          </div>
+          ) : (
+            <button type="button" className="rel-compose-add-photo" onClick={() => fileRef.current?.click()}>
+              <ImagePlus size={20} strokeWidth={1.7} />
+              <span>添加图片</span>
+            </button>
+          )}
         </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={async e => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            const assetId = await saveChatImageToIndexedDB(file);
+            const preview = await getChatImageFromIndexedDB(assetId);
+            setPhotoAssetId(assetId);
+            setPhotoPreview(preview);
+          }}
+        />
       </div>
     </div>
   );

@@ -10,14 +10,15 @@ import type { Character } from "@/lib/character-types";
 import { collectJournalClips } from "@/lib/journal-clips";
 import {
   generateJournalAnnotation,
-  generateJournalCharacterStamp,
-  generateJournalCharacterWrite,
+  generateJournalCharacterPage,
+  type JournalCharacterPageDraft,
 } from "@/lib/journal-engine";
 import { sendJournalShareToCharacter } from "@/lib/journal-share";
 import {
   addJournalAnnotation,
   createCharacterDoodleStrokes,
   createJournalBlockId,
+  inferJournalDrawingSkill,
   createJournalBook,
   createJournalPage,
   deleteJournalBook,
@@ -190,6 +191,46 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
     const side = block.side
       || (block.author === "character" ? "right" : (currentBook?.kind === "couple" ? "left" : activeSide));
     addBlock({ ...block, side });
+  };
+
+  const blocksFromCharacterDraft = (characterId: string, draft: JournalCharacterPageDraft): JournalBlock[] => {
+    const skill = draft.skill || inferJournalDrawingSkill({ id: characterId });
+    const blocks: JournalBlock[] = [];
+    if (draft.text?.trim()) {
+      blocks.push({
+        id: createJournalBlockId(),
+        type: "text",
+        text: draft.text.trim(),
+        author: "character",
+        characterId,
+        side: "right",
+        fontSize: draft.fontSize,
+      });
+    }
+    if (draft.stamp) {
+      blocks.push({
+        id: createJournalBlockId(),
+        type: "stamp",
+        stamp: draft.stamp,
+        note: draft.stampNote,
+        author: "character",
+        characterId,
+        side: "right",
+        x: draft.stampX ?? 58,
+        y: draft.stampY ?? 12,
+      });
+    }
+    if (draft.doodle) {
+      blocks.push({
+        id: createJournalBlockId(),
+        type: "doodle",
+        strokes: createCharacterDoodleStrokes(draft.stamp || "heart", { skill, seed: `${characterId}:${Date.now()}` }),
+        author: "character",
+        characterId,
+        side: "right",
+      });
+    }
+    return blocks;
   };
 
   const renderHome = () => (
@@ -381,15 +422,8 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           if (!book.characterId) return;
           setBusy("对方在写右页");
           try {
-            const text = await generateJournalCharacterWrite({ characterId: book.characterId, book, page });
-            addSideBlock({
-              id: createJournalBlockId(),
-              type: "text",
-              text,
-              author: "character",
-              characterId: book.characterId,
-              side: "right",
-            });
+            const draft = await generateJournalCharacterPage({ characterId: book.characterId, book, page, mode: "write" });
+            updatePageBlocks([...page.blocks, ...blocksFromCharacterDraft(book.characterId, draft)]);
             setActiveSide("right");
             notify("对方写在右页");
           } catch (error) {
@@ -402,29 +436,10 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           if (!book.characterId) return;
           setBusy("对方在涂右页");
           try {
-            const doodle = await generateJournalCharacterStamp({ characterId: book.characterId, book, page });
-            updatePageBlocks([
-              ...page.blocks,
-              {
-                id: createJournalBlockId(),
-                type: "stamp",
-                stamp: doodle.stamp,
-                note: doodle.note,
-                author: "character",
-                characterId: book.characterId,
-                side: "right",
-              },
-              {
-                id: createJournalBlockId(),
-                type: "doodle",
-                strokes: createCharacterDoodleStrokes(doodle.stamp),
-                author: "character",
-                characterId: book.characterId,
-                side: "right",
-              },
-            ]);
+            const draft = await generateJournalCharacterPage({ characterId: book.characterId, book, page, mode: "doodle" });
+            updatePageBlocks([...page.blocks, ...blocksFromCharacterDraft(book.characterId, draft)]);
             setActiveSide("right");
-            notify("对方涂在右页");
+            notify(draft.skill === "poor" ? "对方涂在右页，画得有点歪" : "对方涂在右页");
           } catch (error) {
             notify(error instanceof Error ? error.message : "对方没有涂成");
           } finally {

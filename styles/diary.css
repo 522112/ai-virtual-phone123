@@ -4470,11 +4470,39 @@
   display: none;
 }
 
+.journal-font-row {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+
+.journal-font-row button {
+  min-height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--journal-mute);
+  font-size: calc(10px * var(--app-text-scale, 1));
+}
+
+.journal-font-row button[data-active] {
+  background: #2b2722;
+  color: #fffdf8;
+}
+
 .journal-spread-stage {
   flex: 0 0 auto;
-  height: 318px;
+  height: 380px;
   margin: 4px 0 12px;
   perspective: 1100px;
+}
+
+.journal-spread-stage.is-preview {
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
 }
 
 .journal-spread {
@@ -4531,9 +4559,22 @@
 }
 
 .journal-leaf-body {
+  position: relative;
   flex: 1;
-  min-height: 0;
+  min-height: 180px;
   overflow: auto;
+}
+
+.journal-block.is-float {
+  position: absolute;
+  z-index: 2;
+  width: 46%;
+  margin: 0;
+  touch-action: none;
+}
+
+.journal-block.is-float.journal-block-stamp {
+  width: auto;
 }
 
 .journal-leaf .journal-block textarea {
@@ -4572,13 +4613,16 @@
   z-index: 24;
   background: rgba(28, 24, 20, 0.34);
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
 }
 
 .journal-flip-sheet {
   width: 100%;
-  padding: 14px 12px 18px;
-  border-radius: 18px 18px 0 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 8px 12px;
+  border-radius: 0;
   background: #f7f1e6;
 }
 
@@ -4607,8 +4651,15 @@
 }
 
 .journal-flip-book {
+  flex: 1;
+  min-height: 0;
+  display: flex;
   transform-origin: center;
   transition: transform 0.42s ease;
+}
+
+.journal-flip-book .journal-spread-stage {
+  width: 100%;
 }
 
 .journal-flip-book.is-next {

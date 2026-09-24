@@ -82,6 +82,7 @@ import {
   materializeRelationshipSpacePart,
   parseRelationshipKindLabel,
   relationshipKindLabel,
+  applyCharacterSpaceCover,
 } from "./relationship-storage";
 import {
   applyCharacterAvatarFromChatImage,
@@ -766,7 +767,7 @@ export function buildWeixinCloudPromptMessages(
   if (!options?.skipEmptyGenerateGuard) {
     appendEmptyGenerateGuardMessage(messages, snapshot.apiConfig, history);
   }
-  const relationshipInstruction = buildRelationshipSpaceInstruction(snapshot.character.id, snapshot.session.isGroup);
+  const relationshipInstruction = buildRelationshipSpaceInstruction(snapshot.character.id, snapshot.session.isGroup, history);
   if (relationshipInstruction) {
     messages.push({ role: "system", content: relationshipInstruction });
   }
@@ -2013,6 +2014,18 @@ function importCloudAssistantMessage(
       messages.push(makeCloudImportedMessage(stored, session.id, createdAt, index, {
         role: "system",
         content: `${characterName}换上了你发来的情头`,
+      }, strippedContent));
+      return;
+    }
+    if (part.mediaType === "change_space_cover" && !session.isGroup) {
+      const result = applyCharacterSpaceCover({
+        characterId: stored.characterId,
+        characterName,
+        messages: loadChatMessages(session.id),
+      });
+      messages.push(makeCloudImportedMessage(stored, session.id, createdAt, index, {
+        role: "system",
+        content: result.notice,
       }, strippedContent));
       return;
     }

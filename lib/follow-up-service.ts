@@ -45,6 +45,7 @@ import {
     parseRelationshipKindLabel,
     relationshipKindLabel,
     materializeRelationshipSpacePart,
+    applyCharacterSpaceCover,
 } from "./relationship-storage";
 import {
     applyCharacterAvatarFromChatImage,
@@ -799,6 +800,25 @@ export function handleFollowUpMediaAction(
         return;
     }
 
+    if (actionType === "change_space_cover") {
+        const sess = loadChatSessions().find(item => item.id === sessionId);
+        if (!sess || sess.isGroup) return;
+        const result = applyCharacterSpaceCover({
+            characterId: sess.contactId,
+            characterName: resolveFollowUpSenderName(sessionId),
+            messages: contextMessages,
+        });
+        if (!result.applied) return;
+        pushChatMessage({
+            sessionId,
+            role: "system",
+            content: result.notice,
+            responseBatchId: createResponseBatchId(),
+            rawResponseText: "[设为空间背景]",
+        });
+        return;
+    }
+
     if (actionType === "accept_relationship" || actionType === "decline_relationship") {
         const accept = actionType === "accept_relationship";
         const sess = loadChatSessions().find(item => item.id === sessionId);
@@ -1005,7 +1025,8 @@ export async function parseAndSaveResponse(
             || p.mediaType === "accept_transfer" || p.mediaType === "decline_transfer"
             || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
             || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship"
-            || p.mediaType === "change_avatar") {
+            || p.mediaType === "change_avatar"
+            || p.mediaType === "change_space_cover") {
             handleFollowUpMediaAction(p.mediaType, sessionId, contextMessages);
             continue;
         }

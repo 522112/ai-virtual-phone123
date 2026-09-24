@@ -59,6 +59,9 @@ export type RelationshipBinding = {
   invitedAt: string;
   acceptedAt?: string;
   dissolvedAt?: string;
+  coverImage?: string;
+  coverUpdatedBy?: "user" | "character";
+  coverUpdatedAt?: string;
 };
 
 export type RelationshipPostLike = {
