@@ -14,8 +14,8 @@ import { PhoneChatApp } from "@/components/chat/phone-chat-app";
 import { PhonePlaceholderApp } from "@/components/phone-placeholder-app";
 import MusicApp from "@/components/music/music-app";
 import MusicPlayer from "@/components/music/music-player";
-import MusicFloat from "@/components/music/music-float";
 import MiniAppWindow from "@/components/music/mini-app-window";
+import { PhoneDynamicIsland } from "@/components/phone-dynamic-island";
 import { PhoneCalendarApp } from "@/components/calendar-app";
 import { PhoneQaApp } from "@/components/phone-qa-app";
 import { ChatPluginPageBoundary } from "@/components/chat/chat-plugin-page-boundary";
@@ -1019,10 +1019,8 @@ type MusicOverlayController = {
 };
 
 const MusicShellOverlays = memo(function MusicShellOverlays({
-  activeApp,
   onControllerChange,
 }: {
-  activeApp: DesktopIconId | null;
   onControllerChange: (controller: MusicOverlayController | null) => void;
 }) {
   const musicPlayer = useMusicControlsOptional();
@@ -1034,7 +1032,6 @@ const MusicShellOverlays = memo(function MusicShellOverlays({
   return (
     <>
       {musicPlayer?.showFullPlayer && musicPlayer.currentTrack && <MusicPlayer />}
-      <MusicFloat hidden={activeApp === "music" || musicPlayer?.showFullPlayer} />
     </>
   );
 });
@@ -1103,9 +1100,6 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
     isGroup?: boolean;
   } | null>(null);
   const chatMessageNoticeTimerRef = useRef<number | null>(null);
-  // Swipe-up-to-dismiss state for the chat message notice banner.
-  const [noticeDragY, setNoticeDragY] = useState(0);
-  const noticeDragRef = useRef({ startY: 0, dy: 0, dragging: false, far: false });
   const [musicCustomCss, setMusicCustomCss] = useState(() =>
     typeof window !== "undefined" ? kvGet("music-custom-css") || "" : ""
   );
@@ -2452,6 +2446,65 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     }, 0);
   }, []);
 
+  const handleOpenIslandNotice = useCallback(() => {
+    if (chatMessageNotice) openChatSessionFromNotice(chatMessageNotice.sessionId);
+  }, [chatMessageNotice, openChatSessionFromNotice]);
+
+  const handleDismissIslandNotice = useCallback(() => {
+    if (chatMessageNoticeTimerRef.current !== null) {
+      window.clearTimeout(chatMessageNoticeTimerRef.current);
+      chatMessageNoticeTimerRef.current = null;
+    }
+    setChatMessageNotice(null);
+  }, []);
+
+  const handleDeclineIncomingCall = useCallback(() => {
+    setIncomingCall(current => {
+      if (!current) return null;
+      const callLabel = current.type === "voice" ? "语音通话" : "视频通话";
+      pushChatMessage({
+        sessionId: current.sessionId,
+        role: "user",
+        content: `[我拒绝了${callLabel}]`,
+      });
+      window.dispatchEvent(new CustomEvent("call-declined", { detail: { sessionId: current.sessionId } }));
+      const sessions = loadChatSessions();
+      const sess = sessions.find(s => s.id === current.sessionId);
+      if (sess) {
+        const sid = current.sessionId;
+        kvSet("chat-generating:" + sid, JSON.stringify({ startedAt: Date.now() }));
+        const msgs = loadChatMessages(sid);
+        generateChatCompletion(sess, msgs, { appTags: ["chat", "text"] }).then(cr => {
+          const text = flattenCompletionResult(cr);
+          const { parts, stateValues } = parseAIResponse(text, []);
+          for (const p of parts) {
+            if (p.mediaType === "voice_call" || p.mediaType === "video_call") continue;
+            pushChatMessage({ sessionId: sid, role: "assistant", content: p.content, mediaType: p.mediaType, mediaData: p.mediaData });
+          }
+          scheduleFollowUp(sid, 0, stateValues);
+        }).catch(() => {}).finally(() => {
+          kvRemove("chat-generating:" + sid);
+          window.dispatchEvent(new CustomEvent("chat-bg-complete", { detail: { sessionId: sid } }));
+        });
+      }
+      return null;
+    });
+  }, []);
+
+  const handleAcceptIncomingCall = useCallback(() => {
+    setIncomingCall(current => {
+      if (!current) return null;
+      setActiveApp("chat" as IconId);
+      setChatInitSessionId(current.sessionId);
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("ai-call-trigger", {
+          detail: { sessionId: current.sessionId, type: current.type, __fromBar: true },
+        }));
+      }, 600);
+      return null;
+    });
+  }, []);
+
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{
@@ -2479,8 +2532,6 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     return () => window.removeEventListener(CHAT_REQUEST_REPLY_EVENT, handler);
   }, []);
 
-  // Swipe up to dismiss the message notice; tap still opens the chat. Auto-dismiss
-  // pauses while the finger is down and resumes if the swipe doesn't pass threshold.
   const armNoticeAutoDismiss = useCallback(() => {
     if (chatMessageNoticeTimerRef.current !== null) window.clearTimeout(chatMessageNoticeTimerRef.current);
     chatMessageNoticeTimerRef.current = window.setTimeout(() => {
@@ -2489,42 +2540,12 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     }, 6000);
   }, []);
 
-  const handleNoticePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
-    noticeDragRef.current = { startY: e.clientY, dy: 0, dragging: true, far: false };
+  const handleHoldIslandNotice = useCallback(() => {
     if (chatMessageNoticeTimerRef.current !== null) {
       window.clearTimeout(chatMessageNoticeTimerRef.current);
       chatMessageNoticeTimerRef.current = null;
     }
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
   }, []);
-
-  const handleNoticePointerMove = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
-    const drag = noticeDragRef.current;
-    if (!drag.dragging) return;
-    let dy = e.clientY - drag.startY;
-    if (dy > 0) dy = Math.min(12, dy * 0.3); // rubber-band a little when pulled down
-    drag.dy = dy;
-    if (Math.abs(dy) > 6) drag.far = true;
-    setNoticeDragY(dy);
-  }, []);
-
-  const handleNoticePointerUp = useCallback(() => {
-    const drag = noticeDragRef.current;
-    if (!drag.dragging) return;
-    drag.dragging = false;
-    if (drag.dy < -44) {
-      setNoticeDragY(-220); // slide away, then unmount
-      window.setTimeout(() => setChatMessageNotice(null), 170);
-    } else {
-      setNoticeDragY(0); // bounce back + resume auto-dismiss
-      armNoticeAutoDismiss();
-    }
-  }, [armNoticeAutoDismiss]);
-
-  const handleNoticeClick = useCallback(() => {
-    if (noticeDragRef.current.far) { noticeDragRef.current.far = false; return; }
-    if (chatMessageNotice) openChatSessionFromNotice(chatMessageNotice.sessionId);
-  }, [chatMessageNotice, openChatSessionFromNotice]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -2550,8 +2571,6 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
       if (chatMessageNoticeTimerRef.current !== null) {
         window.clearTimeout(chatMessageNoticeTimerRef.current);
       }
-      noticeDragRef.current = { startY: 0, dy: 0, dragging: false, far: false };
-      setNoticeDragY(0);
       setChatMessageNotice({
         sessionId: detail.sessionId,
         title,
@@ -4185,13 +4204,6 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                 </div>
               </header>
 
-              {notice ? (
-                <aside className="phone-shell-notice" role="status" aria-live="polite">
-                  {notice}
-                </aside>
-              ) : null}
-
-
               {customAppUpdatePrompt ? (
                 <div
                   className="modal-overlay"
@@ -4312,127 +4324,25 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                 </div>
               ) : null}
 
-              {/* Incoming call bar — global overlay */}
-              {incomingCall && (
-                <div className="incoming-call-bar">
-                  <div className="incoming-call-bar-info">
-                    {incomingCall.charAvatar ? (
-                      <img src={incomingCall.charAvatar} alt="" className="incoming-call-bar-avatar" />
-                    ) : (
-                      <span className="incoming-call-bar-avatar incoming-call-bar-avatar-fallback">
-                        {incomingCall.charName[0] || "?"}
-                      </span>
-                    )}
-                    <div className="incoming-call-bar-text">
-                      <span className="incoming-call-bar-name">{incomingCall.charName}</span>
-                      <span className="incoming-call-bar-type">
-                        {incomingCall.isGroup ? "群" : ""}{incomingCall.type === "voice" ? "语音通话" : "视频通话"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="incoming-call-bar-actions">
-                    <button
-                      className="incoming-call-bar-btn incoming-call-bar-decline"
-                      onClick={() => {
-                        const call = incomingCall;
-                        const callLabel = call.type === "voice" ? "语音通话" : "视频通话";
-                        pushChatMessage({
-                          sessionId: call.sessionId,
-                          role: "user",
-                          content: `[我拒绝了${callLabel}]`,
-                        });
-                        setIncomingCall(null);
-                        // Trigger AI reply after declining — fire event for chat-room, plus background fallback
-                        window.dispatchEvent(new CustomEvent("call-declined", { detail: { sessionId: call.sessionId } }));
-                        const sessions = loadChatSessions();
-                        const sess = sessions.find(s => s.id === call.sessionId);
-                        if (sess) {
-                          const sid = call.sessionId;
-                          kvSet("chat-generating:" + sid, JSON.stringify({ startedAt: Date.now() }));
-                          const msgs = loadChatMessages(sid);
-                          generateChatCompletion(sess, msgs, { appTags: ["chat", "text"] }).then(cr => { const text = flattenCompletionResult(cr);
-                            const { parts, stateValues } = parseAIResponse(text, []);
-                            for (const p of parts) {
-                              if (p.mediaType === "voice_call" || p.mediaType === "video_call") continue;
-                              pushChatMessage({ sessionId: sid, role: "assistant", content: p.content, mediaType: p.mediaType, mediaData: p.mediaData });
-                            }
-                            scheduleFollowUp(sid, 0, stateValues);
-                          }).catch(() => {}).finally(() => {
-                            kvRemove("chat-generating:" + sid);
-                            window.dispatchEvent(new CustomEvent("chat-bg-complete", { detail: { sessionId: sid } }));
-                          });
-                        }
-                      }}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91" />
-                        <line x1="23" y1="1" x2="1" y2="23" />
-                      </svg>
-                    </button>
-                    <button
-                      className="incoming-call-bar-btn incoming-call-bar-accept"
-                      onClick={() => {
-                        const call = incomingCall;
-                        setIncomingCall(null);
-                        setActiveApp("chat" as IconId);
-                        setChatInitSessionId(call.sessionId);
-                        // Wait for chat-room to mount, then trigger the call screen
-                        // __fromBar prevents desktop-shell handler from re-showing the bar
-                        setTimeout(() => {
-                          window.dispatchEvent(new CustomEvent("ai-call-trigger", {
-                            detail: { sessionId: call.sessionId, type: call.type, __fromBar: true },
-                          }));
-                        }, 600);
-                      }}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {chatMessageNotice && !incomingCall ? (
-                <button
-                  type="button"
-                  className="chat-message-notice-bar"
-                  style={{
-                    transform: noticeDragY ? `translateY(${noticeDragY}px)` : undefined,
-                    opacity: noticeDragY < 0 ? Math.max(0, 1 + noticeDragY / 160) : 1,
-                    transition: noticeDragRef.current.dragging ? "none" : "transform 180ms ease, opacity 180ms ease",
-                    touchAction: "none",
-                  }}
-                  onPointerDown={handleNoticePointerDown}
-                  onPointerMove={handleNoticePointerMove}
-                  onPointerUp={handleNoticePointerUp}
-                  onPointerCancel={handleNoticePointerUp}
-                  onClick={handleNoticeClick}
-                  aria-label={`查看 ${chatMessageNotice.title} 的新消息`}
-                >
-                  <div className="chat-message-notice-info">
-                    {chatMessageNotice.avatar ? (
-                      <img src={chatMessageNotice.avatar} alt="" className="chat-message-notice-avatar" />
-                    ) : (
-                      <span className="chat-message-notice-avatar chat-message-notice-avatar-fallback">
-                        {chatMessageNotice.title[0] || "消"}
-                      </span>
-                    )}
-                    <div className="chat-message-notice-text">
-                      <span className="chat-message-notice-name">{chatMessageNotice.title}</span>
-                      <span className="chat-message-notice-body">{chatMessageNotice.body}</span>
-                    </div>
-                  </div>
-                  <span className="chat-message-notice-action">查看</span>
-                </button>
-              ) : null}
+              <PhoneDynamicIsland
+                incomingCall={incomingCall}
+                onAcceptCall={handleAcceptIncomingCall}
+                onDeclineCall={handleDeclineIncomingCall}
+                chatNotice={chatMessageNotice}
+                onOpenNotice={handleOpenIslandNotice}
+                onDismissNotice={handleDismissIslandNotice}
+                onHoldNotice={handleHoldIslandNotice}
+                onReleaseNotice={armNoticeAutoDismiss}
+                toast={notice}
+                hideIdle={draftTheme.hideTopBar || draftTheme.cssOverrides["--status-island-visibility"] === "hidden"}
+                musicHidden={activeApp === "music"}
+              />
 
               {/* Music custom CSS — injected at shell level so it persists across apps */}
               {musicCustomCss && <style dangerouslySetInnerHTML={{ __html: musicCustomCss }} />}
 
               {/* Music overlays are isolated so playback progress does not rerender the desktop shell. */}
               <MusicShellOverlays
-                activeApp={activeApp}
                 onControllerChange={handleMusicOverlayControllerChange}
               />
 

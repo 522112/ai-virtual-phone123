@@ -1065,62 +1065,16 @@
 
 
 /* ══════════════════════════════════════════════════
-   Desktop Dynamic Island — music live activity
+   Desktop Dynamic Island — music live activity body
    ══════════════════════════════════════════════════ */
 
-.phone-shell:has(.music-float) .status-island {
-    visibility: hidden;
-}
-
-.music-float {
+.phone-dynamic-island[data-activity="music"] {
     --c-music-text: #f5f5f7;
     --c-music-accent: rgba(255, 255, 255, 0.62);
     --c-music-accent-dim: rgba(255, 255, 255, 0.12);
     --c-music-overlay: rgba(255, 255, 255, 0.08);
     --c-music-surface: #0a0a0a;
     --c-music-surface-solid: #111;
-    position: absolute;
-    z-index: 55;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    touch-action: none;
-    cursor: pointer;
-    user-select: none;
-    transition:
-        width 0.38s cubic-bezier(0.32, 0.72, 0, 1),
-        height 0.38s cubic-bezier(0.32, 0.72, 0, 1),
-        border-radius 0.38s cubic-bezier(0.32, 0.72, 0, 1),
-        left 0.38s cubic-bezier(0.32, 0.72, 0, 1),
-        top 0.38s cubic-bezier(0.32, 0.72, 0, 1),
-        transform 0.25s ease-out,
-        opacity 0.25s ease-out;
-    animation: music-island-in 0.42s cubic-bezier(0.32, 0.72, 0, 1);
-
-    width: 126px;
-    height: 36px;
-    border-radius: 20px;
-    overflow: hidden;
-    background: #0a0a0a;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-    border: 0;
-}
-
-.music-float[data-dragging] {
-    cursor: grabbing;
-    transition: none;
-}
-
-.music-float[data-dismissing] {
-    transform: translateX(-120%) scale(0.86);
-    opacity: 0;
-    pointer-events: none;
-}
-
-.music-float[data-expanded] {
-    width: min(320px, calc(100% - 24px));
-    height: 80px;
-    border-radius: 32px;
 }
 
 .music-float-inner {
@@ -1128,13 +1082,12 @@
     align-items: center;
     width: 100%;
     height: 100%;
-    padding: 0 10px;
+    padding: 0;
     box-sizing: border-box;
     gap: 8px;
 }
 
-.music-float[data-expanded] .music-float-inner {
-    padding: 0 14px;
+.phone-dynamic-island[data-expanded] .music-float-inner {
     gap: 10px;
 }
 
@@ -1150,7 +1103,7 @@
     justify-content: center;
 }
 
-.music-float[data-expanded] .music-float-cover-wrap {
+.phone-dynamic-island[data-expanded] .music-float-cover-wrap {
     width: 48px;
     height: 48px;
     border-radius: 14px;
@@ -1175,7 +1128,7 @@
     padding-right: 2px;
 }
 
-.music-float[data-expanded] .music-float-wave {
+.phone-dynamic-island[data-expanded] .music-float-wave {
     display: none;
 }
 
@@ -1187,19 +1140,19 @@
     background: #34c759;
 }
 
-.music-float[data-playing] .music-float-wave span {
+.phone-dynamic-island[data-playing] .music-float-wave span {
     animation: music-island-bar 0.72s ease-in-out infinite;
 }
 
-.music-float[data-playing] .music-float-wave span:nth-child(2) {
+.phone-dynamic-island[data-playing] .music-float-wave span:nth-child(2) {
     animation-delay: 0.12s;
 }
 
-.music-float[data-playing] .music-float-wave span:nth-child(3) {
+.phone-dynamic-island[data-playing] .music-float-wave span:nth-child(3) {
     animation-delay: 0.24s;
 }
 
-.music-float[data-playing] .music-float-wave span:nth-child(4) {
+.phone-dynamic-island[data-playing] .music-float-wave span:nth-child(4) {
     animation-delay: 0.36s;
 }
 
@@ -1212,7 +1165,7 @@
     min-width: 0;
 }
 
-.music-float[data-expanded] .music-float-info {
+.phone-dynamic-island[data-expanded] .music-float-info {
     display: flex;
     flex: 1;
 }
@@ -1236,7 +1189,7 @@
     flex-shrink: 0;
 }
 
-.music-float[data-expanded] .music-float-controls {
+.phone-dynamic-island[data-expanded] .music-float-controls {
     display: flex;
 }
 
@@ -4005,7 +3958,7 @@
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.music-float {
+.phone-dynamic-island[data-activity="music"] {
     box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
     border: 0;
 }
@@ -4355,7 +4308,7 @@
    桌面灵动岛独立配色 — 黑色胶囊，不随音乐 App 主题
    ═══════════════════════════════════════════════════════ */
 
-.music-float {
+.phone-dynamic-island[data-activity="music"] {
     --c-music-surface: #0a0a0a;
     --c-music-surface-solid: #111;
     --c-music-glass-dim: rgba(255, 255, 255, 0.08);
@@ -4364,9 +4317,6 @@
     --c-music-text: #f5f5f7;
     --c-music-overlay: rgba(255, 255, 255, 0.08);
     --c-music-gold: rgba(255, 255, 255, 0.2);
-    background: #0a0a0a;
-    border: 0;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
 
 /* ═══════════════════════════════════════════════════════
