@@ -434,6 +434,14 @@ const RICH_PATTERNS: {
         }),
     },
     {
+        regex: /\[关系打卡重燃\]/,
+        build: () => ({
+            content: "",
+            mediaType: "relationship_space" as const,
+            mediaData: { spaceAction: "relight" as const },
+        }),
+    },
+    {
         regex: new RegExp(`\\[关系打卡(?:${C}([^\\]]+))?\\]`),
         build: (m) => ({
             content: "",

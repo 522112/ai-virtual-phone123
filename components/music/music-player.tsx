@@ -487,16 +487,18 @@ export default function MusicPlayer() {
 
             {/* Body — cover / vinyl / glow lyrics */}
             <div className="mp-body">
-                {listenTogether && view !== "lyrics" ? (
+                {listenTogether ? (
                     <ListenTogetherDuoStage
                         track={{
                             id: track.id,
                             title: track.title,
                             artist: track.artist || "",
                             coverUrl: track.coverUrl,
+                            lyrics: track.lyrics,
                         }}
+                        lyrics={track.lyrics}
+                        currentTime={player.currentTime}
                         playing={player.isPlaying}
-                        onOpenLyrics={() => setView("lyrics")}
                     />
                 ) : view === "lyrics" ? (
                     <div className="mp-lyrics-wrap" onClick={() => setView("cover")}>
@@ -665,6 +667,7 @@ export default function MusicPlayer() {
                         title: track.title,
                         artist: track.artist || "",
                         coverUrl: track.coverUrl,
+                        lyrics: track.lyrics,
                     }}
                     onNotice={showMusicToast}
                 />

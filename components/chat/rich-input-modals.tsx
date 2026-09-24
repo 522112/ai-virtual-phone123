@@ -7,26 +7,33 @@ import { isAndroidBrowser } from "./voice-input-platform";
 // ── Photo Input Modal ─────────────────────────────
 
 interface PhotoInputModalProps {
-    onSend: (description: string, imageDataUrl?: string) => void;
+    onSend: (description: string, imageDataUrls: string[]) => void;
     onClose: () => void;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+    });
 }
 
 export function PhotoInputModal({ onSend, onClose }: PhotoInputModalProps) {
     const [desc, setDesc] = useState("");
-    const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+    const [imageDataUrls, setImageDataUrls] = useState<string[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            setImageDataUrl(reader.result as string);
-        };
-        reader.readAsDataURL(file);
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []).filter(file => file.type.startsWith("image/"));
+        e.target.value = "";
+        if (files.length === 0) return;
+        const urls = (await Promise.all(files.map(file => readFileAsDataUrl(file)))).filter(Boolean);
+        setImageDataUrls(prev => [...prev, ...urls].slice(0, 12));
     };
 
-    const canSend = !!imageDataUrl;
+    const canSend = imageDataUrls.length > 0;
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -37,40 +44,57 @@ export function PhotoInputModal({ onSend, onClose }: PhotoInputModalProps) {
                 <div className="ts-16 font-semibold text-center text-[var(--c-text)]">发送照片</div>
                 <div
                     className="w-full rounded-xl flex items-center justify-center ui-placeholder-gradient overflow-hidden cursor-pointer relative"
-                    style={{ minHeight: imageDataUrl ? "auto" : "120px" }}
+                    style={{ minHeight: imageDataUrls.length ? "auto" : "120px" }}
                     onClick={() => fileInputRef.current?.click()}
                 >
-                    {imageDataUrl ? (
-                        <img
-                            src={imageDataUrl}
-                            alt="preview"
-                            className="w-full h-auto rounded-xl"
-                            style={{ maxHeight: "240px", objectFit: "contain" }}
-                        />
+                    {imageDataUrls.length > 0 ? (
+                        <div className="photo-album-preview">
+                            {imageDataUrls.map((url, index) => (
+                                <button
+                                    key={`${index}-${url.slice(-18)}`}
+                                    type="button"
+                                    className="photo-album-preview-item"
+                                    onClick={event => {
+                                        event.stopPropagation();
+                                        setImageDataUrls(prev => prev.filter((_, i) => i !== index));
+                                    }}
+                                >
+                                    <img src={url} alt="" />
+                                </button>
+                            ))}
+                            <span className="ts-12 text-[var(--c-icon)]">{imageDataUrls.length} 张，点图可去掉</span>
+                        </div>
                     ) : (
                         <div className="flex flex-col items-center gap-2 py-6">
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--c-icon)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                                 <line x1="12" y1="5" x2="12" y2="19" />
                                 <line x1="5" y1="12" x2="19" y2="12" />
                             </svg>
-                            <span className="ts-12 text-[var(--c-icon)]">点击上传图片</span>
+                            <span className="ts-12 text-[var(--c-icon)]">点击上传图片，可一次多选</span>
                         </div>
                     )}
                     <input
                         ref={fileInputRef}
                         type="file"
                         accept="image/*"
+                        multiple
                         className="hidden"
                         onChange={handleFileChange}
                     />
                 </div>
+                <input
+                    value={desc}
+                    onChange={e => setDesc(e.target.value)}
+                    placeholder="可以写一句说明（可选）"
+                    className="w-full rounded-xl px-3 py-2 ts-14 bg-[var(--c-input)] text-[var(--c-text)]"
+                />
                 <div className="flex gap-3 w-full">
                     <button
                         onClick={onClose}
                         className="ui-btn ui-btn-ghost ui-btn-bordered-ghost flex-1"
                     >取消</button>
                     <button
-                        onClick={() => { if (canSend) onSend(desc.trim(), imageDataUrl!); }}
+                        onClick={() => { if (canSend) onSend(desc.trim(), imageDataUrls); }}
                         disabled={!canSend}
                         className="ui-btn ui-btn-success flex-1"
                     >发送</button>

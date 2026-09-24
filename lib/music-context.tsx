@@ -200,6 +200,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             const playUrl = await getNeteasePlayUrl(nid);
             if (!playUrl) return;
             audio.src = playUrl;
+            if (!track.lyrics) {
+                const lyrics = await getNeteaseLyrics(nid).catch(() => "");
+                if (lyrics) track = { ...track, lyrics };
+            }
         } else {
             // Local tracks: load blob from IndexedDB
             const blob = await getAudioBlob(track.id);

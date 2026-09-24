@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, Fragment, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChatSession, ChatMessage, CHAT_APP_SETTINGS_UPDATED_EVENT, CHAT_INITIAL_VISIBLE_MESSAGE_COUNT, CHAT_LOAD_MORE_MESSAGE_COUNT, CHAT_REQUEST_REPLY_EVENT, loadChatAppSettings, loadChatMessages, loadChatContacts, loadChatSessions, saveChatSessions, pushChatMessage, updateChatMessage, deleteChatMessage, deleteChatMessagesFrom, deleteChatMessagesByIds, retractChatMessage, editChatMessage, updateMessageMediaData, replaceResponseBatchWithParts, replaceGroupResponseRound, isReadingDiscussMessage, isSystemInstructionMessage, createResponseBatchId, createResponseRoundId, getLatestStateValues, getLatestCharacterStateValues, compareChatMessages, isSessionStreamingEnabled } from "@/lib/chat-storage";
+import { ChatSession, ChatMessage, CHAT_APP_SETTINGS_UPDATED_EVENT, CHAT_INITIAL_VISIBLE_MESSAGE_COUNT, CHAT_LOAD_MORE_MESSAGE_COUNT, CHAT_REQUEST_REPLY_EVENT, loadChatAppSettings, loadChatMessages, loadChatContacts, loadChatSessions, createOrGetSession, saveChatSessions, pushChatMessage, updateChatMessage, deleteChatMessage, deleteChatMessagesFrom, deleteChatMessagesByIds, retractChatMessage, editChatMessage, updateMessageMediaData, replaceResponseBatchWithParts, replaceGroupResponseRound, isReadingDiscussMessage, isSystemInstructionMessage, createResponseBatchId, createResponseRoundId, getLatestStateValues, getLatestCharacterStateValues, compareChatMessages, isSessionStreamingEnabled } from "@/lib/chat-storage";
 import { cleanStreamText, splitStreamPreviewSegments, stripLiteralTexts, stripXmlTagBlocks } from "@/lib/stream-preview";
 import type { StateValue } from "@/lib/chat-storage";
 import { parseStateValues, mergeStateValues } from "@/lib/state-value-parser";
@@ -766,16 +766,6 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>, label: "位置", onClick: () => onOpenRichModal("location") },
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="22" /><line x1="8" y1="22" x2="16" y2="22" /></svg>, label: "语音条", onClick: () => onOpenRichModal("voice_msg") },
         ...(!isGroup ? [{ icon: <Heart size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "关系", onClick: onOpenRelationship }] : []),
-        ...(!isGroup ? [{
-            icon: (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="9" cy="12" r="5" />
-                    <circle cx="15" cy="12" r="5" />
-                </svg>
-            ),
-            label: "情头",
-            onClick: () => onOpenRichModal("couple_avatar"),
-        }] : []),
         ...customPlusActions.map(action => ({
             icon: action.appIconDataUrl
                 ? <span className="chat-plus-custom-app-icon" style={{ backgroundImage: `url(${action.appIconDataUrl})` }} aria-hidden="true" />
@@ -1332,6 +1322,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [contextMenuAnchor, setContextMenuAnchor] = useState<ContextMenuAnchor | null>(null);
     const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
     const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
+    const [showForwardPicker, setShowForwardPicker] = useState(false);
     const [showConfirmMultiDelete, setShowConfirmMultiDelete] = useState(false);
     const [expandedMonologueId, setExpandedThinkingId] = useState<string | null>(null);
     // 思维链底部弹窗：存当前查看的 reasoning 文本，null = 关闭
@@ -5612,7 +5603,65 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         setIsMultiSelectMode(false);
         setSelectedMessageIds(new Set());
         setShowConfirmMultiDelete(false);
+        setShowForwardPicker(false);
     }, []);
+
+    const forwardTargets = useMemo(() => {
+        if (!showForwardPicker) return [];
+        const chars = loadCharacters();
+        const sessions = loadChatSessions().filter(item => item.id !== session.id);
+        const seen = new Set(sessions.map(item => item.isGroup ? item.id : item.contactId));
+        const fromSessions = sessions.map(item => ({
+            sessionId: item.id,
+            contactId: item.contactId,
+            isGroup: !!item.isGroup,
+            name: item.isGroup
+                ? (item.groupName || "群聊")
+                : (chars.find(c => c.id === item.contactId)?.name || "联系人"),
+        }));
+        const fromContacts = loadChatContacts()
+            .filter(contact => contact.characterId !== session.contactId && !seen.has(contact.characterId))
+            .map(contact => ({
+                sessionId: "",
+                contactId: contact.characterId,
+                isGroup: false,
+                name: chars.find(c => c.id === contact.characterId)?.name || "联系人",
+            }));
+        return [...fromSessions, ...fromContacts];
+    }, [showForwardPicker, session.id, session.contactId]);
+
+    const forwardSelectedTo = useCallback((target: { sessionId: string; contactId: string; name: string; isGroup: boolean }) => {
+        const stored = loadChatMessages(session.id);
+        const selected = stored
+            .filter(item => selectedMessageIds.has(item.id))
+            .sort(compareChatMessages);
+        if (selected.length === 0) {
+            showChatToast("请选择要转发的消息");
+            return;
+        }
+        const dest = target.sessionId || createOrGetSession(target.contactId).id;
+        const fromName = userIdentity?.name || "我";
+        for (const msg of selected) {
+            pushChatMessage({
+                sessionId: dest,
+                role: "user",
+                content: msg.content,
+                mediaType: msg.mediaType,
+                mediaUrl: msg.mediaUrl,
+                mediaData: {
+                    ...msg.mediaData,
+                    forwardedFromName: fromName,
+                    forwardedFromSessionId: session.id,
+                },
+            });
+        }
+        kvSet(PENDING_REPLY_PREFIX + dest, "1");
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: dest } }));
+        }
+        showChatToast(`已转发给 ${target.name}`);
+        cancelMultiSelect();
+    }, [cancelMultiSelect, selectedMessageIds, session.id, userIdentity?.name]);
 
     const toggleMultiSelectedMessage = useCallback((messageId: string) => {
         setSelectedMessageIds(prev => {
@@ -6360,6 +6409,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                             {/* Message Actions Popup */}
                                             {activeMessageId === msg.id && renderBubbleContextMenu(msg)}
 
+                                            {renderMsg.mediaData?.forwardedFromName ? (
+                                                <div className="chat-forward-kicker">转发自 {renderMsg.mediaData.forwardedFromName}</div>
+                                            ) : null}
                                             <MessageBubble
                                                 msg={renderMsg}
                                                 displayContent={msg.displayProjected ? undefined : bubbleDisplayContent}
@@ -6547,12 +6599,41 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     <button
                         type="button"
                         className="chat-multi-select-delete-btn"
+                        disabled={selectedMessageIds.size === 0}
+                        onClick={() => setShowForwardPicker(true)}
+                    >
+                        转发
+                    </button>
+                    <button
+                        type="button"
+                        className="chat-multi-select-delete-btn"
                         disabled={selectedMessageIds.size === 0 || multiDeleteTargetIds.length === 0}
                         onClick={confirmMultiDelete}
                     >
                         <Trash2 size={18} strokeWidth={1.8} />
                         删除
                     </button>
+                </div>
+            )}
+            {showForwardPicker && (
+                <div className="chat-forward-overlay" onClick={() => setShowForwardPicker(false)}>
+                    <div className="chat-forward-sheet" onClick={e => e.stopPropagation()}>
+                        <div className="chat-forward-head">转发给</div>
+                        <div className="chat-forward-list">
+                            {forwardTargets.length === 0 ? (
+                                <p className="chat-forward-empty">还没有其他联系人</p>
+                            ) : forwardTargets.map(target => (
+                                <button
+                                    key={`${target.sessionId || target.contactId}-${target.name}`}
+                                    type="button"
+                                    className="chat-forward-item"
+                                    onClick={() => forwardSelectedTo(target)}
+                                >
+                                    {target.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             )}
             {!isMultiSelectMode && (offlineMode ? (
@@ -6746,7 +6827,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             )}
             {richModal === "photo" && (
                 <PhotoInputModal
-                    onSend={(desc, imageDataUrl) => { setRichModal(null); sendRichMessage("image", { label: desc }, "", imageDataUrl); }}
+                    onSend={(desc, imageDataUrls) => {
+                        setRichModal(null);
+                        const [first, ...rest] = imageDataUrls;
+                        sendRichMessage("image", { label: desc || (rest.length ? `一组${imageDataUrls.length}张照片` : "照片"), albumUrls: rest.length ? rest : undefined }, "", first);
+                    }}
                     onClose={() => setRichModal(null)}
                 />
             )}
@@ -6920,6 +7005,10 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     onClose={() => setShowRelationshipSpace(false)}
                     onNotice={showChatToast}
                     onDissolved={handleRelationshipDissolved}
+                    onPersonaNudge={() => {
+                        setPendingGenerate(true);
+                        void triggerAIResponse();
+                    }}
                 />
             )}
 

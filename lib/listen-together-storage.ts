@@ -43,6 +43,7 @@ function normalizeTrack(value: unknown): ListenTogetherTrack | null {
     title: item.title,
     artist: typeof item.artist === "string" ? item.artist : "",
     coverUrl: typeof item.coverUrl === "string" && item.coverUrl.trim() ? item.coverUrl : undefined,
+    lyrics: typeof item.lyrics === "string" && item.lyrics.trim() ? item.lyrics : undefined,
   };
 }
 

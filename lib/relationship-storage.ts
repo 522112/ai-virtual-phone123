@@ -123,22 +123,55 @@ export function attachInviteMessageId(relationshipId: string, inviteMessageId: s
   saveBindings(next);
 }
 
+function findLatestDissolvedBinding(characterId: string, kind: RelationshipKind): RelationshipBinding | null {
+  return loadRelationshipBindings()
+    .filter(item => item.characterId === characterId && item.kind === kind && item.status === "dissolved")
+    .sort((a, b) => (b.dissolvedAt || "").localeCompare(a.dissolvedAt || ""))[0] || null;
+}
+
+function rematerializeRelationshipId(key: string, fromId: string, toId: string) {
+  const items = readJson<Array<{ relationshipId: string }>>(key, []);
+  if (!items.some(item => item.relationshipId === fromId)) return;
+  writeJson(key, items.map(item => item.relationshipId === fromId ? { ...item, relationshipId: toId } : item));
+}
+
+function restoreRecordsFromDissolved(fromId: string, toId: string, includeCheckins: boolean) {
+  rematerializeRelationshipId(POSTS_KEY, fromId, toId);
+  rematerializeRelationshipId(COMMENTS_KEY, fromId, toId);
+  rematerializeRelationshipId(ANNIVERSARIES_KEY, fromId, toId);
+  if (includeCheckins) rematerializeRelationshipId(CHECKINS_KEY, fromId, toId);
+}
+
 export function acceptRelationship(relationshipId: string): RelationshipBinding | null {
   const items = loadRelationshipBindings();
   const current = items.find(item => item.id === relationshipId);
   if (!current || current.status !== "pending") return null;
   const acceptedAt = new Date().toISOString();
+  const previous = findLatestDissolvedBinding(current.characterId, current.kind);
+  const restored: Partial<RelationshipBinding> = previous
+    ? {
+        restoredFromId: previous.id,
+        originalAcceptedAt: previous.originalAcceptedAt || previous.acceptedAt || previous.invitedAt,
+        restoredDissolvedAt: previous.dissolvedAt,
+        coverImage: current.coverImage || previous.coverImage,
+        coverUpdatedBy: current.coverUpdatedBy || previous.coverUpdatedBy,
+        coverUpdatedAt: current.coverUpdatedAt || previous.coverUpdatedAt,
+      }
+    : { originalAcceptedAt: acceptedAt };
   const next = items.map(item => {
-    if (item.id === relationshipId) return { ...item, status: "active" as const, acceptedAt };
+    if (item.id === relationshipId) return { ...item, status: "active" as const, acceptedAt, ...restored };
     if (item.status === "pending" && item.characterId === current.characterId) {
       return { ...item, status: "declined" as const };
     }
     return item;
   });
   saveBindings(next);
+  if (previous) {
+    restoreRecordsFromDissolved(previous.id, relationshipId, false);
+  }
   const existingTogether = loadAnniversaries(relationshipId).some(item => item.title === "在一起的日子");
   if (!existingTogether) {
-    addAnniversary(relationshipId, "在一起的日子", acceptedAt.slice(0, 10));
+    addAnniversary(relationshipId, "在一起的日子", (restored.originalAcceptedAt || acceptedAt).slice(0, 10), "user", "user");
   }
   return next.find(item => item.id === relationshipId) || null;
 }
@@ -371,7 +404,7 @@ export function applyCharacterRelationshipDecision(input: {
 }
 
 export function daysTogether(binding: RelationshipBinding): number {
-  const start = Date.parse(binding.acceptedAt || binding.invitedAt);
+  const start = Date.parse(binding.originalAcceptedAt || binding.acceptedAt || binding.invitedAt);
   if (!Number.isFinite(start)) return 0;
   return Math.max(1, Math.floor((Date.now() - start) / 86400000) + 1);
 }
@@ -439,6 +472,17 @@ export function loadCheckins(relationshipId: string): RelationshipCheckin[] {
     .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
 }
 
+export function loadVisibleCheckins(binding: RelationshipBinding): RelationshipCheckin[] {
+  const current = loadCheckins(binding.id);
+  if (!binding.restoredFromId) return current;
+  const previous = loadCheckins(binding.restoredFromId);
+  return [...current, ...previous].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+}
+
+export function needsCheckinRelight(binding: RelationshipBinding): boolean {
+  return Boolean(binding.restoredFromId && !binding.checkinReignitedAt && loadCheckins(binding.restoredFromId).length > 0);
+}
+
 export function hasCheckedInToday(relationshipId: string, authorId: string, authorType: "user" | "character" = "user"): boolean {
   const date = todayKey();
   return loadCheckins(relationshipId).some(item =>
@@ -463,15 +507,15 @@ export function addCheckin(relationshipId: string, authorType: "user" | "charact
   return checkin;
 }
 
-export function checkinStreak(relationshipId: string): number {
-  const dates = [...new Set(loadCheckins(relationshipId).map(item => item.date))].sort().reverse();
-  if (dates.length === 0) return 0;
+function streakFromDates(dates: string[]): number {
+  const unique = [...new Set(dates)].sort().reverse();
+  if (unique.length === 0) return 0;
   const today = todayKey();
   const yesterday = todayKey(new Date(Date.now() - 86400000));
-  if (dates[0] !== today && dates[0] !== yesterday) return 0;
+  if (unique[0] !== today && unique[0] !== yesterday) return 0;
   let streak = 0;
-  let cursor = new Date(`${dates[0]}T00:00:00`);
-  for (const date of dates) {
+  let cursor = new Date(`${unique[0]}T00:00:00`);
+  for (const date of unique) {
     const expected = todayKey(cursor);
     if (date !== expected) break;
     streak += 1;
@@ -480,13 +524,61 @@ export function checkinStreak(relationshipId: string): number {
   return streak;
 }
 
+export function checkinStreak(relationshipId: string): number {
+  return streakFromDates(loadCheckins(relationshipId).map(item => item.date));
+}
+
+function streakEndingOn(dates: string[], endDate: string): number {
+  const unique = [...new Set(dates)].sort().reverse();
+  if (!unique.includes(endDate)) return 0;
+  let streak = 0;
+  let cursor = new Date(`${endDate}T00:00:00`);
+  for (const date of unique) {
+    if (date > endDate) continue;
+    const expected = todayKey(cursor);
+    if (date !== expected) break;
+    streak += 1;
+    cursor = new Date(cursor.getTime() - 86400000);
+  }
+  return streak;
+}
+
+export function checkinStreakForBinding(binding: RelationshipBinding): number {
+  const currentDates = loadCheckins(binding.id).map(item => item.date);
+  if (!binding.restoredFromId || !binding.checkinReignitedAt) {
+    return streakFromDates(currentDates);
+  }
+  const oldDates = loadCheckins(binding.restoredFromId).map(item => item.date);
+  const lastOld = [...new Set(oldDates)].sort().at(-1);
+  const newStreak = streakFromDates(currentDates);
+  if (!lastOld) return newStreak;
+  return streakEndingOn(oldDates, lastOld) + newStreak;
+}
+
+export function reigniteCheckins(relationshipId: string): RelationshipBinding | { error: string } {
+  const items = loadRelationshipBindings();
+  const current = items.find(item => item.id === relationshipId);
+  if (!current || current.status !== "active") return { error: "还没有绑定关系" };
+  if (!current.restoredFromId) return { error: "没有可重燃的打卡记录" };
+  if (current.checkinReignitedAt) return { error: "已经重燃过了" };
+  const now = new Date().toISOString();
+  saveBindings(items.map(item => item.id === relationshipId ? { ...item, checkinReignitedAt: now } : item));
+  return getRelationshipById(relationshipId) || { error: "重燃失败" };
+}
+
 export function loadAnniversaries(relationshipId: string): RelationshipAnniversary[] {
   return readJson<RelationshipAnniversary[]>(ANNIVERSARIES_KEY, [])
     .filter(item => item.relationshipId === relationshipId)
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function addAnniversary(relationshipId: string, title: string, date: string): RelationshipAnniversary | { error: string } {
+export function addAnniversary(
+  relationshipId: string,
+  title: string,
+  date: string,
+  authorType: "user" | "character" = "user",
+  authorId = "user",
+): RelationshipAnniversary | { error: string } {
   const cleanTitle = title.trim();
   if (!cleanTitle) return { error: "请填写纪念日名称" };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "请选择日期" };
@@ -496,6 +588,8 @@ export function addAnniversary(relationshipId: string, title: string, date: stri
     title: cleanTitle,
     date,
     createdAt: new Date().toISOString(),
+    authorType,
+    authorId,
   };
   writeJson(ANNIVERSARIES_KEY, [...readJson<RelationshipAnniversary[]>(ANNIVERSARIES_KEY, []), item]);
   return item;
@@ -530,7 +624,7 @@ export function parseRelationshipKindLabel(raw: string | undefined): Relationshi
   return null;
 }
 
-export type RelationshipSpaceActionKind = "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary";
+export type RelationshipSpaceActionKind = "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary" | "relight";
 
 export function buildRelationshipChatExcerpt(messages: Array<{ role: string; content?: string; mediaType?: string }>): string {
   return messages
@@ -597,13 +691,19 @@ export function applyCharacterSpaceAction(input: {
     return { notice: replyName ? `${input.characterName}回复了${replyName}` : `${input.characterName}评论了空间动态` };
   }
 
+  if (input.action === "relight") {
+    const result = reigniteCheckins(binding.id);
+    if ("error" in result) return { notice: `${input.characterName}想重燃打卡，但${result.error}` };
+    return { notice: `${input.characterName}重燃了你们的打卡` };
+  }
+
   if (input.action === "checkin") {
     const result = addCheckin(binding.id, "character", input.characterId, content || undefined);
     if ("error" in result) return { notice: `${input.characterName}想打卡，但${result.error}` };
     return { notice: `${input.characterName}在${spaceLabel}空间打了卡` };
   }
 
-  const result = addAnniversary(binding.id, content, input.anniversaryDate || "");
+  const result = addAnniversary(binding.id, content, input.anniversaryDate || "", "character", input.characterId);
   if ("error" in result) return { notice: `${input.characterName}想添加纪念日，但${result.error}` };
   return { notice: `${input.characterName}添加了纪念日「${result.title}」` };
 }
@@ -673,12 +773,16 @@ export function buildRelationshipSpaceInstruction(
     `[关系动态感触:内容] — 带着当前聊天的感触发布`,
     `[关系评论:内容] — 评论空间里最近一条动态`,
     `[关系回评:对方名字:内容] — 回复某人的评论`,
-    `[关系打卡] 或 [关系打卡:一句话] — 今日打卡`,
-    `[关系纪念日:名称:YYYY-MM-DD] — 添加纪念日`,
+    `[关系打卡] 或 [关系打卡:一句话] — 今日打卡。按人设决定要不要打，不要每次都打，也不要从不打。`,
+    `[关系纪念日:名称:YYYY-MM-DD] — 按人设添加新的纪念日`,
+    needsCheckinRelight(binding)
+      ? `[关系打卡重燃] — 这段关系是重建的，旧打卡还在但连续天数已暂停。若人设愿意重续，先输出这个标记，重燃后才能继续旧连续。未重燃时不要用普通打卡去接旧记录。`
+      : "",
     `[设为空间背景] — 把对方最近发来的照片（聊天随手发的自拍，或动态/空间里的图）设成空间背景。只在人设真的被打动、觉得适合当背景时使用，不要每张图都换。`,
     findLatestUserChatImage(messages || [])
       ? "对方最近发来一张照片。若人设会觉得好看、想用来布置空间，可输出 [设为空间背景]。"
       : "",
+    "对方刚打卡或刚加纪念日时，你可以跟、也可以不跟，必须像这个人。",
   ].filter(Boolean).join("\n");
 }
 

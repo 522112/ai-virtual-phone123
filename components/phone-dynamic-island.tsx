@@ -165,12 +165,12 @@ export function PhoneDynamicIsland({
     }
 
     if (activity === "music" && player && !drag.far) {
-      const target = e.target as HTMLElement;
-      if (musicExpanded && target.closest(".music-float-info")) {
+      if (musicExpanded) {
         player.openFullPlayer();
+        setMusicExpanded(false);
         return;
       }
-      setMusicExpanded(prev => !prev);
+      setMusicExpanded(true);
     }
     drag.far = false;
   }, [activity, finishDismiss, musicExpanded, onDismissNotice, onOpenNotice, onReleaseNotice, player]);
@@ -188,6 +188,15 @@ export function PhoneDynamicIsland({
           : "灵动岛";
 
   return (
+    <>
+    {activity === "music" && musicExpanded ? (
+      <button
+        type="button"
+        className="phone-island-music-backdrop"
+        aria-label="收起灵动岛"
+        onClick={() => setMusicExpanded(false)}
+      />
+    ) : null}
     <div
       className="phone-dynamic-island"
       data-island=""
@@ -284,5 +293,6 @@ export function PhoneDynamicIsland({
         ) : null}
       </div>
     </div>
+    </>
   );
 }

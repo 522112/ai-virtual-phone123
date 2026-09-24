@@ -17,16 +17,18 @@ import {
   addRelationshipComment,
   addRelationshipPost,
   anniversaryCountdown,
-  checkinStreak,
+  checkinStreakForBinding,
   daysTogether,
   dissolveRelationship,
   getRelationshipById,
   updateRelationshipCover,
   hasCheckedInToday,
   loadAnniversaries,
-  loadCheckins,
+  loadVisibleCheckins,
   loadRelationshipComments,
   loadRelationshipPosts,
+  needsCheckinRelight,
+  reigniteCheckins,
   removeAnniversary,
   toggleRelationshipPostLike,
 } from "@/lib/relationship-storage";
@@ -59,6 +61,7 @@ export function RelationshipSpace({
   onClose,
   onNotice,
   onDissolved,
+  onPersonaNudge,
 }: {
   relationshipId: string;
   character: Character | null;
@@ -66,6 +69,7 @@ export function RelationshipSpace({
   onClose: () => void;
   onNotice: (text: string) => void;
   onDissolved?: (binding: RelationshipBinding) => void;
+  onPersonaNudge?: (kind: "checkin" | "anniversary") => void;
 }) {
   const { binding, posts, tick } = useRelationship(relationshipId);
   const [tab, setTab] = useState<TabKey>("feed");
@@ -98,12 +102,15 @@ export function RelationshipSpace({
   if (!binding || binding.status !== "active") {
     return (
       <div className="rel-space">
-        <header className="rel-space-nav">
-          <button type="button" className="rel-space-icon-btn" onClick={onClose} aria-label="返回">
-            <X size={20} />
-          </button>
-          <span>关系空间</span>
-          <span />
+        <header className="page-header rel-space-header">
+          <div className="page-header-safe-area" />
+          <div className="page-header-content rel-space-nav">
+            <button type="button" className="rel-space-icon-btn" onClick={onClose} aria-label="返回">
+              <X size={20} />
+            </button>
+            <span>关系空间</span>
+            <span />
+          </div>
         </header>
         <div className="rel-space-empty">这段关系已经不在了</div>
       </div>
@@ -115,24 +122,27 @@ export function RelationshipSpace({
 
   return (
     <div className="rel-space" style={{ "--rel-accent": meta.accent } as React.CSSProperties}>
-      <header className="rel-space-nav">
-        <button type="button" className="rel-space-icon-btn" onClick={onClose} aria-label="返回">
-          <X size={20} />
-        </button>
-        <span>{meta.label}空间</span>
-        <button
-          type="button"
-          className="rel-space-text-btn"
-          onClick={() => {
-            if (!window.confirm("解除后双方空间会关闭。确定解除？")) return;
-            const dissolved = dissolveRelationship(binding.id);
-            if (dissolved) onDissolved?.(dissolved);
-            onNotice("已解除关系");
-            onClose();
-          }}
-        >
-          解除
-        </button>
+      <header className="page-header rel-space-header">
+        <div className="page-header-safe-area" />
+        <div className="page-header-content rel-space-nav">
+          <button type="button" className="rel-space-icon-btn" onClick={onClose} aria-label="返回">
+            <X size={20} />
+          </button>
+          <span>{meta.label}空间</span>
+          <button
+            type="button"
+            className="rel-space-text-btn"
+            onClick={() => {
+              if (!window.confirm("解除后双方空间会关闭。确定解除？")) return;
+              const dissolved = dissolveRelationship(binding.id);
+              if (dissolved) onDissolved?.(dissolved);
+              onNotice("已解除关系");
+              onClose();
+            }}
+          >
+            解除
+          </button>
+        </div>
       </header>
 
       <section
@@ -220,14 +230,19 @@ export function RelationshipSpace({
             key={`c-${tick}`}
             binding={binding}
             userId={identity?.id || "user"}
+            characterName={character?.name || "对方"}
             onNotice={onNotice}
+            onPersonaNudge={onPersonaNudge}
           />
         )}
         {tab === "days" && (
           <RelationshipAnniversaryPane
             key={`a-${tick}`}
             binding={binding}
+            userId={identity?.id || "user"}
+            characterName={character?.name || "对方"}
             onNotice={onNotice}
+            onPersonaNudge={onPersonaNudge}
           />
         )}
       </div>
@@ -542,18 +557,21 @@ function RelationshipCompose({
 
   return (
     <div className="rel-compose-overlay" role="dialog" aria-modal="true" aria-label="新动态">
-      <header className="rel-space-nav">
-        <button type="button" className="rel-space-text-btn" onClick={onClose}>取消</button>
-        <span>新动态</span>
-        <button
-          type="button"
-          className="rel-space-text-btn"
-          data-primary=""
-          disabled={!canPublish}
-          onClick={handlePublish}
-        >
-          发表
-        </button>
+      <header className="page-header rel-space-header">
+        <div className="page-header-safe-area" />
+        <div className="page-header-content rel-space-nav">
+          <button type="button" className="rel-space-text-btn" onClick={onClose}>取消</button>
+          <span>新动态</span>
+          <button
+            type="button"
+            className="rel-space-text-btn"
+            data-primary=""
+            disabled={!canPublish}
+            onClick={handlePublish}
+          >
+            发表
+          </button>
+        </div>
       </header>
       <div className="rel-compose-body">
         <textarea
@@ -606,21 +624,47 @@ function RelationshipCompose({
 function RelationshipCheckinPane({
   binding,
   userId,
+  characterName,
   onNotice,
+  onPersonaNudge,
 }: {
   binding: RelationshipBinding;
   userId: string;
+  characterName: string;
   onNotice: (text: string) => void;
+  onPersonaNudge?: (kind: "checkin" | "anniversary") => void;
 }) {
   const checked = hasCheckedInToday(binding.id, userId, "user");
-  const streak = checkinStreak(binding.id);
-  const checkins = loadCheckins(binding.id).slice(0, 14);
+  const partnerChecked = hasCheckedInToday(binding.id, binding.characterId, "character");
+  const waitingRelight = needsCheckinRelight(binding);
+  const streak = checkinStreakForBinding(binding);
+  const checkins = loadVisibleCheckins(binding).slice(0, 14);
 
   return (
     <div className="rel-checkin">
       <div className="rel-checkin-card">
         <div className="rel-checkin-streak">连续 {streak} 天</div>
-        <p>{checked ? "今天已经打过卡了" : "今天还没有打卡"}</p>
+        <p>
+          {waitingRelight ? "重建后旧打卡还在，重燃才会继续之前的连续天数。 " : ""}
+          {checked ? "我今天已经打过卡了" : "我今天还没有打卡"}
+          {partnerChecked ? ` · ${characterName}也打过了` : ` · ${characterName}还没打`}
+        </p>
+        {waitingRelight ? (
+          <button
+            type="button"
+            className="rel-space-primary"
+            onClick={() => {
+              const result = reigniteCheckins(binding.id);
+              if ("error" in result) onNotice(result.error);
+              else {
+                onNotice("已重燃打卡，之前的连续天数会接上");
+                onPersonaNudge?.("checkin");
+              }
+            }}
+          >
+            重燃打卡
+          </button>
+        ) : null}
         <button
           type="button"
           className="rel-space-primary"
@@ -628,7 +672,10 @@ function RelationshipCheckinPane({
           onClick={() => {
             const result = addCheckin(binding.id, "user", userId);
             if ("error" in result) onNotice(result.error);
-            else onNotice("打卡成功");
+            else {
+              onNotice("打卡成功");
+              onPersonaNudge?.("checkin");
+            }
           }}
         >
           {checked ? "已打卡" : "立即打卡"}
@@ -637,8 +684,8 @@ function RelationshipCheckinPane({
       <ul className="rel-checkin-list">
         {checkins.map(item => (
           <li key={item.id}>
-            <strong>{item.date}</strong>
-            <span>{item.authorType === "user" ? "我" : "对方"}</span>
+            <strong>{item.date}{waitingRelight && item.relationshipId === binding.restoredFromId ? " · 待重燃" : ""}</strong>
+            <span>{item.authorType === "user" ? "我" : characterName}</span>
           </li>
         ))}
         {checkins.length === 0 ? <li className="rel-space-empty">还没有打卡记录</li> : null}
@@ -649,10 +696,16 @@ function RelationshipCheckinPane({
 
 function RelationshipAnniversaryPane({
   binding,
+  userId,
+  characterName,
   onNotice,
+  onPersonaNudge,
 }: {
   binding: RelationshipBinding;
+  userId: string;
+  characterName: string;
   onNotice: (text: string) => void;
+  onPersonaNudge?: (kind: "checkin" | "anniversary") => void;
 }) {
   const items = loadAnniversaries(binding.id);
   const [title, setTitle] = useState("");
@@ -664,7 +717,7 @@ function RelationshipAnniversaryPane({
         className="rel-anniv-form"
         onSubmit={e => {
           e.preventDefault();
-          const result = addAnniversary(binding.id, title, date);
+          const result = addAnniversary(binding.id, title, date, "user", userId);
           if ("error" in result) {
             onNotice(result.error);
             return;
@@ -672,6 +725,7 @@ function RelationshipAnniversaryPane({
           setTitle("");
           setDate("");
           onNotice("已添加纪念日");
+          onPersonaNudge?.("anniversary");
         }}
       >
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="纪念日名称，比如在一起" />
@@ -681,11 +735,12 @@ function RelationshipAnniversaryPane({
       <ul className="rel-anniv-list">
         {items.map(item => {
           const count = anniversaryCountdown(item.date);
+          const who = item.authorType === "character" ? characterName : "我";
           return (
             <li key={item.id}>
               <div>
                 <strong>{item.title}</strong>
-                <span>{item.date} · {count.occurred ? "就是今天" : `还有 ${count.days} 天`}</span>
+                <span>{item.date} · {count.occurred ? "就是今天" : `还有 ${count.days} 天`} · {who}加的</span>
               </div>
               <button type="button" className="rel-space-icon-btn" aria-label="删除纪念日" onClick={() => removeAnniversary(item.id)}>
                 <Trash2 size={16} />
