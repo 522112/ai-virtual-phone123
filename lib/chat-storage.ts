@@ -248,7 +248,7 @@ export type ChatMessage = {
         appHistoryRole?: ChatMessageRole;
         relationshipKind?: "couple" | "bestie" | "buddy" | "bros";
         relationshipId?: string;
-        spaceAction?: "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary" | "relight";
+        spaceAction?: "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary" | "relight" | "nudge_checkin" | "remind_checkin" | "anniversary_countdown";
         spaceReplyTo?: string;
         anniversaryDate?: string;
         albumUrls?: string[];

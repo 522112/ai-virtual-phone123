@@ -118,7 +118,9 @@ function partToWeixinText(part: ParsedMessagePart, charName: string): string | n
         if (action === "comment" || action === "reply") return `${charName}评论了关系空间动态`;
         if (action === "relight") return `${charName}重燃了打卡`;
         if (action === "checkin") return `${charName}在关系空间打了卡`;
+        if (action === "nudge_checkin" || action === "remind_checkin") return `${charName}催你打卡`;
         if (action === "anniversary") return `${charName}添加了纪念日`;
+        if (action === "anniversary_countdown") return `${charName}发来了纪念日倒计时`;
         return `${charName}在关系空间发布了动态`;
     }
 

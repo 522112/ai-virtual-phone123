@@ -2083,6 +2083,23 @@ function importCloudAssistantMessage(
         characterName,
         mediaData: part.mediaData,
       });
+      if (notice.cards.length > 0) {
+        notice.cards.forEach((card, cardIndex) => {
+          messages.push(makeCloudImportedMessage(stored, session.id, createdAt, index + cardIndex, {
+            role: "assistant",
+            content: card.desc,
+            mediaType: "relationship_space",
+            mediaData: {
+              spaceAction: card.action,
+              relationshipId: card.relationshipId,
+              relationshipKind: card.relationshipKind,
+              label: card.label || card.title,
+              anniversaryDate: card.anniversaryDate,
+            },
+          }, strippedContent));
+        });
+        return;
+      }
       messages.push(makeCloudImportedMessage(stored, session.id, createdAt, index, {
         role: "assistant",
         content: notice.notice,

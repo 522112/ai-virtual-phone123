@@ -426,11 +426,27 @@ const RICH_PATTERNS: {
         }),
     },
     {
+        regex: new RegExp(`\\[关系纪念日倒计时${C}([^\\]]+)\\]`),
+        build: (m) => ({
+            content: "",
+            mediaType: "relationship_space" as const,
+            mediaData: { label: m[1]?.trim() || "", spaceAction: "anniversary_countdown" as const },
+        }),
+    },
+    {
         regex: new RegExp(`\\[关系纪念日${C}([^\\]:：]+)${C}(\\d{4}-\\d{2}-\\d{2})\\]`),
         build: (m) => ({
             content: "",
             mediaType: "relationship_space" as const,
             mediaData: { label: m[1]?.trim() || "", spaceAction: "anniversary" as const, anniversaryDate: m[2] },
+        }),
+    },
+    {
+        regex: /\[关系催打卡\]/,
+        build: () => ({
+            content: "",
+            mediaType: "relationship_space" as const,
+            mediaData: { spaceAction: "remind_checkin" as const },
         }),
     },
     {

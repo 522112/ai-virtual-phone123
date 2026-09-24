@@ -59,6 +59,15 @@
   z-index: 10;
 }
 
+.chat-app .chat-room-wrapper .rel-space .page-header,
+.chat-app .chat-room-wrapper .rel-compose-overlay .page-header {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  z-index: 3;
+}
+
 /* 聊天插件 chat.header 坑位：头部与消息区都是 absolute 浮层，坑位必须自己定位，
    贴在固定头部正下方。消息区 padding-top 额外加了插件条高度变量，避免遮住首条消息。 */
 .chat-app .chat-room-wrapper .chat-plugin-header {
@@ -8072,13 +8081,14 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  min-height: 168px;
-  padding: 28px 16px 18px;
+  min-height: 220px;
+  padding: 36px 16px 22px;
   background:
     radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--rel-accent) 28%, #fff) 0%, transparent 62%),
     linear-gradient(180deg, color-mix(in srgb, var(--rel-accent) 10%, #fff) 0%, var(--c-page-body-bg, #fff) 100%);
   background-size: cover;
   background-position: center;
+  flex-shrink: 0;
 }
 
 .rel-space-hero[data-has-cover] {
@@ -8125,19 +8135,21 @@
 
 .rel-space-avatars {
   display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .rel-space-avatar {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   overflow: hidden;
   background: #ddd;
+  box-shadow: 0 0 0 3px #fff;
 }
 
 .rel-space-avatar + .rel-space-avatar {
-  margin-left: -12px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #fff 70%, transparent);
+  margin-left: -14px;
 }
 
 .rel-space-avatar img {
@@ -8271,7 +8283,7 @@
 .rel-compose-overlay {
   position: absolute;
   inset: 0;
-  z-index: 12;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   background: var(--c-page-body-bg, #fff);
@@ -8281,7 +8293,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-bottom: 20px;
+  padding: 0 0 20px;
 }
 
 .rel-compose-photo {
@@ -8425,17 +8437,19 @@
 
 .rel-compose-text {
   display: block;
-  width: calc(100% - 32px);
+  width: 100%;
   box-sizing: border-box;
-  min-height: 140px;
-  margin: 8px 16px 0;
-  padding: 10px 12px;
+  min-height: 220px;
+  margin: 0;
+  padding: 16px 16px 8px;
   border: 0;
   resize: none;
-  background: color-mix(in srgb, var(--c-text) 6%, transparent);
+  background: transparent;
+  color: inherit;
   font-size: calc(16px * var(--app-text-scale, 1));
   line-height: 1.7;
   white-space: pre-wrap;
+  outline: none;
 }
 
 .rel-compose-from-chat,
@@ -8443,6 +8457,10 @@
 .rel-compose .rel-feed-excerpt,
 .rel-compose-hint {
   margin: 10px 16px 0;
+}
+
+.rel-compose-overlay .rel-compose-tools {
+  margin: 4px 16px 0;
 }
 
 .rel-compose-tools {

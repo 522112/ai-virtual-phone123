@@ -490,6 +490,11 @@ export function hasCheckedInToday(relationshipId: string, authorId: string, auth
   );
 }
 
+export function hasSideCheckedInToday(relationshipId: string, authorType: "user" | "character"): boolean {
+  const date = todayKey();
+  return loadCheckins(relationshipId).some(item => item.authorType === authorType && item.date === date);
+}
+
 export function addCheckin(relationshipId: string, authorType: "user" | "character", authorId: string, note?: string): RelationshipCheckin | { error: string } {
   if (hasCheckedInToday(relationshipId, authorId, authorType)) {
     return { error: "今天已经打过卡了" };
@@ -624,7 +629,86 @@ export function parseRelationshipKindLabel(raw: string | undefined): Relationshi
   return null;
 }
 
-export type RelationshipSpaceActionKind = "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary" | "relight";
+export type RelationshipSpaceActionKind =
+  | "post"
+  | "post_from_chat"
+  | "comment"
+  | "reply"
+  | "checkin"
+  | "anniversary"
+  | "relight"
+  | "nudge_checkin"
+  | "remind_checkin"
+  | "anniversary_countdown";
+
+export type RelationshipSpaceCard = {
+  action: RelationshipSpaceActionKind;
+  title: string;
+  desc: string;
+  kicker: string;
+  statusText: string;
+  relationshipId: string;
+  relationshipKind: RelationshipBinding["kind"];
+  label?: string;
+  anniversaryDate?: string;
+};
+
+function spaceCardBase(binding: RelationshipBinding): Pick<RelationshipSpaceCard, "relationshipId" | "relationshipKind"> {
+  return { relationshipId: binding.id, relationshipKind: binding.kind };
+}
+
+export function buildCheckinNudgeCard(binding: RelationshipBinding, characterName: string): RelationshipSpaceCard {
+  return {
+    ...spaceCardBase(binding),
+    action: "nudge_checkin",
+    title: "该打卡啦",
+    desc: `提醒${characterName}今天也来打个卡`,
+    kicker: "打卡催促",
+    statusText: "等对方打卡",
+  };
+}
+
+export function buildCheckinRemindCard(binding: RelationshipBinding): RelationshipSpaceCard {
+  return {
+    ...spaceCardBase(binding),
+    action: "remind_checkin",
+    title: "记得打卡",
+    desc: "我已经打过了，你也来一下吧",
+    kicker: "打卡提醒",
+    statusText: "等你打卡",
+  };
+}
+
+export function buildCheckinDoneCard(binding: RelationshipBinding, characterName: string, note?: string): RelationshipSpaceCard {
+  return {
+    ...spaceCardBase(binding),
+    action: "checkin",
+    title: `${characterName}打卡了`,
+    desc: note?.trim() || "今天的打卡已记下",
+    kicker: "关系打卡",
+    statusText: "已打卡",
+    label: note?.trim() || undefined,
+  };
+}
+
+export function buildAnniversaryCountdownCard(
+  binding: RelationshipBinding,
+  title: string,
+  date: string,
+  characterName: string,
+): RelationshipSpaceCard {
+  const count = anniversaryCountdown(date);
+  return {
+    ...spaceCardBase(binding),
+    action: "anniversary_countdown",
+    title: title || "纪念日",
+    desc: count.occurred ? `${characterName}设的「${title}」就是今天` : `${characterName}设的「${title}」还有 ${count.days} 天`,
+    kicker: "纪念日倒计时",
+    statusText: count.occurred ? "就是今天" : `还有 ${count.days} 天`,
+    label: title,
+    anniversaryDate: date,
+  };
+}
 
 export function buildRelationshipChatExcerpt(messages: Array<{ role: string; content?: string; mediaType?: string }>): string {
   return messages
@@ -642,10 +726,10 @@ export function applyCharacterSpaceAction(input: {
   replyToAuthor?: string;
   anniversaryDate?: string;
   chatExcerpt?: string;
-}): { notice: string } {
+}): { notice: string; cards: RelationshipSpaceCard[] } {
   const binding = getRelationshipByCharacter(input.characterId);
   if (!binding || binding.status !== "active") {
-    return { notice: `${input.characterName}想在关系空间里做点什么，但你们还没有绑定关系` };
+    return { notice: `${input.characterName}想在关系空间里做点什么，但你们还没有绑定关系`, cards: [] };
   }
   const spaceLabel = relationshipKindLabel(binding.kind);
   const content = (input.content || "").trim();
@@ -653,7 +737,7 @@ export function applyCharacterSpaceAction(input: {
   if (input.action === "post" || input.action === "post_from_chat") {
     const excerpt = input.action === "post_from_chat" ? (input.chatExcerpt || "").trim() : "";
     if (!content && !excerpt) {
-      return { notice: `${input.characterName}想发动态，但没有写下内容` };
+      return { notice: `${input.characterName}想发动态，但没有写下内容`, cards: [] };
     }
     addRelationshipPost({
       relationshipId: binding.id,
@@ -663,13 +747,28 @@ export function applyCharacterSpaceAction(input: {
       fromChat: input.action === "post_from_chat" && !!excerpt,
       chatExcerpt: excerpt || undefined,
     });
-    return { notice: `${input.characterName}在${spaceLabel}空间发布了动态` };
+    return { notice: `${input.characterName}在${spaceLabel}空间发布了动态`, cards: [] };
+  }
+
+  if (input.action === "nudge_checkin" || input.action === "remind_checkin") {
+    const card = input.action === "nudge_checkin"
+      ? buildCheckinNudgeCard(binding, input.characterName)
+      : buildCheckinRemindCard(binding);
+    return { notice: card.desc, cards: [card] };
+  }
+
+  if (input.action === "anniversary_countdown") {
+    const items = loadAnniversaries(binding.id);
+    const hit = items.find(item => item.title === content) || items.find(item => item.authorType === "character") || items[0];
+    if (!hit) return { notice: `${input.characterName}想发纪念日倒计时，但还没有纪念日`, cards: [] };
+    const card = buildAnniversaryCountdownCard(binding, hit.title, hit.date, input.characterName);
+    return { notice: card.desc, cards: [card] };
   }
 
   if (input.action === "comment" || input.action === "reply") {
-    if (!content) return { notice: `${input.characterName}想评论，但没有写下内容` };
+    if (!content) return { notice: `${input.characterName}想评论，但没有写下内容`, cards: [] };
     const latest = loadRelationshipPosts(binding.id)[0];
-    if (!latest) return { notice: `${input.characterName}想评论，但空间里还没有动态` };
+    if (!latest) return { notice: `${input.characterName}想评论，但空间里还没有动态`, cards: [] };
     const replyName = input.action === "reply" ? (input.replyToAuthor || "").trim() : "";
     const comments = loadRelationshipComments(latest.id);
     const replyTo = replyName
@@ -688,24 +787,29 @@ export function applyCharacterSpaceAction(input: {
       replyToCommentId: replyTo?.id,
       replyToAuthorName: replyName || undefined,
     });
-    return { notice: replyName ? `${input.characterName}回复了${replyName}` : `${input.characterName}评论了空间动态` };
+    return { notice: replyName ? `${input.characterName}回复了${replyName}` : `${input.characterName}评论了空间动态`, cards: [] };
   }
 
   if (input.action === "relight") {
     const result = reigniteCheckins(binding.id);
-    if ("error" in result) return { notice: `${input.characterName}想重燃打卡，但${result.error}` };
-    return { notice: `${input.characterName}重燃了你们的打卡` };
+    if ("error" in result) return { notice: `${input.characterName}想重燃打卡，但${result.error}`, cards: [] };
+    return { notice: `${input.characterName}重燃了你们的打卡`, cards: [] };
   }
 
   if (input.action === "checkin") {
     const result = addCheckin(binding.id, "character", input.characterId, content || undefined);
-    if ("error" in result) return { notice: `${input.characterName}想打卡，但${result.error}` };
-    return { notice: `${input.characterName}在${spaceLabel}空间打了卡` };
+    if ("error" in result) return { notice: `${input.characterName}想打卡，但${result.error}`, cards: [] };
+    const cards = [buildCheckinDoneCard(binding, input.characterName, content)];
+    if (!hasSideCheckedInToday(binding.id, "user")) cards.push(buildCheckinRemindCard(binding));
+    return { notice: `${input.characterName}在${spaceLabel}空间打了卡`, cards };
   }
 
   const result = addAnniversary(binding.id, content, input.anniversaryDate || "", "character", input.characterId);
-  if ("error" in result) return { notice: `${input.characterName}想添加纪念日，但${result.error}` };
-  return { notice: `${input.characterName}添加了纪念日「${result.title}」` };
+  if ("error" in result) return { notice: `${input.characterName}想添加纪念日，但${result.error}`, cards: [] };
+  return {
+    notice: `${input.characterName}添加了纪念日「${result.title}」`,
+    cards: [buildAnniversaryCountdownCard(binding, result.title, result.date, input.characterName)],
+  };
 }
 
 export function materializeRelationshipSpacePart(input: {
@@ -718,7 +822,7 @@ export function materializeRelationshipSpacePart(input: {
     anniversaryDate?: string;
   };
   messages?: Array<{ role: string; content?: string; mediaType?: string }>;
-}): { notice: string } {
+}): { notice: string; cards: RelationshipSpaceCard[] } {
   const action = input.mediaData?.spaceAction || "post";
   return applyCharacterSpaceAction({
     characterId: input.characterId,
@@ -773,8 +877,10 @@ export function buildRelationshipSpaceInstruction(
     `[关系动态感触:内容] — 带着当前聊天的感触发布`,
     `[关系评论:内容] — 评论空间里最近一条动态`,
     `[关系回评:对方名字:内容] — 回复某人的评论`,
-    `[关系打卡] 或 [关系打卡:一句话] — 今日打卡。按人设决定要不要打，不要每次都打，也不要从不打。`,
-    `[关系纪念日:名称:YYYY-MM-DD] — 按人设添加新的纪念日`,
+    `[关系打卡] 或 [关系打卡:一句话] — 今日打卡。按人设决定要不要打，不要每次都打，也不要从不打。打卡后系统会发小卡片；若对方还没打，再提醒对方。`,
+    `[关系催打卡] — 提醒对方打卡，会发一张小卡片到聊天。`,
+    `[关系纪念日:名称:YYYY-MM-DD] — 按人设添加新的纪念日，添加后会发倒计时小卡片到聊天。`,
+    `[关系纪念日倒计时:名称] — 把已有纪念日的倒计时发到聊天。`,
     needsCheckinRelight(binding)
       ? `[关系打卡重燃] — 这段关系是重建的，旧打卡还在但连续天数已暂停。若人设愿意重续，先输出这个标记，重燃后才能继续旧连续。未重燃时不要用普通打卡去接旧记录。`
       : "",
@@ -782,7 +888,7 @@ export function buildRelationshipSpaceInstruction(
     findLatestUserChatImage(messages || [])
       ? "对方最近发来一张照片。若人设会觉得好看、想用来布置空间，可输出 [设为空间背景]。"
       : "",
-    "对方刚打卡或刚加纪念日时，你可以跟、也可以不跟，必须像这个人。",
+    "对方刚打卡、催你打卡或刚加纪念日时，你可以跟、也可以不跟，必须像这个人。被催打卡时可输出 [关系打卡]；打完后若对方还没打，可用 [关系催打卡] 回催。",
   ].filter(Boolean).join("\n");
 }
 

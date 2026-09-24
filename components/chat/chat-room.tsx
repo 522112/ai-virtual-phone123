@@ -113,6 +113,7 @@ import {
     materializeRelationshipSpacePart,
     applyCharacterSpaceCover,
 } from "@/lib/relationship-storage";
+import type { RelationshipSpaceCard } from "@/lib/relationship-storage";
 import type { RelationshipBinding, RelationshipKind } from "@/lib/relationship-types";
 
 // ── Call system message detection ──────────────────────────
@@ -218,6 +219,7 @@ const CHAT_VISUAL_MEDIA_TYPES = new Set([
     "accept_relationship",
     "decline_relationship",
     "dissolve_relationship",
+    "relationship_space",
 ]);
 
 const WEIXIN_CLOUD_DELETE_TIMEOUT_MS = 15000;
@@ -267,6 +269,7 @@ const CHAT_MEDIA_BUBBLE_TYPES = new Set([
     "accept_relationship",
     "decline_relationship",
     "dissolve_relationship",
+    "relationship_space",
 ]);
 
 const STANDALONE_CARD_BUBBLE_STYLE = {
@@ -3038,6 +3041,22 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     mediaData: p.mediaData,
                     messages,
                 });
+                if (notice.cards.length > 0) {
+                    for (const card of notice.cards) {
+                        pushFilteredPart({
+                            content: card.desc,
+                            mediaType: "relationship_space",
+                            mediaData: {
+                                spaceAction: card.action,
+                                relationshipId: card.relationshipId,
+                                relationshipKind: card.relationshipKind,
+                                label: card.label || card.title,
+                                anniversaryDate: card.anniversaryDate,
+                            },
+                        });
+                    }
+                    continue;
+                }
                 pushFilteredPart({ content: notice.notice });
                 continue;
             }
@@ -7008,6 +7027,22 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     onPersonaNudge={() => {
                         setPendingGenerate(true);
                         void triggerAIResponse();
+                    }}
+                    onSpaceCard={(card: RelationshipSpaceCard, role) => {
+                        const newMsg = pushChatMessage({
+                            sessionId: session.id,
+                            role,
+                            content: card.desc,
+                            mediaType: "relationship_space",
+                            mediaData: {
+                                spaceAction: card.action,
+                                relationshipId: card.relationshipId,
+                                relationshipKind: card.relationshipKind,
+                                label: card.label || card.title,
+                                anniversaryDate: card.anniversaryDate,
+                            },
+                        });
+                        setMessages(prev => [...prev, newMsg]);
                     }}
                 />
             )}
