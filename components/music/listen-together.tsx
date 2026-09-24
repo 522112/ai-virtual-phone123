@@ -21,6 +21,7 @@ import {
   startListenTogetherSession,
 } from "@/lib/listen-together-storage";
 import type { ListenTogetherSession, ListenTogetherTrack } from "@/lib/listen-together-types";
+import { parseChatBubbleDisplay } from "@/lib/chat-message-display";
 import { loadRelationshipBindings } from "@/lib/relationship-storage";
 
 type ListenTogetherControlsProps = {
@@ -385,12 +386,16 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                     const mine = item.author === "user";
                     const avatar = mine ? identity?.avatarUrl : character?.avatar;
                     const alt = mine ? (identity?.name || "我") : session.characterName;
+                    const parsed = parseChatBubbleDisplay(item.text, [session.characterName, identity?.name || "", "我", "用户"]);
                     return (
                       <div key={item.id} className={`lt-row${mine ? " is-me" : ""}`}>
                         <span className="lt-row-avatar">
                           {avatar ? <img src={avatar} alt={alt} /> : <ChatFallbackAvatar alt={alt} />}
                         </span>
-                        <div className={`lt-bubble${mine ? " is-me" : ""}`}>{item.text}</div>
+                        <div className="lt-msg-col">
+                          {parsed.whisper ? <span className="lt-whisper">【私聊】</span> : null}
+                          {parsed.body ? <div className={`lt-bubble${mine ? " is-me" : ""}`}>{parsed.body}</div> : null}
+                        </div>
                       </div>
                     );
                   })}

@@ -32,6 +32,10 @@ import { formatShoppingPaymentRequestHistory } from "./shopping-payment-request"
 import { loadCustomAppTimelineEntries } from "./custom-app-storage";
 import { loadListenTogetherSessions } from "./listen-together-storage";
 import {
+    loadRelationshipComments,
+    loadVisibleRelationshipPostsForCharacter,
+} from "./relationship-storage";
+import {
     canCharacterSeeMomentPost,
     getVisibleMomentCommentsForCharacter,
     getVisibleMomentLikesForCharacter,
@@ -431,6 +435,40 @@ export function loadNativeTimeline(
                 content: `${msgLabel} ${sender}: ${msg.text}`,
             });
         }
+    }
+
+    // ── Couple-space posts: only the bound character can know the user's posts ──
+    const spacePosts = loadVisibleRelationshipPostsForCharacter(characterId);
+    for (const post of spacePosts) {
+        if (options?.afterTimestamp && post.createdAt <= options.afterTimestamp) continue;
+        const comments = loadRelationshipComments(post.id);
+        const filteredComments = options?.afterTimestamp
+            ? comments.filter(comment => comment.createdAt > options.afterTimestamp!)
+            : comments;
+        if (options?.afterTimestamp && post.createdAt <= options.afterTimestamp && filteredComments.length === 0) continue;
+        const authorName = post.authorType === "user" ? userName : charName;
+        const postLabel = formatPromptEventLabel("关系空间", post.createdAt, timeAware, timestampOptions);
+        const lines = [
+            `${postLabel} ${authorName}发了一条仅你们空间可见的动态："${post.content || (post.photoAssetId ? "[图片]" : "")}"`,
+        ];
+        const threads = buildTwoLevelMomentThreads(filteredComments);
+        for (const thread of threads) {
+            const rootName = thread.root.authorType === "user" ? userName : charName;
+            lines.push(`💬 ${rootName}评论："${thread.root.content}"`);
+            for (const reply of thread.replies) {
+                const replyName = reply.authorType === "user" ? userName : charName;
+                const replyTarget = reply.replyToAuthorName || (reply.replyToAuthorType === "user" ? userName : charName);
+                lines.push(`  ↳ ${replyName}→${replyTarget}："${reply.content}"`);
+            }
+        }
+        const eventTimestamps = [post.createdAt, ...filteredComments.map(comment => comment.createdAt)].sort();
+        entries.push({
+            id: post.id,
+            sourceApp: "chat",
+            sourceDetail: "direct",
+            timestamp: eventTimestamps[eventTimestamps.length - 1] || post.createdAt,
+            content: lines.join("\n"),
+        });
     }
 
     // ── Moments posts & comments (grouped by post) ──

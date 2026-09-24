@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Heart, ImagePlus, MessageCircle, Trash2, X } from "lucide-react";
 import type { ChatMessage } from "@/lib/chat-storage";
 import type { Character } from "@/lib/character-types";
@@ -78,6 +78,47 @@ export function RelationshipSpace({
   const { binding, posts, tick } = useRelationship(relationshipId);
   const [tab, setTab] = useState<TabKey>("feed");
   const [composing, setComposing] = useState(false);
+  const [activeComposer, setActiveComposer] = useState<{
+    postId: string;
+    replyTo?: { commentId: string; authorId: string; authorType: "user" | "character"; name: string };
+  } | null>(null);
+  const [composerText, setComposerText] = useState("");
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const identityId = resolveUserIdentity()?.id || "user";
+
+  const closeComposer = useCallback(() => {
+    setActiveComposer(null);
+    setComposerText("");
+    composerInputRef.current?.blur();
+  }, []);
+
+  const submitComposer = useCallback(() => {
+    if (!binding) return;
+    const text = composerText.trim();
+    const target = activeComposer;
+    if (!text || !target) return;
+    addRelationshipComment({
+      postId: target.postId,
+      relationshipId: binding.id,
+      authorType: "user",
+      authorId: identityId,
+      content: text,
+      replyToCommentId: target.replyTo?.commentId,
+      replyToAuthorId: target.replyTo?.authorId,
+      replyToAuthorType: target.replyTo?.authorType,
+      replyToAuthorName: target.replyTo?.name,
+    });
+    closeComposer();
+    onPersonaNudge?.("checkin");
+  }, [activeComposer, binding, closeComposer, composerText, identityId, onPersonaNudge]);
+
+  useEffect(() => {
+    if (!activeComposer) return;
+    const timer = window.setTimeout(() => {
+      composerInputRef.current?.focus({ preventScroll: true });
+    }, 40);
+    return () => window.clearTimeout(timer);
+  }, [activeComposer]);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const identity = resolveUserIdentity(character?.id || "", "chat");
@@ -220,13 +261,28 @@ export function RelationshipSpace({
         {tab === "feed" && (
           <RelationshipFeed
             key={tick}
-            binding={binding}
             posts={posts}
             character={character}
             userName={identity?.name || "我"}
             userAvatar={identity?.avatarUrl || null}
             userId={identity?.id || "user"}
             onCompose={() => setComposing(true)}
+            onOpenComment={postId => {
+              setComposerText("");
+              setActiveComposer({ postId });
+            }}
+            onOpenReply={(postId, comment, name) => {
+              setComposerText("");
+              setActiveComposer({
+                postId,
+                replyTo: {
+                  commentId: comment.id,
+                  authorId: comment.authorId,
+                  authorType: comment.authorType,
+                  name,
+                },
+              });
+            }}
           />
         )}
         {tab === "checkin" && (
@@ -265,6 +321,54 @@ export function RelationshipSpace({
           onNotice={onNotice}
         />
       )}
+
+      {activeComposer ? (
+        <div className="feed-comment-modal-layer" data-ui="modal">
+          <button
+            type="button"
+            className="feed-comment-modal-backdrop"
+            aria-label="关闭评论输入"
+            onClick={closeComposer}
+          />
+          <div
+            className="feed-comment-modal-dialog"
+            data-ui="modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={activeComposer.replyTo ? `回复 ${activeComposer.replyTo.name}` : "发表评论"}
+          >
+            <div className="feed-comment-modal-title">
+              {activeComposer.replyTo ? `回复 ${activeComposer.replyTo.name}` : "发表评论"}
+            </div>
+            <textarea
+              ref={composerInputRef}
+              value={composerText}
+              onChange={event => setComposerText(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                  event.preventDefault();
+                  submitComposer();
+                } else if (event.key === "Escape") {
+                  closeComposer();
+                }
+              }}
+              placeholder={activeComposer.replyTo ? `回复 ${activeComposer.replyTo.name}` : "说点什么吧"}
+              className="feed-comment-modal-input"
+            />
+            <div className="feed-comment-modal-actions">
+              <button type="button" className="feed-comment-modal-cancel" onClick={closeComposer}>取消</button>
+              <button
+                type="button"
+                className="feed-comment-modal-send"
+                disabled={!composerText.trim()}
+                onClick={submitComposer}
+              >
+                发送
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -288,21 +392,23 @@ function RelAvatar({ src, alt }: { src?: string | null; alt: string }) {
 }
 
 function RelationshipFeed({
-  binding,
   posts,
   character,
   userName,
   userAvatar,
   userId,
   onCompose,
+  onOpenComment,
+  onOpenReply,
 }: {
-  binding: RelationshipBinding;
   posts: RelationshipPost[];
   character: Character | null;
   userName: string;
   userAvatar: string | null;
   userId: string;
   onCompose: () => void;
+  onOpenComment: (postId: string) => void;
+  onOpenReply: (postId: string, comment: RelationshipComment, name: string) => void;
 }) {
   return (
     <div className="rel-feed">
@@ -321,11 +427,12 @@ function RelationshipFeed({
         <RelationshipPostCard
           key={post.id}
           post={post}
-          binding={binding}
           character={character}
           userName={userName}
           userAvatar={userAvatar}
           userId={userId}
+          onOpenComment={() => onOpenComment(post.id)}
+          onOpenReply={(comment, name) => onOpenReply(post.id, comment, name)}
         />
       ))}
     </div>
@@ -334,23 +441,23 @@ function RelationshipFeed({
 
 function RelationshipPostCard({
   post,
-  binding,
   character,
   userName,
   userAvatar,
   userId,
+  onOpenComment,
+  onOpenReply,
 }: {
   post: RelationshipPost;
-  binding: RelationshipBinding;
   character: Character | null;
   userName: string;
   userAvatar: string | null;
   userId: string;
+  onOpenComment: () => void;
+  onOpenReply: (comment: RelationshipComment, name: string) => void;
 }) {
   const [photo, setPhoto] = useState<string | null>(null);
   const [comments, setComments] = useState(() => loadRelationshipComments(post.id));
-  const [draft, setDraft] = useState("");
-  const [replyTo, setReplyTo] = useState<RelationshipComment | null>(null);
   const [likes, setLikes] = useState(post.likes);
   const liked = likes.some(like => like.authorType === "user" && like.authorId === userId);
   const authorName = post.authorType === "user" ? userName : (character?.name || "对方");
@@ -367,29 +474,18 @@ function RelationshipPostCard({
     return () => { cancelled = true; };
   }, [post.photoAssetId]);
 
+  useEffect(() => {
+    const refresh = () => setComments(loadRelationshipComments(post.id));
+    window.addEventListener(RELATIONSHIP_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(RELATIONSHIP_CHANGED_EVENT, refresh);
+  }, [post.id]);
+
   const authorOf = (comment: RelationshipComment) => (
     comment.authorType === "user" ? userName : (character?.name || "对方")
   );
   const avatarOf = (comment: RelationshipComment) => (
     comment.authorType === "user" ? userAvatar : (character?.avatar || null)
   );
-
-  const submit = () => {
-    const content = draft.trim();
-    if (!content) return;
-    addRelationshipComment({
-      postId: post.id,
-      relationshipId: binding.id,
-      authorType: "user",
-      authorId: userId,
-      content,
-      replyToCommentId: replyTo?.id,
-      replyToAuthorName: replyTo ? authorOf(replyTo) : undefined,
-    });
-    setDraft("");
-    setReplyTo(null);
-    setComments(loadRelationshipComments(post.id));
-  };
 
   return (
     <article className="feed-post rel-feed-post relative border-b-[2.5px] border-[var(--c-card-border)] pb-5 mb-5 w-full bg-transparent">
@@ -430,7 +526,7 @@ function RelationshipPostCard({
           <button
             type="button"
             className="feed-post-comment-btn bg-none border-none p-0 cursor-pointer flex items-center"
-            onClick={() => setReplyTo(null)}
+            onClick={onOpenComment}
           >
             <MessageCircle size={16} strokeWidth={1.75} className="text-[var(--c-icon)]" />
           </button>
@@ -451,7 +547,7 @@ function RelationshipPostCard({
             <div className="feed-comments flex flex-col gap-1 w-full mt-1">
               {commentThreads.map(({ root, replies }) => (
                 <div key={root.id} className="feed-comment feed-comment-root w-full">
-                  <div className="feed-comment-row flex items-start gap-2 cursor-pointer" onClick={() => setReplyTo(root)}>
+                  <div className="feed-comment-row flex items-start gap-2 cursor-pointer" onClick={() => onOpenReply(root, authorOf(root))}>
                     <div className="feed-comment-avatar feed-comment-avatar-root w-[32px] h-[32px] rounded-full shrink-0 bg-[var(--c-input)] overflow-hidden flex items-center justify-center">
                       <RelAvatar src={avatarOf(root)} alt={authorOf(root)} />
                     </div>
@@ -460,14 +556,14 @@ function RelationshipPostCard({
                       <div className="feed-comment-body ts-15 leading-[1.55] text-[var(--c-text-title)]">{root.content}</div>
                       <div className="feed-comment-meta flex items-center gap-0 mt-[2px] ts-13 text-[var(--c-icon)] w-full">
                         <span className="feed-comment-time whitespace-nowrap mr-4">{formatRelTimeAgo(root.createdAt)}</span>
-                        <button type="button" className="feed-comment-reply-btn" onClick={(e) => { e.stopPropagation(); setReplyTo(root); }}>回复</button>
+                        <button type="button" className="feed-comment-reply-btn" onClick={(e) => { e.stopPropagation(); onOpenReply(root, authorOf(root)); }}>回复</button>
                       </div>
                     </div>
                   </div>
                   {replies.length > 0 && (
                     <div className="feed-comment-replies flex flex-col gap-1 w-full mt-1 pl-[40px]">
                       {replies.map(reply => (
-                        <div key={reply.id} className="feed-comment feed-comment-child flex items-start gap-2 cursor-pointer" onClick={() => setReplyTo(reply)}>
+                        <div key={reply.id} className="feed-comment feed-comment-child flex items-start gap-2 cursor-pointer" onClick={() => onOpenReply(reply, authorOf(reply))}>
                           <div className="feed-comment-avatar feed-comment-avatar-child w-[22px] h-[22px] rounded-full shrink-0 bg-[var(--c-input)] overflow-hidden flex items-center justify-center mt-[2px]">
                             <RelAvatar src={avatarOf(reply)} alt={authorOf(reply)} />
                           </div>
@@ -485,7 +581,7 @@ function RelationshipPostCard({
                             </div>
                             <div className="feed-comment-meta flex items-center gap-0 mt-[2px] ts-13 text-[var(--c-icon)]">
                               <span className="feed-comment-time whitespace-nowrap mr-4">{formatRelTimeAgo(reply.createdAt)}</span>
-                              <button type="button" className="feed-comment-reply-btn" onClick={(e) => { e.stopPropagation(); setReplyTo(reply); }}>回复</button>
+                              <button type="button" className="feed-comment-reply-btn" onClick={(e) => { e.stopPropagation(); onOpenReply(reply, authorOf(reply)); }}>回复</button>
                             </div>
                           </div>
                         </div>
@@ -499,23 +595,6 @@ function RelationshipPostCard({
         </div>
       )}
 
-      <div className="rel-feed-composer">
-        <input
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          placeholder={replyTo ? `回复 ${authorOf(replyTo)}` : "评论"}
-          onKeyDown={e => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submit();
-            }
-          }}
-        />
-        {replyTo ? (
-          <button type="button" className="feed-comment-reply-btn" onClick={() => setReplyTo(null)}>取消</button>
-        ) : null}
-        <button type="button" className="feed-comment-send" onClick={submit} disabled={!draft.trim()}>发送</button>
-      </div>
     </article>
   );
 }

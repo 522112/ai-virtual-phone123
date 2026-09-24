@@ -95,24 +95,30 @@ export function JournalBlockView({
   block,
   editable,
   selected,
+  editing,
+  locked,
   notes,
   onChange,
   onRemove,
   onOpenNote,
   onSelect,
+  onBeginEdit,
   onAnnotate,
 }: {
   block: JournalBlock;
   editable: boolean;
   selected: boolean;
+  editing: boolean;
+  locked?: boolean;
   notes: JournalAnnotation[];
   onChange: (block: JournalBlock) => void;
   onRemove: () => void;
   onOpenNote: (note: JournalAnnotation) => void;
   onSelect: () => void;
+  onBeginEdit: () => void;
   onAnnotate?: () => void;
 }) {
-  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; originW: number; originH: number } | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const floated = isFloated(block);
@@ -121,13 +127,20 @@ export function JournalBlockView({
   const boxW = block.boxW || (floated ? 54 : undefined);
   const boxH = block.boxH;
   const canAnnotate = Boolean(editable && onAnnotate && block.author === "character" && (block.type === "text" || block.type === "clip"));
+  const contentEditing = editing && !locked;
 
   useEffect(() => {
     const el = textRef.current;
     if (!el || floated) return;
     el.style.height = "0px";
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
-  }, [block.type === "text" ? block.text : "", fontSize, floated]);
+  }, [block.type === "text" ? block.text : "", fontSize, floated, contentEditing]);
+
+  useEffect(() => {
+    if (contentEditing && block.type === "text" && block.author === "user") {
+      textRef.current?.focus();
+    }
+  }, [contentEditing, block.type, block.author]);
 
   const parentRect = (node: HTMLElement) => node.closest(".journal-leaf-body")?.getBoundingClientRect();
 
@@ -148,6 +161,7 @@ export function JournalBlockView({
       originY: typeof block.y === "number" ? block.y : rect
         ? ((event.currentTarget.getBoundingClientRect().top - rect.top) / rect.height) * 100
         : 8,
+      moved: false,
     };
     onSelect();
   };
@@ -170,10 +184,14 @@ export function JournalBlockView({
     if (!dragRef.current) return;
     const rect = parentRect(event.currentTarget);
     if (!rect) return;
+    const dx = event.clientX - dragRef.current.startX;
+    const dy = event.clientY - dragRef.current.startY;
+    if (!dragRef.current.moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+    dragRef.current.moved = true;
     onChange({
       ...block,
-      x: Math.min(86, Math.max(0, dragRef.current.originX + ((event.clientX - dragRef.current.startX) / rect.width) * 100)),
-      y: Math.min(86, Math.max(0, dragRef.current.originY + ((event.clientY - dragRef.current.startY) / rect.height) * 100)),
+      x: Math.min(86, Math.max(0, dragRef.current.originX + (dx / rect.width) * 100)),
+      y: Math.min(86, Math.max(0, dragRef.current.originY + (dy / rect.height) * 100)),
     });
   };
 
@@ -189,7 +207,7 @@ export function JournalBlockView({
 
   return (
     <div
-      className={`journal-block journal-block-${block.type}${block.author === "character" ? " is-char" : ""}${floated ? " is-float" : ""}${selected ? " is-selected" : ""}`}
+      className={`journal-block journal-block-${block.type}${block.author === "character" ? " is-char" : ""}${floated ? " is-float" : ""}${selected ? " is-selected" : ""}${contentEditing ? " is-editing" : ""}${locked ? " is-locked" : ""}`}
       style={floated ? {
         left: `${block.x}%`,
         top: `${block.y}%`,
@@ -202,7 +220,15 @@ export function JournalBlockView({
       onPointerMove={moveDrag}
       onPointerUp={endGesture}
       onPointerCancel={endGesture}
-      onClick={onSelect}
+      onClick={event => {
+        event.stopPropagation();
+        onSelect();
+      }}
+      onDoubleClick={event => {
+        event.stopPropagation();
+        if (!editable || locked) return;
+        onBeginEdit();
+      }}
     >
       {editable && selected ? (
         <button type="button" className="journal-block-move" aria-label="移动" onPointerDown={beginDrag}>
@@ -211,7 +237,7 @@ export function JournalBlockView({
       ) : null}
       {block.type === "text" ? (
         <>
-          {editable && selected ? (
+          {editable && contentEditing && block.author === "user" ? (
             <div className="journal-font-row" onPointerDown={event => event.stopPropagation()}>
               {JOURNAL_FONTS.map(font => (
                 <button
@@ -233,7 +259,7 @@ export function JournalBlockView({
               />
             </div>
           ) : null}
-          {editable && block.author === "user" ? (
+          {editable && contentEditing && block.author === "user" ? (
             <textarea
               ref={textRef}
               value={block.text}
@@ -242,6 +268,7 @@ export function JournalBlockView({
               style={textStyle}
               onChange={event => onChange({ ...block, text: event.target.value })}
               onFocus={onSelect}
+              onPointerDown={event => event.stopPropagation()}
             />
           ) : (
             <TextWithMarks
@@ -263,10 +290,10 @@ export function JournalBlockView({
       {block.type === "doodle" ? (
         <JournalDoodlePad
           strokes={block.strokes}
-          disabled={!editable}
-          tools={editable && selected}
+          disabled={!editable || !contentEditing}
+          tools={editable && contentEditing}
           onChange={strokes => {
-            if (!editable || block.type !== "doodle") return;
+            if (!editable || !contentEditing || block.type !== "doodle") return;
             onChange({ ...block, strokes, x: block.x ?? 12, y: block.y ?? 28, boxW: block.boxW ?? 64, boxH: block.boxH ?? 32 });
           }}
         />
@@ -288,7 +315,7 @@ export function JournalBlockView({
           批注
         </button>
       ) : null}
-      {editable && selected && (block.type === "text" || block.type === "doodle" || block.type === "image" || block.type === "clip") ? (
+      {editable && (selected || contentEditing) && (block.type === "text" || block.type === "doodle" || block.type === "image" || block.type === "clip") ? (
         <span
           className="journal-resize-handle"
           onPointerDown={event => {
@@ -314,10 +341,16 @@ export function JournalBlockView({
   );
 }
 
+function isContentEditableType(type: JournalBlock["type"]): boolean {
+  return type === "text" || type === "doodle";
+}
+
 function JournalLeaf({
   page,
   annotations,
   editable,
+  focusBlockId,
+  onFocusConsumed,
   onChangeBlock,
   onRemoveBlock,
   onAnnotateBlock,
@@ -325,26 +358,70 @@ function JournalLeaf({
   page: JournalPage;
   annotations: JournalAnnotation[];
   editable: boolean;
+  focusBlockId?: string | null;
+  onFocusConsumed?: () => void;
   onChangeBlock: (block: JournalBlock) => void;
   onRemoveBlock: (blockId: string) => void;
   onAnnotateBlock?: (block: JournalBlock) => void;
 }) {
   const [openNote, setOpenNote] = useState<JournalAnnotation | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editingBlock = page.blocks.find(item => item.id === editingId) || null;
+  const editingKind = editingBlock?.type || null;
+
+  useEffect(() => {
+    if (!focusBlockId) return;
+    setSelectedId(focusBlockId);
+    setEditingId(focusBlockId);
+    onFocusConsumed?.();
+  }, [focusBlockId, onFocusConsumed]);
+
+  const saveAndClear = () => {
+    setEditingId(null);
+    setSelectedId(null);
+    setOpenNote(null);
+  };
+
+  const beginEdit = (block: JournalBlock) => {
+    if (!editable) return;
+    if (!isContentEditableType(block.type)) {
+      setSelectedId(block.id);
+      return;
+    }
+    if (editingKind && editingKind !== block.type) return;
+    setSelectedId(block.id);
+    setEditingId(block.id);
+  };
+
   return (
     <div className="journal-leaf journal-leaf-single">
-      <div className="journal-leaf-body">
+      <div
+        className="journal-leaf-body"
+        onPointerDown={event => {
+          if (!editable) return;
+          const target = event.target as HTMLElement;
+          if (target.closest(".journal-block, .journal-note-pop")) return;
+          saveAndClear();
+        }}
+      >
         {page.blocks.length === 0 ? <p className="journal-empty">这一页还是空的</p> : page.blocks.map(block => (
           <JournalBlockView
             key={block.id}
             block={block}
             editable={editable}
             selected={selectedId === block.id}
+            editing={editingId === block.id}
+            locked={Boolean(editingKind && editingKind !== block.type)}
             notes={annotations.filter(item => item.blockId === block.id || (!item.blockId && (block.type === "text" || block.type === "clip")))}
             onChange={onChangeBlock}
             onRemove={() => onRemoveBlock(block.id)}
             onOpenNote={setOpenNote}
-            onSelect={() => setSelectedId(block.id)}
+            onSelect={() => {
+              if (editingKind && editingKind !== block.type) return;
+              setSelectedId(block.id);
+            }}
+            onBeginEdit={() => beginEdit(block)}
             onAnnotate={onAnnotateBlock ? () => onAnnotateBlock(block) : undefined}
           />
         ))}
@@ -366,6 +443,8 @@ export function JournalOpenBook({
   page,
   annotations,
   preview,
+  focusBlockId,
+  onFocusConsumed,
   onChangeBlock,
   onRemoveBlock,
   onAnnotateBlock,
@@ -374,6 +453,8 @@ export function JournalOpenBook({
   page: JournalPage;
   annotations: JournalAnnotation[];
   preview?: boolean;
+  focusBlockId?: string | null;
+  onFocusConsumed?: () => void;
   onChangeBlock: (block: JournalBlock) => void;
   onRemoveBlock: (blockId: string) => void;
   onAnnotateBlock?: (block: JournalBlock) => void;
@@ -385,6 +466,8 @@ export function JournalOpenBook({
           page={page}
           annotations={annotations}
           editable={!preview}
+          focusBlockId={preview ? null : focusBlockId}
+          onFocusConsumed={preview ? undefined : onFocusConsumed}
           onChangeBlock={onChangeBlock}
           onRemoveBlock={onRemoveBlock}
           onAnnotateBlock={preview ? undefined : onAnnotateBlock}
