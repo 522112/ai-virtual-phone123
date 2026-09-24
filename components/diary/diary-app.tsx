@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpenText, ChevronLeft, StickyNote } from "lucide-react";
+import { BookOpenText, ChevronLeft, NotebookPen, StickyNote } from "lucide-react";
 
 import { DiaryEntriesApp } from "./diary-entries-app";
+import { JournalApp } from "./journal-app";
 import { NoteWallApp } from "./note-wall-app";
 
 type DiaryAppProps = {
@@ -11,7 +12,7 @@ type DiaryAppProps = {
   onNotice?: (message: string) => void;
 };
 
-type DiaryView = "home" | "entries" | "notewall";
+type DiaryView = "home" | "entries" | "journal" | "notewall";
 
 const NOTE_WALL_UI_ENABLED = false;
 
@@ -30,6 +31,10 @@ export function DiaryApp({ onClose, onNotice }: DiaryAppProps) {
     return <DiaryEntriesApp onBack={() => setView("home")} onNotice={onNotice} />;
   }
 
+  if (view === "journal") {
+    return <JournalApp onBack={() => setView("home")} onNotice={onNotice} />;
+  }
+
   return (
     <section className="diary-app">
       <header className="diary-app-header">
@@ -38,7 +43,7 @@ export function DiaryApp({ onClose, onNotice }: DiaryAppProps) {
         </button>
         <div>
           <h1>手记</h1>
-          <p>记录角色留下的话</p>
+          <p>角色日记，和自己的手账</p>
         </div>
         <span className="diary-header-spacer" />
       </header>
@@ -63,6 +68,28 @@ export function DiaryApp({ onClose, onNotice }: DiaryAppProps) {
           <span className="diary-feature-bottom" aria-hidden="true">
             <span className="diary-feature-barcode" />
             <span className="diary-feature-weather">SUNNY 24C / HUM 62%</span>
+          </span>
+        </button>
+
+        <button type="button" className="diary-feature-card diary-feature-card-journal" onClick={() => setView("journal")}>
+          <span className="diary-feature-punches diary-feature-punches-left" aria-hidden="true" />
+          <span className="diary-feature-punches diary-feature-punches-right" aria-hidden="true" />
+          <span className="diary-feature-card-head">
+            <span className="diary-feature-label">JOURNAL</span>
+            <span className="diary-feature-number">{todayLabel}</span>
+          </span>
+          <span className="diary-feature-main">
+            <span className="diary-feature-icon">
+              <NotebookPen size={20} strokeWidth={1.55} />
+            </span>
+            <span>
+              <strong>手账</strong>
+              <em>自己的日记册，也可以和角色一起写</em>
+            </span>
+          </span>
+          <span className="diary-feature-bottom" aria-hidden="true">
+            <span className="diary-feature-barcode" />
+            <span className="diary-feature-weather">WARM 23C / HUM 58%</span>
           </span>
         </button>
 

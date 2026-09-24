@@ -238,7 +238,7 @@ const PRIMARY_DATA_MODULES: DataModuleDefinition[] = [
   {
     id: "apps",
     label: "内容应用",
-    description: "日历、日记、购物、余额、阅读、音乐、经期记录与应用偏好",
+    description: "日历、日记、手账、购物、余额、阅读、音乐、经期记录与应用偏好",
     variant: "teal",
     large: true,
     sources: [
@@ -256,6 +256,8 @@ const PRIMARY_DATA_MODULES: DataModuleDefinition[] = [
           "ai_phone_diary_entry_timer_settings_v1",
           "ai_phone_diary_entry_font_asset_v1",
           "ai_phone_diary_entry_font_scale_v1",
+          "ai_phone_journal_books_v1",
+          "ai_phone_journal_annotations_v1",
           "ai_phone_shopping_state_v1",
           "ai_phone_wallet_state_v1",
           "ai_phone_reading_interaction_config_v1",
