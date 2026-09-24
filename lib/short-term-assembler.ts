@@ -347,7 +347,9 @@ export function loadNativeTimeline(
                 else if (action === "reply") content = `[关系回评:${msg.mediaData?.spaceReplyTo || "对方"}:${label}]`;
                 else if (action === "relight") content = "[关系打卡重燃]";
                 else if (action === "checkin") content = label ? `[关系打卡:${label}]` : "[关系打卡]";
+                else if (action === "nudge_checkin" || action === "remind_checkin") content = "[关系催打卡]";
                 else if (action === "anniversary") content = `[关系纪念日:${label}:${msg.mediaData?.anniversaryDate || ""}]`;
+                else if (action === "anniversary_countdown") content = `[关系纪念日倒计时:${label}]`;
                 else content = `[关系动态:${label}]`;
             }
             else if (msg.mediaType === "poke") content = `[我拍了拍${msg.mediaData?.pokeTarget || ""}]`;

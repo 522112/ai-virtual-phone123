@@ -1265,7 +1265,10 @@ function formatRichMediaForHistoryInner(msg: ChatMessage, userName: string, char
             if (action === "reply") return `[关系回评:${d?.spaceReplyTo || "对方"}:${label}]`;
             if (action === "relight") return "[关系打卡重燃]";
             if (action === "checkin") return label ? `[关系打卡:${label}]` : "[关系打卡]";
+            if (action === "nudge_checkin") return "[关系催打卡]";
+            if (action === "remind_checkin") return "[关系催打卡]";
             if (action === "anniversary") return `[关系纪念日:${label}:${d?.anniversaryDate || ""}]`;
+            if (action === "anniversary_countdown") return `[关系纪念日倒计时:${label}]`;
             return `[关系动态:${label}]`;
         }
         default:

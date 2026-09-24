@@ -17,6 +17,7 @@ import {
   addRelationshipComment,
   addRelationshipPost,
   anniversaryCountdown,
+  buildCheckinNudgeCard,
   checkinStreakForBinding,
   daysTogether,
   dissolveRelationship,
@@ -32,6 +33,7 @@ import {
   removeAnniversary,
   toggleRelationshipPostLike,
 } from "@/lib/relationship-storage";
+import type { RelationshipSpaceCard } from "@/lib/relationship-storage";
 import type { RelationshipBinding, RelationshipComment, RelationshipPost } from "@/lib/relationship-types";
 
 type TabKey = "feed" | "checkin" | "days";
@@ -62,6 +64,7 @@ export function RelationshipSpace({
   onNotice,
   onDissolved,
   onPersonaNudge,
+  onSpaceCard,
 }: {
   relationshipId: string;
   character: Character | null;
@@ -69,7 +72,8 @@ export function RelationshipSpace({
   onClose: () => void;
   onNotice: (text: string) => void;
   onDissolved?: (binding: RelationshipBinding) => void;
-  onPersonaNudge?: (kind: "checkin" | "anniversary") => void;
+  onPersonaNudge?: (kind: "checkin" | "anniversary" | "nudge_checkin") => void;
+  onSpaceCard?: (card: RelationshipSpaceCard, role: "user" | "assistant") => void;
 }) {
   const { binding, posts, tick } = useRelationship(relationshipId);
   const [tab, setTab] = useState<TabKey>("feed");
@@ -233,6 +237,12 @@ export function RelationshipSpace({
             characterName={character?.name || "对方"}
             onNotice={onNotice}
             onPersonaNudge={onPersonaNudge}
+            onNudgePartner={() => {
+              onSpaceCard?.(buildCheckinNudgeCard(binding, character?.name || "对方"), "user");
+              onPersonaNudge?.("nudge_checkin");
+              onNotice("已催对方打卡");
+              onClose();
+            }}
           />
         )}
         {tab === "days" && (
@@ -627,12 +637,14 @@ function RelationshipCheckinPane({
   characterName,
   onNotice,
   onPersonaNudge,
+  onNudgePartner,
 }: {
   binding: RelationshipBinding;
   userId: string;
   characterName: string;
   onNotice: (text: string) => void;
-  onPersonaNudge?: (kind: "checkin" | "anniversary") => void;
+  onPersonaNudge?: (kind: "checkin" | "anniversary" | "nudge_checkin") => void;
+  onNudgePartner?: () => void;
 }) {
   const checked = hasCheckedInToday(binding.id, userId, "user");
   const partnerChecked = hasCheckedInToday(binding.id, binding.characterId, "character");
@@ -680,6 +692,11 @@ function RelationshipCheckinPane({
         >
           {checked ? "已打卡" : "立即打卡"}
         </button>
+        {!waitingRelight && !partnerChecked ? (
+          <button type="button" className="rel-space-primary" onClick={onNudgePartner}>
+            催{characterName}打卡
+          </button>
+        ) : null}
       </div>
       <ul className="rel-checkin-list">
         {checkins.map(item => (

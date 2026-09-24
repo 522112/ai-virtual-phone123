@@ -103,6 +103,7 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
         case "accept_relationship":
         case "decline_relationship":
         case "dissolve_relationship":
+        case "relationship_space":
             return <RelationshipInviteBubble msg={msg} charName={charName} userName={userName} onAction={onRelationshipAction} />;
         case "contact_card":
             return <ContactCardBubble msg={msg} characterId={characterId} />;
@@ -759,38 +760,66 @@ function RelationshipInviteBubble({
         || parseRelationshipKindLabel(msg.mediaData?.label)
         || "couple";
     const meta = RELATIONSHIP_KIND_META[kind];
+    const spaceAction = msg.mediaType === "relationship_space" ? msg.mediaData?.spaceAction : undefined;
     const dissolved = msg.mediaType === "dissolve_relationship";
     const status = dissolved
         ? "dissolved"
-        : msg.mediaType === "accept_relationship"
+        : msg.mediaType === "accept_relationship" || Boolean(spaceAction)
             ? "received"
             : msg.mediaType === "decline_relationship"
                 ? "declined"
                 : (msg.mediaData?.status || "pending");
     const incoming = msg.role === "assistant" && status === "pending" && msg.mediaType === "relationship_invite";
     const sender = msg.role === "user" ? (userName || "我") : (msg.senderName || charName || "对方");
-    const title = dissolved
+    const spaceCopy = spaceAction === "nudge_checkin"
+        ? { title: "该打卡啦", desc: `${sender}催你今天打个卡`, kicker: "打卡催促", statusText: "去打卡" }
+        : spaceAction === "remind_checkin"
+            ? { title: "记得打卡", desc: `${sender}提醒你也来打卡`, kicker: "打卡提醒", statusText: "去打卡" }
+            : spaceAction === "checkin"
+                ? { title: `${sender}打卡了`, desc: msg.mediaData?.label || "今天的打卡已记下", kicker: "关系打卡", statusText: "已打卡" }
+                : spaceAction === "anniversary_countdown" || spaceAction === "anniversary"
+                    ? {
+                        title: msg.mediaData?.label || "纪念日",
+                        desc: msg.content || "纪念日倒计时",
+                        kicker: "纪念日倒计时",
+                        statusText: "看倒计时",
+                    }
+                    : {
+                        title: msg.mediaData?.label || "空间动态",
+                        desc: msg.content || "点卡片进入双方空间",
+                        kicker: "关系空间",
+                        statusText: "进入空间",
+                    };
+    const title = spaceAction
+        ? spaceCopy.title
+        : dissolved
         ? `已解除${relationshipKindLabel(kind)}关系`
         : msg.mediaType === "accept_relationship"
             ? `已成为${relationshipKindLabel(kind)}`
             : msg.mediaType === "decline_relationship"
                 ? `已拒绝成为${relationshipKindLabel(kind)}`
                 : meta.inviteTitle;
-    const desc = dissolved
+    const desc = spaceAction
+        ? spaceCopy.desc
+        : dissolved
         ? "双方空间已关闭"
         : msg.mediaType === "accept_relationship"
             ? "点卡片进入双方空间"
             : msg.mediaType === "decline_relationship"
                 ? `${sender}没有接受这次邀约`
                 : `${sender}邀请绑定${meta.label}`;
-    const statusText = dissolved
+    const statusText = spaceAction
+        ? spaceCopy.statusText
+        : dissolved
         ? "已解除"
         : status === "received"
             ? "已同意"
             : status === "declined"
                 ? "已拒绝"
                 : incoming ? "待接收" : "等待对方接受";
-    const kicker = dissolved
+    const kicker = spaceAction
+        ? spaceCopy.kicker
+        : dissolved
         ? "关系解除"
         : msg.mediaType === "decline_relationship"
             ? "关系拒绝"

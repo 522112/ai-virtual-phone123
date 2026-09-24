@@ -1056,6 +1056,22 @@ export async function parseAndSaveResponse(
                 mediaData: p.mediaData,
                 messages: contextMessages,
             });
+            if (notice.cards.length > 0) {
+                for (const card of notice.cards) {
+                    filteredParts.push({
+                        content: card.desc,
+                        mediaType: "relationship_space",
+                        mediaData: {
+                            spaceAction: card.action,
+                            relationshipId: card.relationshipId,
+                            relationshipKind: card.relationshipKind,
+                            label: card.label || card.title,
+                            anniversaryDate: card.anniversaryDate,
+                        },
+                    });
+                }
+                continue;
+            }
             filteredParts.push({ content: notice.notice });
             continue;
         }
