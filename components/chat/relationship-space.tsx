@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Heart, MessageCircle, Plus, Trash2, X } from "lucide-react";
 import type { ChatMessage } from "@/lib/chat-storage";
 import type { Character } from "@/lib/character-types";
@@ -49,14 +49,6 @@ function useRelationship(relationshipId: string) {
   }, [relationshipId]);
 
   return { binding, posts, tick };
-}
-
-function buildChatExcerpt(messages: ChatMessage[]): string {
-  return messages
-    .filter(msg => (msg.role === "user" || msg.role === "assistant") && msg.content.trim() && !msg.mediaType)
-    .slice(-6)
-    .map(msg => `${msg.role === "user" ? "我" : "对方"}：${msg.content.trim().slice(0, 80)}`)
-    .join("\n");
 }
 
 export function RelationshipSpace({
@@ -185,7 +177,6 @@ export function RelationshipSpace({
       {composing && (
         <RelationshipCompose
           binding={binding}
-          messages={messages}
           userId={identity?.id || "user"}
           onClose={() => setComposing(false)}
           onNotice={onNotice}
@@ -443,89 +434,119 @@ function RelationshipPostCard({
 
 function RelationshipCompose({
   binding,
-  messages,
   userId,
   onClose,
   onNotice,
 }: {
   binding: RelationshipBinding;
-  messages: ChatMessage[];
   userId: string;
   onClose: () => void;
   onNotice: (text: string) => void;
 }) {
   const [text, setText] = useState("");
-  const [fromChat, setFromChat] = useState(false);
   const [photoAssetId, setPhotoAssetId] = useState<string | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const excerpt = useMemo(() => buildChatExcerpt(messages), [messages]);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  const canPublish = Boolean(text.trim() || photoAssetId);
+
+  const handlePublish = () => {
+    const content = text.trim();
+    if (!content && !photoAssetId) {
+      onNotice("写一点内容再发吧");
+      return;
+    }
+    addRelationshipPost({
+      relationshipId: binding.id,
+      authorType: "user",
+      authorId: userId,
+      content,
+      photoAssetId: photoAssetId || undefined,
+    });
+    onNotice("已发布到空间");
+    onClose();
+  };
 
   return (
-    <div className="rel-compose">
-      <header className="rel-space-nav">
-        <button type="button" className="rel-space-text-btn" onClick={onClose}>取消</button>
-        <span>新动态</span>
-        <button
-          type="button"
-          className="rel-space-text-btn"
-          data-primary=""
-          onClick={() => {
-            const content = text.trim();
-            if (!content && !photoAssetId && !(fromChat && excerpt)) {
-              onNotice("写一点内容再发吧");
-              return;
-            }
-            addRelationshipPost({
-              relationshipId: binding.id,
-              authorType: "user",
-              authorId: userId,
-              content,
-              photoAssetId: photoAssetId || undefined,
-              fromChat: fromChat && !!excerpt,
-              chatExcerpt: fromChat ? excerpt : undefined,
-            });
-            onNotice("已发布到空间");
-            onClose();
-          }}
-        >
-          发布
-        </button>
-      </header>
-      <textarea
-        className="rel-compose-text"
-        value={text}
-        onChange={e => setText(e.target.value)}
-        placeholder="写此刻的心情，或只是想说的话"
-        autoFocus
-      />
-      <label className="rel-compose-from-chat">
-        <input type="checkbox" checked={fromChat} onChange={e => setFromChat(e.target.checked)} />
-        来自当前聊天的感触
-      </label>
-      {fromChat && excerpt ? <pre className="rel-feed-excerpt">{excerpt}</pre> : null}
-      {fromChat && !excerpt ? <p className="rel-compose-hint">最近几条文字消息会附在动态上</p> : null}
-      {photoPreview ? <img src={photoPreview} alt="" className="rel-post-photo" /> : null}
-      <div className="rel-compose-tools">
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={async e => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (!file) return;
-            const assetId = await saveChatImageToIndexedDB(file);
-            const preview = await getChatImageFromIndexedDB(assetId);
-            setPhotoAssetId(assetId);
-            setPhotoPreview(preview);
-          }}
-        />
-        <button type="button" className="rel-space-primary" onClick={() => fileRef.current?.click()}>添加照片</button>
-        {photoAssetId ? (
-          <button type="button" className="rel-space-text-btn" onClick={() => { setPhotoAssetId(null); setPhotoPreview(null); }}>去掉照片</button>
-        ) : null}
+    <div className="modal-overlay" data-ui="modal" role="presentation" onClick={onClose}>
+      <div
+        className="compose-modal"
+        data-ui="modal-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="新动态"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="compose-modal-header">
+          <button type="button" onClick={onClose} className="compose-header-icon" aria-label="取消">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <span className="compose-modal-title">新动态</span>
+          <button type="button" onClick={handlePublish} disabled={!canPublish} className="compose-header-icon compose-header-send" aria-label="发表">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </div>
+        <div className="compose-modal-body">
+          <div className="compose-top-area">
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="这一刻的想法..."
+              className="compose-textarea"
+            />
+            <div className="compose-media-grid">
+              {photoPreview ? (
+                <div className="compose-photo-block-preview">
+                  <img src={photoPreview} alt="" />
+                  <button
+                    type="button"
+                    onClick={() => { setPhotoAssetId(null); setPhotoPreview(null); }}
+                    className="ui-close-sm compose-photo-remove"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => fileRef.current?.click()} className="compose-photo-block">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async e => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                const assetId = await saveChatImageToIndexedDB(file);
+                const preview = await getChatImageFromIndexedDB(assetId);
+                setPhotoAssetId(assetId);
+                setPhotoPreview(preview);
+              }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

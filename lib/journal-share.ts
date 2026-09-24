@@ -19,19 +19,44 @@ function firstImage(page?: JournalPage): string {
   return page?.blocks.find(block => block.type === "image")?.src || "";
 }
 
+function sideExcerpt(page: JournalPage, side: "left" | "right"): string {
+  return page.blocks
+    .filter(block => (block.side || (block.author === "character" ? "right" : "left")) === side)
+    .map(block => {
+      if (block.type === "text") return block.text.trim();
+      if (block.type === "clip") return block.text.trim();
+      if (block.type === "image") return block.caption?.trim() || "";
+      if (block.type === "stamp") return block.note?.trim() || "";
+      return "";
+    })
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 90);
+}
+
 export function buildJournalPageCardHtml(book: JournalBook, page: JournalPage): string {
   const image = firstImage(page);
-  const excerpt = formatJournalPagePlainText(page).split("\n").slice(2).join(" ").slice(0, 180);
+  const left = sideExcerpt(page, "left");
+  const right = sideExcerpt(page, "right");
   return `
-<section style="margin:0;padding:16px 16px 14px;border-radius:18px;background:linear-gradient(180deg,#fffdf8,#f6f1e8);color:#2b2722;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:11px;letter-spacing:0.12em;opacity:0.55;">
+<section style="margin:0;padding:14px 14px 12px;border-radius:18px;background:linear-gradient(180deg,#fffdf8,#f6f1e8);color:#2b2722;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:11px;letter-spacing:0.12em;opacity:0.55;">
     <span>${book.kind === "couple" ? "COUPLE JOURNAL" : "JOURNAL"}</span>
     <span>${escapeHtml(page.dateLabel || "")}</span>
   </div>
-  <h3 style="margin:0 0 8px;font-size:18px;line-height:1.35;">${escapeHtml(page.title || book.title)}</h3>
+  <h3 style="margin:0 0 6px;font-size:17px;line-height:1.35;">${escapeHtml(page.title || book.title)}</h3>
   <p style="margin:0 0 10px;font-size:12px;opacity:0.62;">来自《${escapeHtml(book.title)}》</p>
-  ${image ? `<img src="${image}" alt="" style="width:100%;height:148px;object-fit:cover;border-radius:12px;margin:0 0 10px;" />` : ""}
-  <p style="margin:0;font-size:13px;line-height:1.7;">${escapeHtml(excerpt || "一页手账。")}</p>
+  ${image ? `<img src="${image}" alt="" style="width:100%;height:120px;object-fit:cover;border-radius:10px;margin:0 0 10px;" />` : ""}
+  <div style="display:flex;gap:8px;">
+    <div style="flex:1;min-width:0;padding:8px;border-radius:8px;background:rgba(255,255,255,0.55);box-shadow:inset -1px 0 0 rgba(80,60,40,0.08);">
+      <div style="font-size:10px;letter-spacing:0.08em;opacity:0.5;margin-bottom:4px;">LEFT</div>
+      <p style="margin:0;font-size:12px;line-height:1.6;">${escapeHtml(left || "空白左页")}</p>
+    </div>
+    <div style="flex:1;min-width:0;padding:8px;border-radius:8px;background:rgba(255,255,255,0.55);">
+      <div style="font-size:10px;letter-spacing:0.08em;opacity:0.5;margin-bottom:4px;">RIGHT</div>
+      <p style="margin:0;font-size:12px;line-height:1.6;">${escapeHtml(right || "空白右页")}</p>
+    </div>
+  </div>
 </section>`;
 }
 
@@ -82,7 +107,7 @@ export function sendJournalShareToCharacter(input: {
         subtitle: input.book.title,
         body: body.slice(0, 400),
         html,
-        height: input.page ? 280 : 220,
+        height: input.page ? 300 : 220,
       },
     },
   });

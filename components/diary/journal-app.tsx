@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, Plus } from "lucide-react";
 
 import { ChatFallbackAvatar } from "@/components/chat/chat-fallback-avatar";
-import { JournalDoodlePad } from "./journal-doodle-pad";
+import { JournalEditBar, JournalFlipPreview, JournalOpenBook } from "./journal-spread";
 import { loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
 import { collectJournalClips } from "@/lib/journal-clips";
@@ -15,6 +15,7 @@ import {
 } from "@/lib/journal-engine";
 import { sendJournalShareToCharacter } from "@/lib/journal-share";
 import {
+  addJournalAnnotation,
   createCharacterDoodleStrokes,
   createJournalBlockId,
   createJournalBook,
@@ -29,8 +30,8 @@ import {
   updateJournalBook,
   updateJournalPage,
 } from "@/lib/journal-storage";
-import type { JournalAnnotation, JournalBlock, JournalBook, JournalBookKind, JournalClipCandidate, JournalPage, JournalStampKind } from "@/lib/journal-types";
-import { JOURNAL_COVER_COLORS, JOURNAL_STAMPS } from "@/lib/journal-types";
+import type { JournalAnnotation, JournalBlock, JournalBook, JournalBookKind, JournalClipCandidate, JournalPage, JournalSide } from "@/lib/journal-types";
+import { JOURNAL_COVER_COLORS } from "@/lib/journal-types";
 import { loadRelationshipBindings } from "@/lib/relationship-storage";
 
 type JournalAppProps = {
@@ -43,19 +44,6 @@ type JournalView =
   | { name: "books"; kind: JournalBookKind }
   | { name: "book"; bookId: string }
   | { name: "page"; bookId: string; pageId: string };
-
-const STAMP_LABEL: Record<JournalStampKind, string> = {
-  heart: "心",
-  star: "星",
-  flower: "花",
-  arrow: "箭",
-  underline: "线",
-  tape: "贴",
-};
-
-function JournalStampMark({ stamp }: { stamp: JournalStampKind }) {
-  return <span className={`journal-stamp journal-stamp-${stamp}`} aria-hidden="true" />;
-}
 
 function CharacterPicker({
   characters,
@@ -98,6 +86,9 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
   const [shareTarget, setShareTarget] = useState<{ bookId: string; pageId?: string } | null>(null);
   const [annotateTarget, setAnnotateTarget] = useState<{ bookId: string; pageId?: string } | null>(null);
   const [annotationCharId, setAnnotationCharId] = useState<string | null>(null);
+  const [activeSide, setActiveSide] = useState<JournalSide>("left");
+  const [previewBookId, setPreviewBookId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
   const [busy, setBusy] = useState("");
   const [clips, setClips] = useState<JournalClipCandidate[]>([]);
   const [clipOpen, setClipOpen] = useState(false);
@@ -173,7 +164,12 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
     const page = annotateTarget.pageId ? book.pages.find(item => item.id === annotateTarget.pageId) : undefined;
     setBusy("批注中");
     try {
-      await generateJournalAnnotation({ characterId, book, page });
+      await generateJournalAnnotation({
+        characterId,
+        book,
+        page,
+        side: annotateTarget.pageId ? activeSide : undefined,
+      });
       setAnnotationCharId(characterId);
       setAnnotateTarget(null);
       refresh();
@@ -188,6 +184,12 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
   const addBlock = (block: JournalBlock) => {
     if (!currentPage) return;
     updatePageBlocks([...currentPage.blocks, block]);
+  };
+
+  const addSideBlock = (block: JournalBlock) => {
+    const side = block.side
+      || (block.author === "character" ? "right" : (currentBook?.kind === "couple" ? "left" : activeSide));
+    addBlock({ ...block, side });
   };
 
   const renderHome = () => (
@@ -249,7 +251,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
   const renderAnnotations = (target: { bookId: string; pageId?: string }) => (
     <div className="journal-annotate">
       <div className="journal-annotate-head">
-        <span>页边批注</span>
+        <span>{target.pageId ? (activeSide === "left" ? "批左页" : "批右页") : "册边批注"}</span>
         <div className="journal-annotate-switch">
           <button type="button" data-active={!annotationCharId ? "" : undefined} onClick={() => setAnnotationCharId(null)}>全部</button>
           {annotationChars.map(character => (
@@ -265,9 +267,39 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         </div>
         <button type="button" onClick={() => setAnnotateTarget(target)}>请角色批注</button>
       </div>
+      {target.pageId ? (
+        <div className="journal-note-row">
+          <input
+            className="journal-rename-input"
+            value={noteDraft}
+            placeholder={activeSide === "left" ? "给左页写一句批注" : "给右页写一句批注"}
+            onChange={event => setNoteDraft(event.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const text = noteDraft.trim();
+              if (!text || !target.pageId) return;
+              addJournalAnnotation({
+                bookId: target.bookId,
+                pageId: target.pageId,
+                side: activeSide,
+                authorType: "user",
+                characterId: "user",
+                characterName: "我",
+                text,
+              });
+              setNoteDraft("");
+              refresh();
+            }}
+          >
+            写下
+          </button>
+        </div>
+      ) : null}
       {visibleAnnotations.length === 0 ? <p className="journal-empty">还没有批注</p> : visibleAnnotations.map(item => (
-        <p key={item.id} className="journal-annotation">
-          <b>{item.characterName}</b>
+        <p key={item.id} className={`journal-annotation${item.authorType === "user" ? " is-user" : ""}`}>
+          <b>{item.characterName}{item.side === "left" ? " · 左" : item.side === "right" ? " · 右" : ""}</b>
           {item.text}
         </p>
       ))}
@@ -297,6 +329,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         <button type="button" onClick={() => { setRenameBookId(book.id); setRenameValue(book.title); }}>重命名</button>
         <button type="button" onClick={() => { coverBookIdRef.current = book.id; coverInputRef.current?.click(); }}>换封面</button>
         <button type="button" onClick={() => setShareTarget({ bookId: book.id })}>分享整册</button>
+        <button type="button" onClick={() => setPreviewBookId(book.id)}>翻页预览</button>
       </div>
       {book.pages.length === 0 ? <p className="journal-empty">这一册还是空的</p> : book.pages.map(page => (
         <button key={page.id} type="button" className="journal-page-row" onClick={() => setView({ name: "page", bookId: book.id, pageId: page.id })}>
@@ -321,118 +354,93 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         />
         <span>{page.dateLabel}</span>
       </div>
-      <div className="journal-paper">
-        {page.blocks.map(block => (
-          <div key={block.id} className={`journal-block journal-block-${block.type}${block.author === "character" ? " is-char" : ""}`}>
-            {block.type === "text" ? (
-              <textarea
-                value={block.text}
-                placeholder={block.author === "character" ? "对方写下的一段" : "写在这一页上"}
-                onChange={event => {
-                  updatePageBlocks(page.blocks.map(item => item.id === block.id && item.type === "text" ? { ...item, text: event.target.value } : item));
-                }}
-              />
-            ) : null}
-            {block.type === "image" ? (
-              <figure>
-                <img src={block.src} alt="" />
-                {block.caption ? <figcaption>{block.caption}</figcaption> : null}
-              </figure>
-            ) : null}
-            {block.type === "doodle" ? (
-              <JournalDoodlePad
-                strokes={block.strokes}
-                disabled={block.author === "character"}
-                onChange={strokes => {
-                  updatePageBlocks(page.blocks.map(item => item.id === block.id && item.type === "doodle" ? { ...item, strokes } : item));
-                }}
-              />
-            ) : null}
-            {block.type === "stamp" ? (
-              <div className="journal-stamp-row">
-                <JournalStampMark stamp={block.stamp} />
-                <span>{block.note || STAMP_LABEL[block.stamp]}</span>
-              </div>
-            ) : null}
-            {block.type === "clip" ? (
-              <blockquote>
-                <small>{block.sourceLabel || "摘录"}</small>
-                <p>{block.text}</p>
-              </blockquote>
-            ) : null}
-            <button type="button" className="journal-block-remove" onClick={() => updatePageBlocks(page.blocks.filter(item => item.id !== block.id))} aria-label="删除这块">
-              <Trash2 size={14} />
-            </button>
-          </div>
-        ))}
-      </div>
-      <div className="journal-edit-bar">
-        <button type="button" onClick={() => addBlock({ id: createJournalBlockId(), type: "text", text: "", author: "user" })}>文字</button>
-        <button type="button" onClick={() => imageInputRef.current?.click()}>图片</button>
-        <button type="button" onClick={() => addBlock({ id: createJournalBlockId(), type: "doodle", strokes: [], author: "user" })}>涂鸦</button>
-        {JOURNAL_STAMPS.map(stamp => (
-          <button key={stamp} type="button" onClick={() => addBlock({ id: createJournalBlockId(), type: "stamp", stamp, author: "user" })}>
-            {STAMP_LABEL[stamp]}
-          </button>
-        ))}
-        {book.kind === "couple" && book.characterId ? (
-          <>
-            <button type="button" onClick={async () => {
-              setClipOpen(true);
-              setClips(await collectJournalClips(book.characterId!));
-            }}>摘录</button>
-            <button type="button" disabled={Boolean(busy)} onClick={async () => {
-              setBusy("对方在写");
-              try {
-                const text = await generateJournalCharacterWrite({ characterId: book.characterId!, book, page });
-                addBlock({ id: createJournalBlockId(), type: "text", text, author: "character", characterId: book.characterId });
-                notify("对方写了一段");
-              } catch (error) {
-                notify(error instanceof Error ? error.message : "对方没有写下来");
-              } finally {
-                setBusy("");
-              }
-            }}>请对方写</button>
-            <button type="button" disabled={Boolean(busy)} onClick={async () => {
-              setBusy("对方在涂");
-              try {
-                const doodle = await generateJournalCharacterStamp({ characterId: book.characterId!, book, page });
-                const extra: JournalBlock[] = [
-                  {
-                    id: createJournalBlockId(),
-                    type: "stamp",
-                    stamp: doodle.stamp,
-                    note: doodle.note,
-                    author: "character",
-                    characterId: book.characterId,
-                  },
-                  {
-                    id: createJournalBlockId(),
-                    type: "doodle",
-                    strokes: createCharacterDoodleStrokes(doodle.stamp),
-                    author: "character",
-                    characterId: book.characterId,
-                  },
-                ];
-                updatePageBlocks([...page.blocks, ...extra]);
-                notify("对方留下了一个涂鸦");
-              } catch (error) {
-                notify(error instanceof Error ? error.message : "对方没有涂成");
-              } finally {
-                setBusy("");
-              }
-            }}>请对方涂</button>
-          </>
-        ) : null}
-      </div>
+      <JournalOpenBook
+        book={book}
+        page={page}
+        annotations={visibleAnnotations}
+        activeSide={activeSide}
+        onActivateSide={setActiveSide}
+        onChangeBlock={block => {
+          updatePageBlocks(page.blocks.map(item => item.id === block.id ? block : item));
+        }}
+        onRemoveBlock={blockId => updatePageBlocks(page.blocks.filter(item => item.id !== blockId))}
+      />
+      <JournalEditBar
+        book={book}
+        busy={busy}
+        onAddText={() => addSideBlock({ id: createJournalBlockId(), type: "text", text: "", author: "user", side: activeSide === "right" && book.kind === "personal" ? "right" : "left" })}
+        onAddImage={() => imageInputRef.current?.click()}
+        onAddDoodle={() => addSideBlock({ id: createJournalBlockId(), type: "doodle", strokes: [], author: "user", side: activeSide === "right" && book.kind === "personal" ? "right" : "left" })}
+        onAddStamp={stamp => addSideBlock({ id: createJournalBlockId(), type: "stamp", stamp, author: "user", side: activeSide === "right" && book.kind === "personal" ? "right" : "left" })}
+        onClip={async () => {
+          if (!book.characterId) return;
+          setClipOpen(true);
+          setClips(await collectJournalClips(book.characterId));
+        }}
+        onInviteWrite={async () => {
+          if (!book.characterId) return;
+          setBusy("对方在写右页");
+          try {
+            const text = await generateJournalCharacterWrite({ characterId: book.characterId, book, page });
+            addSideBlock({
+              id: createJournalBlockId(),
+              type: "text",
+              text,
+              author: "character",
+              characterId: book.characterId,
+              side: "right",
+            });
+            setActiveSide("right");
+            notify("对方写在右页");
+          } catch (error) {
+            notify(error instanceof Error ? error.message : "对方没有写下来");
+          } finally {
+            setBusy("");
+          }
+        }}
+        onInviteDoodle={async () => {
+          if (!book.characterId) return;
+          setBusy("对方在涂右页");
+          try {
+            const doodle = await generateJournalCharacterStamp({ characterId: book.characterId, book, page });
+            updatePageBlocks([
+              ...page.blocks,
+              {
+                id: createJournalBlockId(),
+                type: "stamp",
+                stamp: doodle.stamp,
+                note: doodle.note,
+                author: "character",
+                characterId: book.characterId,
+                side: "right",
+              },
+              {
+                id: createJournalBlockId(),
+                type: "doodle",
+                strokes: createCharacterDoodleStrokes(doodle.stamp),
+                author: "character",
+                characterId: book.characterId,
+                side: "right",
+              },
+            ]);
+            setActiveSide("right");
+            notify("对方涂在右页");
+          } catch (error) {
+            notify(error instanceof Error ? error.message : "对方没有涂成");
+          } finally {
+            setBusy("");
+          }
+        }}
+      />
       {renderAnnotations({ bookId: book.id, pageId: page.id })}
       <div className="journal-toolbar">
-        <button type="button" onClick={() => setShareTarget({ bookId: book.id, pageId: page.id })}>分享这页</button>
+        <button type="button" onClick={() => setShareTarget({ bookId: book.id, pageId: page.id })}>分享这一摊</button>
+        <button type="button" onClick={() => setPreviewBookId(book.id)}>翻页预览</button>
         <button type="button" onClick={() => {
           deleteJournalPage(book.id, page.id);
           refresh();
           setView({ name: "book", bookId: book.id });
-        }}>删除这页</button>
+        }}>删除这一摊</button>
       </div>
     </main>
   );
@@ -496,7 +504,13 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           event.target.value = "";
           if (!file) return;
           const src = await imageFileToJournalDataUrl(file);
-          addBlock({ id: createJournalBlockId(), type: "image", src, author: "user" });
+          addSideBlock({
+            id: createJournalBlockId(),
+            type: "image",
+            src,
+            author: "user",
+            side: currentBook?.kind === "couple" ? "left" : activeSide,
+          });
         }}
       />
 
@@ -568,6 +582,14 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           }}
         />
       )}
+      {previewBookId && getJournalBook(previewBookId) ? (
+        <JournalFlipPreview
+          book={getJournalBook(previewBookId)!}
+          annotations={annotations}
+          onClose={() => setPreviewBookId(null)}
+        />
+      ) : null}
+
       {clipOpen && (
         <div className="journal-sheet-overlay" onClick={() => setClipOpen(false)}>
           <div className="journal-sheet" onClick={event => event.stopPropagation()}>
@@ -579,14 +601,15 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
                   type="button"
                   className="journal-clip-row"
                   onClick={() => {
-                    addBlock({
+                    addSideBlock({
                       id: createJournalBlockId(),
                       type: "clip",
                       source: clip.source,
                       text: clip.text,
                       sourceLabel: clip.sourceLabel,
                       author: "user",
-                    });
+                      side: "left",
+                    } as JournalBlock);
                     setClipOpen(false);
                   }}
                 >
