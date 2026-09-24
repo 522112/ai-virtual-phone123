@@ -2049,10 +2049,6 @@
   cursor: default;
 }
 
-.chat-app-custom-card {
-  width: min(240px, calc(100% - 8px));
-}
-
 .chat-forward-kicker {
   font-size: calc(11px * var(--app-text-scale, 1));
   opacity: 0.55;
@@ -2171,6 +2167,9 @@
 .chat-photo-album-nav button:disabled {
   opacity: 0.35;
 }
+
+.chat-app-custom-card {
+  width: min(240px, calc(100% - 8px));
   border-radius: 0;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.06);
