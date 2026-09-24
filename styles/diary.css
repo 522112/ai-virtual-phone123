@@ -4528,7 +4528,7 @@
 }
 
 .journal-spread-stage.is-preview {
-  height: 100%;
+  height: auto;
   flex: 1;
   min-height: 0;
   margin: 0;
@@ -4731,17 +4731,19 @@
 }
 
 .journal-flip-sheet {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 10px 8px 12px;
+  padding: 10px 8px 86px;
   border-radius: 0;
   background: #f7f1e6;
 }
 
 .journal-flip-head,
 .journal-flip-nav {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4765,7 +4767,22 @@
 }
 
 .journal-flip-nav {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 28px;
+  z-index: 3;
   justify-content: center;
+  min-height: 44px;
+  padding: 6px 8px;
+  margin-bottom: 0;
+  border-radius: 14px;
+  background: #efe6d6;
+  box-shadow: 0 4px 12px rgba(60, 42, 28, 0.08);
+}
+
+.journal-flip-nav button {
+  min-width: 76px;
 }
 
 .journal-flip-nav button[data-active] {
@@ -4774,15 +4791,17 @@
 }
 
 .journal-flip-book {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  overflow: hidden;
   transform-origin: center;
   transition: transform 0.42s ease;
 }
 
 .journal-flip-book .journal-spread-stage {
   width: 100%;
+  height: 100%;
 }
 
 .journal-flip-book.is-next {
