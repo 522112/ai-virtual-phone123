@@ -16,6 +16,7 @@ import {
 } from "@/lib/music-service";
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
+import { ListenTogetherControls } from "./listen-together";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
 
 const PLAY_MODE_ICONS: Record<PlayMode, { svg: string; label: string }> = {
@@ -642,6 +643,15 @@ export default function MusicPlayer() {
                     </svg>
                     <span>{commentTotal > 0 ? formatCount(commentTotal) : "评论"}</span>
                 </button>
+                <ListenTogetherControls
+                    track={{
+                        id: track.id,
+                        title: track.title,
+                        artist: track.artist || "",
+                        coverUrl: track.coverUrl,
+                    }}
+                    onNotice={showMusicToast}
+                />
                 <button className="mp-social-btn" onClick={openShareViaChat}>
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                         <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />

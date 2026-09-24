@@ -7775,7 +7775,15 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 8;
+  z-index: 12;
+}
+
+.chat-room-wrapper[data-space-open] .chat-input-bar,
+.chat-room-wrapper[data-space-open] [data-ui="input"],
+.chat-room-wrapper[data-space-open] .chat-plus-menu,
+.chat-room-wrapper[data-space-open] .chat-emoji-panel,
+.chat-room-wrapper[data-space-open] .chat-sticker-panel {
+  display: none !important;
 }
 
 .rel-invite-overlay {
