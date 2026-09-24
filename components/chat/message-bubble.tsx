@@ -1369,6 +1369,8 @@ function ImageBubble({
     const d = msg.mediaData;
     const label = d?.label || "照片";
     const rawUrl = msg.mediaUrl || "";
+    const albumRaws = [rawUrl, ...(d?.albumUrls || [])].filter(Boolean);
+    const isAlbum = albumRaws.length > 1;
     // 媒体维护压缩后 mediaUrl 是 media-store:// 引用，直接当 <img src> 会裂图，
     // 与 MediaFileBubble 相同：先解析为 object URL 再渲染。
     const [resolvedUrl, setResolvedUrl] = useState<string>(isMediaStoreRef(rawUrl) ? "" : rawUrl);
@@ -1382,6 +1384,9 @@ function ImageBubble({
     const isPending = regenerating || (!resolvedUrl && d?.imageGenerationStatus === "pending");
     const canRegenerate = Boolean(d?.label?.trim());
     const [showPreview, setShowPreview] = useState(false);
+    const [albumPage, setAlbumPage] = useState(0);
+    const [albumResolved, setAlbumResolved] = useState<string[]>([]);
+    const albumTouchX = useRef<number | null>(null);
 
     const [hasRef, setHasRef] = useState(() => hasCharacterReferenceImage(characterId));
     const [useReferenceDraft, setUseReferenceDraft] = useState(d?.useReferenceImage === true);
@@ -1399,6 +1404,32 @@ function ImageBubble({
         });
         return () => { if (revokeUrl) URL.revokeObjectURL(revokeUrl); };
     }, [rawUrl]);
+
+    useEffect(() => {
+        if (!isAlbum) {
+            setAlbumResolved([]);
+            return;
+        }
+        let cancelled = false;
+        const revokes: string[] = [];
+        Promise.all(albumRaws.map(async src => {
+            if (!src) return "";
+            if (src.startsWith("data:") || src.startsWith("http") || src.startsWith("blob:")) return src;
+            if (isMediaStoreRef(src)) {
+                const objUrl = await loadMediaObjectUrl(src);
+                if (objUrl) revokes.push(objUrl);
+                return objUrl || "";
+            }
+            const fromAsset = await getChatImageFromIndexedDB(src.startsWith("asset://") ? src.slice("asset://".length) : src).catch(() => "");
+            return fromAsset || src;
+        })).then(urls => {
+            if (!cancelled) setAlbumResolved(urls.filter(Boolean));
+        });
+        return () => {
+            cancelled = true;
+            revokes.forEach(url => URL.revokeObjectURL(url));
+        };
+    }, [isAlbum, albumRaws.join("|")]);
 
     const openPromptEditor = useCallback(() => {
         const latestHasRef = hasCharacterReferenceImage(characterId);
@@ -1472,6 +1503,47 @@ function ImageBubble({
             )}
         </>
     );
+
+    if (isAlbum && albumResolved.length > 0) {
+        const pageCount = Math.max(1, Math.ceil(albumResolved.length / 2));
+        const page = Math.min(albumPage, pageCount - 1);
+        const pair = albumResolved.slice(page * 2, page * 2 + 2);
+        return (
+            <>
+                <div
+                    className="chat-photo-album"
+                    onTouchStart={e => { albumTouchX.current = e.changedTouches[0]?.clientX ?? null; }}
+                    onTouchEnd={e => {
+                        const start = albumTouchX.current;
+                        albumTouchX.current = null;
+                        if (start == null) return;
+                        const dx = (e.changedTouches[0]?.clientX ?? start) - start;
+                        if (dx < -36) setAlbumPage(n => Math.min(pageCount - 1, n + 1));
+                        if (dx > 36) setAlbumPage(n => Math.max(0, n - 1));
+                    }}
+                >
+                    <div className="chat-photo-album-page">
+                        {pair.map((url, index) => (
+                            <button
+                                key={`${page}-${index}`}
+                                type="button"
+                                className="chat-photo-album-slot"
+                                onClick={e => { e.stopPropagation(); setResolvedUrl(url); setShowPreview(true); }}
+                            >
+                                <img src={url} alt="" />
+                            </button>
+                        ))}
+                    </div>
+                    <div className="chat-photo-album-nav">
+                        <button type="button" disabled={page <= 0} onClick={e => { e.stopPropagation(); setAlbumPage(n => Math.max(0, n - 1)); }}>左</button>
+                        <span>{page + 1}/{pageCount}</span>
+                        <button type="button" disabled={page >= pageCount - 1} onClick={e => { e.stopPropagation(); setAlbumPage(n => Math.min(pageCount - 1, n + 1)); }}>右</button>
+                    </div>
+                </div>
+                {previewAndDialog}
+            </>
+        );
+    }
 
     if (resolvedUrl) {
         return (

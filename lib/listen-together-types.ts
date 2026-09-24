@@ -5,6 +5,7 @@ export type ListenTogetherTrack = {
   title: string;
   artist: string;
   coverUrl?: string;
+  lyrics?: string;
 };
 
 export type ListenTogetherMessage = {

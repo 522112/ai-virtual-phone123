@@ -194,6 +194,15 @@
 
 /* ── Dynamic Island (live activities) ── */
 
+.phone-island-music-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 209;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
 .phone-dynamic-island {
   position: absolute;
   top: 12px;

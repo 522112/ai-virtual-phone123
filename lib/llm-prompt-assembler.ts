@@ -172,7 +172,9 @@ function isImageGenerationMediaMessage(msg: ChatMessage): boolean {
 function formatPhotoDirective(msg: ChatMessage, prefix = ""): string {
     const description = msg.mediaData?.label?.trim() || "图片";
     const mode = msg.mediaData?.useReferenceImage === true ? "使用参考图" : "不使用参考图";
-    return `${prefix}[照片:${mode}:${description}]`;
+    const albumCount = 1 + (msg.mediaData?.albumUrls?.length || 0);
+    const album = albumCount > 1 ? `一组${albumCount}张照片` : "照片";
+    return `${prefix}[${album}:${mode}:${description}]`;
 }
 
 function formatImageGenerationDirective(msg: ChatMessage, prefix = ""): string {
@@ -192,9 +194,11 @@ function getPromptVisionImageUrl(msg: ChatMessage): string | undefined {
 
 function formatDirectVisionBody(msg: ChatMessage, userName: string, charName: string): string {
     if (msg.mediaType === "sticker") return formatRichMediaForHistory(msg, userName, charName);
-    return isImageGenerationMediaMessage(msg)
+    const body = isImageGenerationMediaMessage(msg)
         ? formatImageGenerationDirective(msg)
         : formatPhotoDirective(msg);
+    const from = msg.mediaData?.forwardedFromName?.trim();
+    return from ? `[转发自${from}] ${body}` : body;
 }
 
 function getAnnotatedSenderPrefix(body: string, msg: ChatMessage): string {
@@ -545,6 +549,8 @@ function pushChronologicalShortTermBlocks(params: {
             } else {
                 body = formatRichMediaForHistory(msg, resolvedUserName, characterName);
             }
+        } else if (msg.mediaData?.forwardedFromName && body) {
+            body = `[转发自${msg.mediaData.forwardedFromName}] ${body}`;
         }
 
         if (!body.trim() && !imageUrl) return;
@@ -1007,6 +1013,8 @@ export function assemblePromptPayload(input: AssemblerInput): LLMMessage[] {
                 } else {
                     body = formatRichMediaForHistory(msg, resolvedUserName, character?.name || "对方");
                 }
+            } else if (msg.mediaData?.forwardedFromName && body) {
+                body = `[转发自${msg.mediaData.forwardedFromName}] ${body}`;
             }
 
             if (!body.trim() && !imageUrl) return;
@@ -1134,6 +1142,12 @@ export function assemblePromptPayload(input: AssemblerInput): LLMMessage[] {
 
 /** Format a rich-media message as bracket text for LLM context. */
 export function formatRichMediaForHistory(msg: ChatMessage, userName: string, charName: string, isGroup?: boolean): string {
+    const formatted = formatRichMediaForHistoryInner(msg, userName, charName, isGroup);
+    const from = msg.mediaData?.forwardedFromName?.trim();
+    return from ? `[转发自${from}] ${formatted}` : formatted;
+}
+
+function formatRichMediaForHistoryInner(msg: ChatMessage, userName: string, charName: string, isGroup?: boolean): string {
     const d = msg.mediaData;
     switch (msg.mediaType) {
         case "red_packet": {
@@ -1249,6 +1263,7 @@ export function formatRichMediaForHistory(msg: ChatMessage, userName: string, ch
             if (action === "post_from_chat") return `[关系动态感触:${label}]`;
             if (action === "comment") return `[关系评论:${label}]`;
             if (action === "reply") return `[关系回评:${d?.spaceReplyTo || "对方"}:${label}]`;
+            if (action === "relight") return "[关系打卡重燃]";
             if (action === "checkin") return label ? `[关系打卡:${label}]` : "[关系打卡]";
             if (action === "anniversary") return `[关系纪念日:${label}:${d?.anniversaryDate || ""}]`;
             return `[关系动态:${label}]`;

@@ -116,6 +116,7 @@ function partToWeixinText(part: ParsedMessagePart, charName: string): string | n
     if (part.mediaType === "relationship_space") {
         const action = data.spaceAction;
         if (action === "comment" || action === "reply") return `${charName}评论了关系空间动态`;
+        if (action === "relight") return `${charName}重燃了打卡`;
         if (action === "checkin") return `${charName}在关系空间打了卡`;
         if (action === "anniversary") return `${charName}添加了纪念日`;
         return `${charName}在关系空间发布了动态`;

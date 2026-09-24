@@ -62,6 +62,10 @@ export type RelationshipBinding = {
   coverImage?: string;
   coverUpdatedBy?: "user" | "character";
   coverUpdatedAt?: string;
+  restoredFromId?: string;
+  originalAcceptedAt?: string;
+  restoredDissolvedAt?: string;
+  checkinReignitedAt?: string;
 };
 
 export type RelationshipPostLike = {
@@ -111,4 +115,6 @@ export type RelationshipAnniversary = {
   title: string;
   date: string;
   createdAt: string;
+  authorType?: "user" | "character";
+  authorId?: string;
 };

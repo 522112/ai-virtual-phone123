@@ -7,7 +7,8 @@ import { ChatFallbackAvatar } from "@/components/chat/chat-fallback-avatar";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
-import { generateListenTogetherReply } from "@/lib/listen-together-engine";
+import { generateListenTogetherReply, type ListenTogetherAction } from "@/lib/listen-together-engine";
+import { getMusicControlBridge } from "@/lib/music-control-bridge";
 import { buildListenTogetherCardHtml, sendListenTogetherShare } from "@/lib/listen-together-share";
 import {
   LISTEN_TOGETHER_UPDATED_EVENT,
@@ -50,17 +51,50 @@ function DuoAvatar({ src, alt, playing }: { src?: string; alt: string; playing: 
   );
 }
 
+function parseLyricLines(lyrics: string | undefined): { time: number; text: string }[] {
+  const raw = (lyrics || "").trim();
+  if (!raw) return [];
+  const lines: { time: number; text: string }[] = [];
+  for (const line of raw.split("\n")) {
+    const match = line.match(/\[(\d+):(\d+(?:\.\d+)?)\](.*)/);
+    if (match) {
+      lines.push({
+        time: parseInt(match[1], 10) * 60 + parseFloat(match[2]),
+        text: match[3].trim(),
+      });
+    }
+  }
+  if (lines.length > 0) {
+    lines.sort((a, b) => a.time - b.time);
+    return lines;
+  }
+  return raw.split("\n").map((text, index) => ({ time: index, text: text.trim() })).filter(item => item.text);
+}
+
 export function ListenTogetherDuoStage({
-  track,
+  lyrics,
+  currentTime,
   playing,
-  onOpenLyrics,
 }: {
-  track: ListenTogetherTrack;
+  track?: ListenTogetherTrack;
+  lyrics?: string;
+  currentTime: number;
   playing: boolean;
-  onOpenLyrics: () => void;
+  onOpenLyrics?: () => void;
 }) {
   const session = useActiveListenTogetherSession();
   const [tick, setTick] = useState(0);
+  const lyricsRef = useRef<HTMLDivElement>(null);
+  const parsed = useMemo(() => parseLyricLines(lyrics), [lyrics]);
+  const activeIdx = useMemo(() => {
+    if (parsed.length === 0) return -1;
+    if (!parsed.some(item => item.time > 0)) return Math.min(parsed.length - 1, Math.floor(currentTime));
+    let idx = 0;
+    for (let i = parsed.length - 1; i >= 0; i -= 1) {
+      if (currentTime >= parsed[i].time) return i;
+    }
+    return idx;
+  }, [parsed, currentTime]);
 
   useEffect(() => {
     const refresh = () => setTick(n => n + 1);
@@ -72,15 +106,22 @@ export function ListenTogetherDuoStage({
     };
   }, []);
 
+  useEffect(() => {
+    const root = lyricsRef.current;
+    if (!root || activeIdx < 0) return;
+    const el = root.children[activeIdx] as HTMLElement | undefined;
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeIdx]);
+
   if (!session) return null;
 
   const character = loadCharacters().find(item => item.id === session.characterId) || null;
-  const identity = resolveUserIdentity(session.characterId, "music");
+  const identity = resolveUserIdentity(session.characterId, "chat");
   const userName = identity?.name || "我";
 
   return (
-    <div className="lt-duo" onClick={onOpenLyrics} data-avatar-rev={tick}>
-      <div className="lt-duo-faces">
+    <div className="lt-duo" data-avatar-rev={tick} data-playing={playing ? "" : undefined}>
+      <div className="lt-duo-faces" data-playing={playing ? "" : undefined}>
         <DuoAvatar src={identity?.avatarUrl} alt={userName} playing={playing} />
         <span className="lt-duo-link" aria-hidden="true">
           <svg width="28" height="22" viewBox="0 0 28 22" fill="none">
@@ -90,23 +131,21 @@ export function ListenTogetherDuoStage({
             <path d="M20.5 8.2c1.6-1.7 4.2-1.5 5.4.4 1 1.6.4 3.6-1.1 4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
         </span>
-        <DuoAvatar src={character?.avatar} alt={session.characterName} playing={playing} />
+        <DuoAvatar src={character?.avatar || undefined} alt={session.characterName} playing={playing} />
       </div>
       <div className="lt-duo-caption">和{session.characterName}一起听</div>
-      <div className="lt-duo-now">
-        <span className="lt-duo-disc">
-          {track.coverUrl ? <img src={track.coverUrl} alt="" /> : (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
-              <path d="M9 18V6l12-2v12" />
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="16" r="3" />
-            </svg>
-          )}
-        </span>
-        <div>
-          <strong>{track.title}</strong>
-          <span>{track.artist || "正在听"}</span>
-        </div>
+      <div className="lt-duo-lyrics" ref={lyricsRef}>
+        {parsed.length === 0 ? (
+          <div className="lt-duo-lyric" data-active="">暂无歌词</div>
+        ) : parsed.map((line, index) => (
+          <div
+            key={`${line.time}-${index}`}
+            className="lt-duo-lyric"
+            {...(index === activeIdx ? { "data-active": "" } : Math.abs(index - activeIdx) === 1 ? { "data-near": "" } : {})}
+          >
+            {line.text || " "}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -120,7 +159,9 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const announcedTrackRef = useRef<string>("");
   const [playerRoot, setPlayerRoot] = useState<Element | null>(null);
+  const [avatarTick, setAvatarTick] = useState(0);
 
   useEffect(() => {
     setPlayerRoot(document.querySelector(".music-player"));
@@ -137,9 +178,64 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
   }, [refresh]);
 
   useEffect(() => {
+    const refreshAvatars = () => setAvatarTick(n => n + 1);
+    window.addEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
+    window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
+    return () => {
+      window.removeEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
+      window.removeEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
+    };
+  }, []);
+
+  const applyActions = useCallback(async (actions: ListenTogetherAction[]) => {
+    const bridge = getMusicControlBridge();
+    for (const action of actions) {
+      if (action.kind === "play") {
+        await bridge?.playByQuery(action.query);
+      } else if (action.kind === "skip") {
+        if (action.action === "prev") bridge?.prev();
+        else bridge?.next();
+      } else if (action.kind === "end") {
+        const active = getActiveListenTogetherSession();
+        if (active) {
+          const ended = endListenTogetherSession(active.id);
+          setResult(ended);
+          setPanel("result");
+          setSession(null);
+        }
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (!session || session.status !== "active") return;
     appendListenTogetherTrack(session.id, track);
   }, [session?.id, session?.status, track.id, track.title, track.artist, track.coverUrl]);
+
+  useEffect(() => {
+    if (!session || session.status !== "active") return;
+    if (!track.id || announcedTrackRef.current === track.id) return;
+    const first = !announcedTrackRef.current;
+    announcedTrackRef.current = track.id;
+    if (first) return;
+    let cancelled = false;
+    setBusy("正在换歌");
+    void generateListenTogetherReply({
+      characterId: session.characterId,
+      session,
+      currentTrack: track,
+      lyrics: track.lyrics,
+      trackChanged: true,
+    }).then(async reply => {
+      if (cancelled) return;
+      if (reply.text) appendListenTogetherMessage(session.id, { author: "character", text: reply.text });
+      await applyActions(reply.actions);
+      refresh();
+    }).catch(() => undefined).finally(() => {
+      if (!cancelled) setBusy("");
+    });
+    return () => { cancelled = true; };
+  }, [applyActions, session?.id, session?.status, track.id]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -165,15 +261,18 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
     });
     setSession(next);
     setPanel("chat");
+    announcedTrackRef.current = track.id;
     setBusy("正在接通");
     try {
-      const text = await generateListenTogetherReply({
+      const reply = await generateListenTogetherReply({
         characterId: character.id,
         session: next,
         currentTrack: track,
+        lyrics: track.lyrics,
         opening: true,
       });
-      appendListenTogetherMessage(next.id, { author: "character", text });
+      if (reply.text) appendListenTogetherMessage(next.id, { author: "character", text: reply.text });
+      await applyActions(reply.actions);
       refresh();
     } catch (error) {
       notify(error instanceof Error ? error.message : "对方还没开口");
@@ -198,8 +297,10 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
         session: latest,
         userText: text,
         currentTrack: track,
+        lyrics: track.lyrics,
       });
-      appendListenTogetherMessage(latest.id, { author: "character", text: reply });
+      if (reply.text) appendListenTogetherMessage(latest.id, { author: "character", text: reply.text });
+      await applyActions(reply.actions);
       refresh();
     } catch (error) {
       notify(error instanceof Error ? error.message : "这句没有发出去");
@@ -277,12 +378,22 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                   <strong>{track.title}</strong>
                   <span>{track.artist || "正在听"}</span>
                 </div>
-                <div className="lt-messages" ref={listRef}>
-                  {session.messages.length === 0 ? <p className="lt-empty">先跟对方说一句</p> : session.messages.map(item => (
-                    <div key={item.id} className={`lt-bubble${item.author === "user" ? " is-me" : ""}`}>
-                      {item.text}
-                    </div>
-                  ))}
+                <div className="lt-messages" ref={listRef} data-avatar-rev={avatarTick}>
+                  {session.messages.length === 0 ? <p className="lt-empty">先跟对方说一句</p> : session.messages.map(item => {
+                    const character = loadCharacters().find(entry => entry.id === session.characterId) || null;
+                    const identity = resolveUserIdentity(session.characterId, "chat");
+                    const mine = item.author === "user";
+                    const avatar = mine ? identity?.avatarUrl : character?.avatar;
+                    const alt = mine ? (identity?.name || "我") : session.characterName;
+                    return (
+                      <div key={item.id} className={`lt-row${mine ? " is-me" : ""}`}>
+                        <span className="lt-row-avatar">
+                          {avatar ? <img src={avatar} alt={alt} /> : <ChatFallbackAvatar alt={alt} />}
+                        </span>
+                        <div className={`lt-bubble${mine ? " is-me" : ""}`}>{item.text}</div>
+                      </div>
+                    );
+                  })}
                   {busy ? <div className="lt-busy">{busy}</div> : null}
                 </div>
                 <div className="lt-compose">

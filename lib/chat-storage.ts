@@ -248,9 +248,12 @@ export type ChatMessage = {
         appHistoryRole?: ChatMessageRole;
         relationshipKind?: "couple" | "bestie" | "buddy" | "bros";
         relationshipId?: string;
-        spaceAction?: "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary";
+        spaceAction?: "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary" | "relight";
         spaceReplyTo?: string;
         anniversaryDate?: string;
+        albumUrls?: string[];
+        forwardedFromName?: string;
+        forwardedFromSessionId?: string;
     };
     isTyping?: boolean; // temporary flag for UI rendering
     statusPanel?: string; // AI display-only status content from [状态栏] tags
@@ -411,7 +414,10 @@ export function getChatMessagePreview(msg: ChatMessage): string {
     }
     if (msg.mediaType === "image") {
         const label = msg.mediaData?.label?.trim();
-        return label ? `[图片] ${label}` : "[图片]";
+        const albumCount = 1 + (msg.mediaData?.albumUrls?.length || 0);
+        const prefix = msg.mediaData?.forwardedFromName ? `[转发自${msg.mediaData.forwardedFromName}] ` : "";
+        if (albumCount > 1) return `${prefix}[一组照片:${albumCount}张]${label ? ` ${label}` : ""}`;
+        return `${prefix}${label ? `[图片] ${label}` : "[图片]"}`;
     }
     if (msg.mediaType === "app_card") {
         const appName = msg.mediaData?.appName || "APP";

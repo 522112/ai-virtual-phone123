@@ -30,6 +30,7 @@ import { loadChatOfflineProjectionEntries } from "./chat-offline-storage";
 import { loadCheckPhoneProjectionEntries } from "./checkphone-storage";
 import { formatShoppingPaymentRequestHistory } from "./shopping-payment-request";
 import { loadCustomAppTimelineEntries } from "./custom-app-storage";
+import { loadListenTogetherSessions } from "./listen-together-storage";
 import {
     canCharacterSeeMomentPost,
     getVisibleMomentCommentsForCharacter,
@@ -46,7 +47,10 @@ import {
 function formatPhotoDirectiveForPrompt(msg: ChatMessage): string {
     const description = msg.mediaData?.label?.trim() || "图片";
     const mode = msg.mediaData?.useReferenceImage === true ? "使用参考图" : "不使用参考图";
-    return `[照片:${mode}:${description}]`;
+    const albumCount = 1 + (msg.mediaData?.albumUrls?.length || 0);
+    const album = albumCount > 1 ? `一组${albumCount}张照片` : "照片";
+    const forwarded = msg.mediaData?.forwardedFromName ? `[转发自${msg.mediaData.forwardedFromName}] ` : "";
+    return `${forwarded}[${album}:${mode}:${description}]`;
 }
 
 export type NativeTimelineEntry = {
@@ -341,6 +345,7 @@ export function loadNativeTimeline(
                 if (action === "post_from_chat") content = `[关系动态感触:${label}]`;
                 else if (action === "comment") content = `[关系评论:${label}]`;
                 else if (action === "reply") content = `[关系回评:${msg.mediaData?.spaceReplyTo || "对方"}:${label}]`;
+                else if (action === "relight") content = "[关系打卡重燃]";
                 else if (action === "checkin") content = label ? `[关系打卡:${label}]` : "[关系打卡]";
                 else if (action === "anniversary") content = `[关系纪念日:${label}:${msg.mediaData?.anniversaryDate || ""}]`;
                 else content = `[关系动态:${label}]`;
@@ -393,6 +398,10 @@ export function loadNativeTimeline(
                 }
             }
 
+            if (msg.mediaData?.forwardedFromName && content) {
+                content = `[转发自${msg.mediaData.forwardedFromName}] ${content}`;
+            }
+
             if (!content.trim()) continue;
 
             entries.push({
@@ -401,6 +410,23 @@ export function loadNativeTimeline(
                 sourceDetail: "direct",
                 timestamp: msg.createdAt,
                 content: `${msgLabel} ${sender}: ${content}`,
+            });
+        }
+    }
+
+    // ── Listen-together chat (into recent_chat / STM) ──
+    for (const listen of loadListenTogetherSessions()) {
+        if (listen.characterId !== characterId) continue;
+        for (const msg of listen.messages) {
+            if (options?.afterTimestamp && msg.createdAt <= options.afterTimestamp) continue;
+            const sender = msg.author === "user" ? userName : listen.characterName;
+            const msgLabel = formatPromptEventLabel("一起听", msg.createdAt, timeAware, timestampOptions);
+            entries.push({
+                id: msg.id,
+                sourceApp: "chat",
+                sourceDetail: "direct",
+                timestamp: msg.createdAt,
+                content: `${msgLabel} ${sender}: ${msg.text}`,
             });
         }
     }
