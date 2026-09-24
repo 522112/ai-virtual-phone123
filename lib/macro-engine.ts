@@ -79,6 +79,8 @@ export class MacroEngine {
     xiaohongshuUserPostContext: string = "";
     xiaohongshuCommentContext: string = "";
     xiaohongshuMentionContext: string = "";
+    douyinFeedContext: string = "";
+    douyinLiveContext: string = "";
     interviewTheme: string = "";
     interviewHostName: string = "";
     interviewGuests: string = "";
@@ -214,6 +216,8 @@ export class MacroEngine {
         if (body === "xiaohongshuUserPostContext") return this.xiaohongshuUserPostContext || "暂无用户小红书笔记";
         if (body === "xiaohongshuCommentContext") return this.xiaohongshuCommentContext || "暂无小红书评论上下文";
         if (body === "xiaohongshuMentionContext") return this.xiaohongshuMentionContext || "暂无小红书@上下文";
+        if (body === "douyinFeedContext") return this.douyinFeedContext || "暂无抖音推荐内容";
+        if (body === "douyinLiveContext") return this.douyinLiveContext || "暂无抖音直播上下文";
         if (body === "interviewTheme") return this.interviewTheme || "\x00TRIM\x00";
         if (body === "interviewHostName") return this.interviewHostName || "主持人";
         if (body === "interviewGuests") return this.interviewGuests || this.charName || "\x00TRIM\x00";

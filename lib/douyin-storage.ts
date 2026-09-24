@@ -1,16 +1,21 @@
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { resolveUserIdentity } from "./settings-storage";
+import { creditWalletBalance } from "./wallet-storage";
 import type {
   DouyinAuthor,
+  DouyinAuthorSource,
   DouyinComment,
   DouyinDanmaku,
   DouyinDmMessage,
   DouyinDmThread,
   DouyinLiveRoom,
+  DouyinPkState,
   DouyinSession,
+  DouyinSettings,
   DouyinState,
   DouyinVideo,
 } from "./douyin-types";
+import { DEFAULT_DOUYIN_SETTINGS } from "./douyin-types";
 
 export const DOUYIN_STATE_KEY = "ai_phone_douyin_state_v1";
 export const DOUYIN_UPDATED_EVENT = "douyin-state-updated";
@@ -35,12 +40,14 @@ function dispatchUpdated(): void {
   window.dispatchEvent(new CustomEvent(DOUYIN_UPDATED_EVENT));
 }
 
+const TONES = ["#ff6b9d", "#ff9f43", "#f5c542", "#54a0ff", "#5f27cd", "#10ac84", "#fe2c55", "#25f4ee"];
+
 const SEED_AUTHORS: DouyinAuthor[] = [
-  { id: "dy_a_aurora", name: "极光小七", handle: "aurora7", avatarTone: "#ff6b9d", bio: "夜景猎人", followers: 128000, following: 86 },
-  { id: "dy_a_chef", name: "深夜食堂", handle: "midnightsoup", avatarTone: "#ff9f43", bio: "一人食也可以很热闹", followers: 92000, following: 41 },
-  { id: "dy_a_cat", name: "橘座本座", handle: "orangecat", avatarTone: "#f5c542", bio: "喵了个咪", followers: 210000, following: 12 },
-  { id: "dy_a_city", name: "街角慢镜", handle: "slowcity", avatarTone: "#54a0ff", bio: "城市声景", followers: 64000, following: 203 },
-  { id: "dy_a_dance", name: "不绊脚", handle: "stepsoft", avatarTone: "#5f27cd", bio: "练舞日记", followers: 305000, following: 58 },
+  { id: "dy_a_aurora", name: "极光小七", handle: "aurora7", avatarTone: "#ff6b9d", bio: "夜景猎人", followers: 128000, following: 86, source: "seed" },
+  { id: "dy_a_chef", name: "深夜食堂", handle: "midnightsoup", avatarTone: "#ff9f43", bio: "一人食也可以很热闹", followers: 92000, following: 41, source: "seed" },
+  { id: "dy_a_cat", name: "橘座本座", handle: "orangecat", avatarTone: "#f5c542", bio: "喵了个咪", followers: 210000, following: 12, source: "seed" },
+  { id: "dy_a_city", name: "街角慢镜", handle: "slowcity", avatarTone: "#54a0ff", bio: "城市声景", followers: 64000, following: 203, source: "seed" },
+  { id: "dy_a_dance", name: "不绊脚", handle: "stepsoft", avatarTone: "#5f27cd", bio: "练舞日记", followers: 305000, following: 58, source: "seed" },
 ];
 
 function seedComments(videoId: string): DouyinComment[] {
@@ -59,6 +66,7 @@ function seedComments(videoId: string): DouyinComment[] {
     likeCount: 3 + index * 17,
     liked: false,
     createdAt: nowIso(),
+    authorType: "npc" as const,
   }));
 }
 
@@ -89,6 +97,7 @@ function seedVideos(): DouyinVideo[] {
       followed: false,
       comments,
       createdAt: nowIso(),
+      source: "seed" as const,
     };
   });
 }
@@ -133,13 +142,17 @@ function seedLiveRooms(): DouyinLiveRoom[] {
       viewers: 1860,
       coverTone: "#2d1b14",
       giftCoins: 320,
+      settledGiftCoins: 0,
       status: "live",
       startedAt: now,
+      hostType: "npc",
+      persona: "深夜食堂主播，爱边煮边聊",
       danmaku: [
-        { id: "dy_dk_1", text: "老板再来一碗", tone: "#fff", createdAt: now },
-        { id: "dy_dk_2", text: "香味隔着屏幕都闻到了", tone: "#25f4ee", createdAt: now },
-        { id: "dy_dk_3", text: "前方高能炒勺", tone: "#fe2c55", createdAt: now },
+        { id: "dy_dk_1", text: "老板再来一碗", tone: "#fff", createdAt: now, kind: "audience", authorName: "路人甲" },
+        { id: "dy_dk_2", text: "香味隔着屏幕都闻到了", tone: "#25f4ee", createdAt: now, kind: "audience", authorName: "夜猫" },
+        { id: "dy_dk_3", text: "前方高能炒勺", tone: "#fe2c55", createdAt: now, kind: "audience", authorName: "吃货" },
       ],
+      speakLines: ["今晚想吃什么跟我说"],
     },
     {
       id: "dy_live_2",
@@ -149,12 +162,16 @@ function seedLiveRooms(): DouyinLiveRoom[] {
       viewers: 4200,
       coverTone: "#1b1430",
       giftCoins: 980,
+      settledGiftCoins: 0,
       status: "live",
       startedAt: now,
+      hostType: "npc",
+      persona: "练舞区主播，喜欢带练",
       danmaku: [
-        { id: "dy_dk_4", text: "这段手位太丝滑了", tone: "#25f4ee", createdAt: now },
-        { id: "dy_dk_5", text: "老师再放慢一倍！", tone: "#fff", createdAt: now },
+        { id: "dy_dk_4", text: "这段手位太丝滑了", tone: "#25f4ee", createdAt: now, kind: "audience", authorName: "学员A" },
+        { id: "dy_dk_5", text: "老师再放慢一倍！", tone: "#fff", createdAt: now, kind: "audience", authorName: "学员B" },
       ],
+      speakLines: ["跟我一起，一二三四"],
     },
   ];
 }
@@ -169,12 +186,19 @@ function defaultSession(): DouyinSession {
     bio: "还没有简介",
     walletLinked: false,
     followingIds: [],
+    followers: 12,
+    persona: "普通抖音用户，喜欢随手拍日常",
   };
+}
+
+function defaultSettings(): DouyinSettings {
+  return { ...DEFAULT_DOUYIN_SETTINGS };
 }
 
 export function createDefaultDouyinState(): DouyinState {
   return {
     session: defaultSession(),
+    settings: defaultSettings(),
     authors: SEED_AUTHORS,
     videos: seedVideos(),
     threads: seedThreads(),
@@ -196,6 +220,26 @@ function normalizeComment(value: unknown): DouyinComment | null {
     likeCount: Number(item.likeCount) || 0,
     liked: item.liked === true,
     createdAt: cleanText(item.createdAt, 40) || nowIso(),
+    authorType: item.authorType === "character" || item.authorType === "user" || item.authorType === "npc" ? item.authorType : "npc",
+    characterId: typeof item.characterId === "string" ? item.characterId : undefined,
+  };
+}
+
+function normalizeSource(value: unknown): DouyinAuthorSource | undefined {
+  if (value === "seed" || value === "npc" || value === "character" || value === "user") return value;
+  return undefined;
+}
+
+function normalizePk(value: unknown): DouyinPkState | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Partial<DouyinPkState>;
+  return {
+    active: item.active !== false,
+    opponentName: cleanText(item.opponentName, 40) || "对手",
+    opponentTone: cleanText(item.opponentTone, 20) || "#fe2c55",
+    myScore: Math.max(0, Number(item.myScore) || 0),
+    opponentScore: Math.max(0, Number(item.opponentScore) || 0),
+    topic: cleanText(item.topic, 40) || "随便比一场",
   };
 }
 
@@ -219,6 +263,8 @@ function normalizeVideo(value: unknown): DouyinVideo | null {
     followed: item.followed === true,
     comments,
     createdAt: cleanText(item.createdAt, 40) || nowIso(),
+    source: normalizeSource(item.source),
+    characterId: typeof item.characterId === "string" ? item.characterId : undefined,
   };
 }
 
@@ -257,6 +303,9 @@ function normalizeLive(value: unknown): DouyinLiveRoom | null {
         tone: cleanText(d.tone, 20) || "#fff",
         createdAt: cleanText(d.createdAt, 40) || nowIso(),
         fromMe: d.fromMe === true,
+        authorName: cleanText(d.authorName, 40) || undefined,
+        kind: d.kind,
+        characterId: typeof d.characterId === "string" ? d.characterId : undefined,
       }))
     : [];
   return {
@@ -267,9 +316,52 @@ function normalizeLive(value: unknown): DouyinLiveRoom | null {
     viewers: Number(item.viewers) || 0,
     coverTone: cleanText(item.coverTone, 20) || "#1a1a2e",
     giftCoins: Number(item.giftCoins) || 0,
+    settledGiftCoins: Number(item.settledGiftCoins) || 0,
     danmaku,
     status: item.status === "ended" ? "ended" : "live",
     startedAt: cleanText(item.startedAt, 40) || nowIso(),
+    hostType: item.hostType === "user" || item.hostType === "character" || item.hostType === "npc" ? item.hostType : "npc",
+    characterId: typeof item.characterId === "string" ? item.characterId : undefined,
+    persona: cleanText(item.persona, 200) || undefined,
+    spriteAssetId: typeof item.spriteAssetId === "string" ? item.spriteAssetId : undefined,
+    speakLines: Array.isArray(item.speakLines)
+      ? item.speakLines.map(line => cleanText(line, 160)).filter(Boolean).slice(-12)
+      : [],
+    pk: normalizePk(item.pk),
+    viewerHints: Array.isArray(item.viewerHints)
+      ? item.viewerHints.map(hint => cleanText(hint, 80)).filter(Boolean).slice(0, 12)
+      : undefined,
+  };
+}
+
+function normalizeAuthor(value: unknown): DouyinAuthor | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Partial<DouyinAuthor>;
+  if (typeof item.id !== "string" || typeof item.name !== "string") return null;
+  return {
+    id: item.id,
+    name: cleanText(item.name, 40) || "创作者",
+    handle: cleanText(item.handle, 40) || "user",
+    avatarTone: cleanText(item.avatarTone, 20) || "#999",
+    bio: cleanText(item.bio, 120) || undefined,
+    followers: Number(item.followers) || 0,
+    following: Number(item.following) || 0,
+    source: normalizeSource(item.source) || "seed",
+    characterId: typeof item.characterId === "string" ? item.characterId : undefined,
+    persona: cleanText(item.persona, 200) || undefined,
+    spriteAssetId: typeof item.spriteAssetId === "string" ? item.spriteAssetId : undefined,
+  };
+}
+
+function normalizeSettings(raw: unknown): DouyinSettings {
+  const fallback = defaultSettings();
+  if (!raw || typeof raw !== "object") return fallback;
+  const item = raw as Partial<DouyinSettings>;
+  return {
+    participantCharacterIds: Array.isArray(item.participantCharacterIds)
+      ? item.participantCharacterIds.filter((id): id is string => typeof id === "string")
+      : [],
+    audienceDanmakuCount: Math.min(30, Math.max(5, Number(item.audienceDanmakuCount) || fallback.audienceDanmakuCount)),
   };
 }
 
@@ -289,9 +381,12 @@ function normalizeState(raw: unknown): DouyinState {
       followingIds: Array.isArray(sessionRaw.followingIds)
         ? sessionRaw.followingIds.filter((id): id is string => typeof id === "string")
         : [],
+      followers: Number(sessionRaw.followers) || fallback.session.followers,
+      persona: cleanText(sessionRaw.persona, 200) || fallback.session.persona,
     },
+    settings: normalizeSettings(item.settings),
     authors: Array.isArray(item.authors) && item.authors.length > 0
-      ? item.authors.filter((a): a is DouyinAuthor => Boolean(a && typeof a === "object" && typeof (a as DouyinAuthor).id === "string"))
+      ? item.authors.map(normalizeAuthor).filter(Boolean) as DouyinAuthor[]
       : fallback.authors,
     videos: Array.isArray(item.videos) && item.videos.length > 0
       ? item.videos.map(normalizeVideo).filter(Boolean) as DouyinVideo[]
@@ -325,7 +420,15 @@ export function saveDouyinState(state: DouyinState): DouyinState {
   return next;
 }
 
-export function loginDouyinAccount(input?: { nickname?: string; handle?: string }): DouyinState {
+export function updateDouyinSettings(patch: Partial<DouyinSettings>): DouyinState {
+  const state = loadDouyinState();
+  return saveDouyinState({
+    ...state,
+    settings: normalizeSettings({ ...state.settings, ...patch }),
+  });
+}
+
+export function loginDouyinAccount(input?: { nickname?: string; handle?: string; persona?: string }): DouyinState {
   const state = loadDouyinState();
   const identity = resolveUserIdentity();
   const next = saveDouyinState({
@@ -336,6 +439,7 @@ export function loginDouyinAccount(input?: { nickname?: string; handle?: string 
       nickname: cleanText(input?.nickname, 40) || identity?.name || state.session.nickname,
       handle: cleanText(input?.handle, 40) || state.session.handle,
       avatarTone: state.session.avatarTone,
+      persona: cleanText(input?.persona, 200) || state.session.persona,
     },
   });
   return next;
@@ -402,6 +506,7 @@ export function addDouyinComment(videoId: string, text: string): DouyinState {
     likeCount: 0,
     liked: false,
     createdAt: nowIso(),
+    authorType: "user",
   };
   return saveDouyinState({
     ...state,
@@ -447,22 +552,60 @@ export function markDouyinThreadRead(threadId: string): DouyinState {
   });
 }
 
-export function appendDouyinDanmaku(roomId: string, text: string, fromMe = false): DouyinState {
+export function appendDouyinDanmaku(
+  roomId: string,
+  text: string,
+  options?: { fromMe?: boolean; authorName?: string; kind?: DouyinDanmaku["kind"]; characterId?: string; tone?: string },
+): DouyinState {
   const trimmed = cleanText(text, 80);
   if (!trimmed) return loadDouyinState();
   const state = loadDouyinState();
+  const fromMe = options?.fromMe === true;
   const item: DouyinDanmaku = {
     id: makeId("dk"),
     text: trimmed,
-    tone: fromMe ? "#25f4ee" : "#ffffff",
+    tone: options?.tone || (fromMe ? "#25f4ee" : "#ffffff"),
     createdAt: nowIso(),
     fromMe,
+    authorName: cleanText(options?.authorName, 40) || (fromMe ? state.session.nickname : undefined),
+    kind: options?.kind || (fromMe ? "user" : "audience"),
+    characterId: options?.characterId,
   };
   return saveDouyinState({
     ...state,
     liveRooms: state.liveRooms.map(room => {
       if (room.id !== roomId) return room;
-      return { ...room, danmaku: [...room.danmaku.slice(-40), item] };
+      return { ...room, danmaku: [...room.danmaku.slice(-80), item] };
+    }),
+  });
+}
+
+export function appendDouyinDanmakuBatch(
+  roomId: string,
+  items: Array<{ text: string; authorName?: string; kind?: DouyinDanmaku["kind"]; characterId?: string; tone?: string }>,
+): DouyinState {
+  const state = loadDouyinState();
+  const mapped: DouyinDanmaku[] = items
+    .map(item => {
+      const text = cleanText(item.text, 80);
+      if (!text) return null;
+      return {
+        id: makeId("dk"),
+        text,
+        tone: item.tone || "#ffffff",
+        createdAt: nowIso(),
+        authorName: cleanText(item.authorName, 40) || "观众",
+        kind: item.kind || "audience",
+        characterId: item.characterId,
+      } satisfies DouyinDanmaku;
+    })
+    .filter(Boolean) as DouyinDanmaku[];
+  if (mapped.length === 0) return state;
+  return saveDouyinState({
+    ...state,
+    liveRooms: state.liveRooms.map(room => {
+      if (room.id !== roomId) return room;
+      return { ...room, danmaku: [...room.danmaku, ...mapped].slice(-120) };
     }),
   });
 }
@@ -479,22 +622,106 @@ export function addDouyinGift(roomId: string, coins: number): DouyinState {
   });
 }
 
-export function startMyDouyinLive(title: string): DouyinState {
+export function updateDouyinLiveRoom(
+  roomId: string,
+  patch: Partial<Pick<DouyinLiveRoom, "viewers" | "giftCoins" | "speakLines" | "pk" | "persona" | "title" | "spriteAssetId" | "viewerHints">>,
+): DouyinState {
   const state = loadDouyinState();
+  return saveDouyinState({
+    ...state,
+    liveRooms: state.liveRooms.map(room => {
+      if (room.id !== roomId) return room;
+      return {
+        ...room,
+        ...patch,
+        speakLines: patch.speakLines
+          ? [...(room.speakLines || []), ...patch.speakLines].map(line => cleanText(line, 160)).filter(Boolean).slice(-12)
+          : room.speakLines,
+      };
+    }),
+  });
+}
+
+export function startDouyinPk(roomId: string, opponentName: string, topic = "随便比一场"): DouyinState {
+  return updateDouyinLiveRoom(roomId, {
+    pk: {
+      active: true,
+      opponentName: cleanText(opponentName, 40) || "神秘对手",
+      opponentTone: TONES[Math.floor(Math.random() * TONES.length)],
+      myScore: 100 + Math.floor(Math.random() * 400),
+      opponentScore: 80 + Math.floor(Math.random() * 420),
+      topic: cleanText(topic, 40) || "随便比一场",
+    },
+  });
+}
+
+export function bumpDouyinPkScore(roomId: string, side: "me" | "opponent", amount = 10): DouyinState {
+  const state = loadDouyinState();
+  return saveDouyinState({
+    ...state,
+    liveRooms: state.liveRooms.map(room => {
+      if (room.id !== roomId || !room.pk?.active) return room;
+      return {
+        ...room,
+        pk: {
+          ...room.pk,
+          myScore: room.pk.myScore + (side === "me" ? amount : 0),
+          opponentScore: room.pk.opponentScore + (side === "opponent" ? amount : 0),
+        },
+      };
+    }),
+  });
+}
+
+export function endDouyinPk(roomId: string): DouyinState {
+  const state = loadDouyinState();
+  return saveDouyinState({
+    ...state,
+    liveRooms: state.liveRooms.map(room => (
+      room.id === roomId ? { ...room, pk: room.pk ? { ...room.pk, active: false } : null } : room
+    )),
+  });
+}
+
+function buildViewerHintsFromPersona(persona: string): string[] {
+  const base = [
+    "路人吃播粉",
+    "夜里刷手机的学生",
+    "同城围观群众",
+    "刷礼物的大哥",
+    "安静潜水党",
+    "起哄架秧子",
+    "认真提问的新人",
+    "老粉报到",
+  ];
+  const seed = persona.length + persona.charCodeAt(0);
+  return base.map((item, index) => `${item}·人设感${(seed + index) % 9}`).slice(0, 6);
+}
+
+export function startMyDouyinLive(title: string, options?: { spriteAssetId?: string }): DouyinState {
+  const state = loadDouyinState();
+  const persona = state.session.persona || "普通抖音用户";
+  const fame = Math.max(20, Math.min(8000, Math.round(state.session.followers * (0.2 + Math.random()))));
   const room: DouyinLiveRoom = {
     id: makeId("live"),
     hostName: state.session.nickname || "我",
     hostTone: state.session.avatarTone,
     title: cleanText(title, 80) || `${state.session.nickname}的直播间`,
-    viewers: 1,
+    viewers: Math.max(3, fame),
     coverTone: "#12121a",
     giftCoins: 0,
+    settledGiftCoins: 0,
     danmaku: [
-      { id: makeId("dk"), text: "来了来了", tone: "#fff", createdAt: nowIso() },
-      { id: makeId("dk"), text: "主播好", tone: "#25f4ee", createdAt: nowIso() },
+      { id: makeId("dk"), text: "来了来了", tone: "#fff", createdAt: nowIso(), kind: "audience", authorName: "早到的人" },
+      { id: makeId("dk"), text: "主播好", tone: "#25f4ee", createdAt: nowIso(), kind: "audience", authorName: "潜水员" },
     ],
     status: "live",
     startedAt: nowIso(),
+    hostType: "user",
+    persona,
+    spriteAssetId: options?.spriteAssetId,
+    speakLines: [],
+    viewerHints: buildViewerHintsFromPersona(persona),
   };
   return saveDouyinState({
     ...state,
@@ -503,33 +730,95 @@ export function startMyDouyinLive(title: string): DouyinState {
   });
 }
 
+export function settleDouyinLiveGifts(roomId: string): { state: DouyinState; credited: number } {
+  const state = loadDouyinState();
+  const room = state.liveRooms.find(item => item.id === roomId);
+  if (!room) return { state, credited: 0 };
+  const unsettled = Math.max(0, room.giftCoins - (room.settledGiftCoins || 0));
+  if (unsettled <= 0) return { state, credited: 0 };
+  if (room.hostType === "user" || room.id === state.myLiveRoomId) {
+    creditWalletBalance(
+      unsettled,
+      "抖音直播礼物入账",
+      `「${room.title}」礼物折合余额`,
+      "抖音",
+    );
+  }
+  const next = saveDouyinState({
+    ...state,
+    liveRooms: state.liveRooms.map(item => (
+      item.id === roomId ? { ...item, settledGiftCoins: item.giftCoins } : item
+    )),
+  });
+  return { state: next, credited: unsettled };
+}
+
 export function endMyDouyinLive(): DouyinState {
   const state = loadDouyinState();
   if (!state.myLiveRoomId) return state;
+  const roomId = state.myLiveRoomId;
+  const settled = settleDouyinLiveGifts(roomId);
   return saveDouyinState({
-    ...state,
-    liveRooms: state.liveRooms.map(room => (
-      room.id === state.myLiveRoomId ? { ...room, status: "ended" } : room
+    ...settled.state,
+    liveRooms: settled.state.liveRooms.map(room => (
+      room.id === roomId ? { ...room, status: "ended" } : room
     )),
     myLiveRoomId: null,
   });
 }
 
-export function publishDouyinVideo(caption: string): DouyinState {
+export function endDouyinLiveRoom(roomId: string): DouyinState {
+  const settled = settleDouyinLiveGifts(roomId);
+  return saveDouyinState({
+    ...settled.state,
+    liveRooms: settled.state.liveRooms.map(room => (
+      room.id === roomId ? { ...room, status: "ended" } : room
+    )),
+    myLiveRoomId: settled.state.myLiveRoomId === roomId ? null : settled.state.myLiveRoomId,
+  });
+}
+
+export function upsertDouyinAuthor(author: DouyinAuthor): DouyinState {
   const state = loadDouyinState();
+  const exists = state.authors.some(item => item.id === author.id);
+  return saveDouyinState({
+    ...state,
+    authors: exists
+      ? state.authors.map(item => (item.id === author.id ? { ...item, ...author } : item))
+      : [author, ...state.authors],
+  });
+}
+
+export function publishDouyinVideo(
+  caption: string,
+  options?: {
+    authorId?: string;
+    music?: string;
+    coverTone?: string;
+    likeCount?: number;
+    shareCount?: number;
+    comments?: DouyinComment[];
+    source?: DouyinAuthorSource;
+    characterId?: string;
+  },
+): DouyinState {
+  const state = loadDouyinState();
+  const comments = options?.comments || [];
   const video: DouyinVideo = {
     id: makeId("vid"),
-    authorId: "self",
+    authorId: options?.authorId || "self",
     caption: cleanText(caption, 240) || "分享日常生活",
-    music: "原声 · 我",
-    coverTone: "#161823",
-    likeCount: 0,
-    commentCount: 0,
-    shareCount: 0,
+    music: cleanText(options?.music, 80) || "原声 · 我",
+    coverTone: cleanText(options?.coverTone, 20) || "#161823",
+    likeCount: Math.max(0, Number(options?.likeCount) || 0),
+    commentCount: comments.length,
+    shareCount: Math.max(0, Number(options?.shareCount) || 0),
     liked: false,
     followed: false,
-    comments: [],
+    comments,
     createdAt: nowIso(),
+    source: options?.source || "user",
+    characterId: options?.characterId,
   };
   return saveDouyinState({
     ...state,
@@ -537,8 +826,40 @@ export function publishDouyinVideo(caption: string): DouyinState {
   });
 }
 
+export function replaceDouyinNpcLiveRooms(rooms: DouyinLiveRoom[], authors: DouyinAuthor[] = []): DouyinState {
+  const state = loadDouyinState();
+  const kept = state.liveRooms.filter(room => room.hostType === "user" || room.hostType === "character" || room.id === state.myLiveRoomId);
+  const authorMap = new Map(state.authors.map(item => [item.id, item]));
+  for (const author of authors) authorMap.set(author.id, author);
+  return saveDouyinState({
+    ...state,
+    authors: [...authorMap.values()],
+    liveRooms: [...rooms.filter(room => room.status === "live"), ...kept],
+  });
+}
+
+export function addDouyinLiveRoom(room: DouyinLiveRoom, author?: DouyinAuthor): DouyinState {
+  const state = loadDouyinState();
+  const authors = author
+    ? (state.authors.some(item => item.id === author.id)
+      ? state.authors.map(item => (item.id === author.id ? author : item))
+      : [author, ...state.authors])
+    : state.authors;
+  return saveDouyinState({
+    ...state,
+    authors,
+    liveRooms: [room, ...state.liveRooms.filter(item => item.id !== room.id)],
+  });
+}
+
+export function makeDouyinId(prefix: string): string {
+  return makeId(prefix);
+}
+
 export function formatDouyinCount(count: number): string {
   if (count >= 10000) return `${(count / 10000).toFixed(count >= 100000 ? 0 : 1).replace(/\.0$/, "")}万`;
   if (count >= 1000) return `${(count / 1000).toFixed(1).replace(/\.0$/, "")}k`;
   return String(Math.max(0, Math.round(count)));
 }
+
+export { TONES as DOUYIN_TONES };

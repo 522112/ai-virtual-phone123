@@ -117,6 +117,8 @@ export interface AssemblerInput {
     xiaohongshuUserPostContext?: string;
     xiaohongshuCommentContext?: string;
     xiaohongshuMentionContext?: string;
+    douyinFeedContext?: string;
+    douyinLiveContext?: string;
     interviewTheme?: string;
     interviewHostName?: string;
     interviewGuests?: string;
@@ -715,6 +717,8 @@ export function assemblePromptPayload(input: AssemblerInput): LLMMessage[] {
         engine.xiaohongshuUserPostContext = input.xiaohongshuUserPostContext ?? "";
         engine.xiaohongshuCommentContext = input.xiaohongshuCommentContext ?? "";
         engine.xiaohongshuMentionContext = input.xiaohongshuMentionContext ?? "";
+        engine.douyinFeedContext = input.douyinFeedContext ?? "";
+        engine.douyinLiveContext = input.douyinLiveContext ?? "";
         engine.interviewTheme = input.interviewTheme ?? "";
         engine.interviewHostName = input.interviewHostName ?? "";
         engine.interviewGuests = input.interviewGuests ?? "";

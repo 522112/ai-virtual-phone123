@@ -802,3 +802,153 @@
   place-items: center;
   cursor: pointer;
 }
+
+.dy-busy {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(37, 244, 238, 0.12);
+  color: var(--dy-cyan);
+  font-size: 12px;
+}
+
+.dy-npc-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dy-npc-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.dy-npc-thumb {
+  height: 96px;
+  display: grid;
+  place-items: center;
+  background: #222534 center/cover no-repeat;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.dy-npc-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.dy-npc-meta strong {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dy-char-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dy-chip {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--dy-text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dy-chip[data-on] {
+  border-color: rgba(254, 44, 85, 0.7);
+  background: rgba(254, 44, 85, 0.18);
+}
+
+.dy-link-btn {
+  border: 0;
+  background: transparent;
+  color: var(--dy-cyan);
+  font-size: 12px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.dy-link-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dy-pk-bar {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.dy-pk-bar strong {
+  display: block;
+  font-size: 12px;
+}
+
+.dy-pk-bar span {
+  display: block;
+  margin-top: 2px;
+  color: var(--dy-muted);
+  font-size: 11px;
+}
+
+.dy-pk-meter {
+  margin-top: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(254, 44, 85, 0.35);
+  overflow: hidden;
+}
+
+.dy-pk-meter i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--dy-cyan), #7ef9f4);
+}
+
+.dy-speak-line {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.dy-viewer-hints {
+  margin-top: 6px;
+  color: var(--dy-muted);
+  font-size: 11px;
+}
+
+.dy-live-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dy-live-tools button {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
