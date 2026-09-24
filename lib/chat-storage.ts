@@ -120,6 +120,7 @@ export type ChatMessage = {
         | "relationship_invite"
         | "accept_relationship"
         | "decline_relationship"
+        | "relationship_space"
         | "contact_card"
         | "app_card"
         | "tool_notice"
@@ -244,6 +245,9 @@ export type ChatMessage = {
         appHistoryRole?: ChatMessageRole;
         relationshipKind?: "couple" | "bestie" | "buddy" | "bros";
         relationshipId?: string;
+        spaceAction?: "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary";
+        spaceReplyTo?: string;
+        anniversaryDate?: string;
     };
     isTyping?: boolean; // temporary flag for UI rendering
     statusPanel?: string; // AI display-only status content from [状态栏] tags
@@ -363,6 +367,7 @@ export function getChatMessagePreview(msg: ChatMessage): string {
     if (msg.mediaType === "relationship_invite") return msg.content || "[关系邀请]";
     if (msg.mediaType === "accept_relationship") return msg.content || "[同意关系]";
     if (msg.mediaType === "decline_relationship") return msg.content || "[拒绝关系]";
+    if (msg.mediaType === "relationship_space") return msg.content || "[关系空间]";
 
     // Call messages: stored as assistant/user role, detect by content
     const callInit = msg.content?.match(/\[我向(.+?)发起了((?:语音|视频)通话)\]/);

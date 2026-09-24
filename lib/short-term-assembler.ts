@@ -332,6 +332,16 @@ export function loadNativeTimeline(
             else if (msg.mediaType === "relationship_invite") content = `[关系邀请:${msg.mediaData?.label || "关系"}]`;
             else if (msg.mediaType === "accept_relationship") content = "[同意关系]";
             else if (msg.mediaType === "decline_relationship") content = "[拒绝关系]";
+            else if (msg.mediaType === "relationship_space") {
+                const action = msg.mediaData?.spaceAction;
+                const label = msg.mediaData?.label || "";
+                if (action === "post_from_chat") content = `[关系动态感触:${label}]`;
+                else if (action === "comment") content = `[关系评论:${label}]`;
+                else if (action === "reply") content = `[关系回评:${msg.mediaData?.spaceReplyTo || "对方"}:${label}]`;
+                else if (action === "checkin") content = label ? `[关系打卡:${label}]` : "[关系打卡]";
+                else if (action === "anniversary") content = `[关系纪念日:${label}:${msg.mediaData?.anniversaryDate || ""}]`;
+                else content = `[关系动态:${label}]`;
+            }
             else if (msg.mediaType === "poke") content = `[我拍了拍${msg.mediaData?.pokeTarget || ""}]`;
             // Represent rich media as text when content is empty
             else if (!content && msg.mediaType) {

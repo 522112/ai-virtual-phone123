@@ -101,6 +101,7 @@ import {
     getRelationshipById,
     parseRelationshipKindLabel,
     relationshipKindLabel,
+    materializeRelationshipSpacePart,
 } from "@/lib/relationship-storage";
 import type { RelationshipKind } from "@/lib/relationship-types";
 
@@ -2942,6 +2943,16 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         status: "pending",
                     },
                 }, (message) => attachInviteMessageId(created.id, message.id));
+                continue;
+            }
+            if (p.mediaType === "relationship_space" && !session.isGroup) {
+                const notice = materializeRelationshipSpacePart({
+                    characterId: session.contactId,
+                    characterName: charN,
+                    mediaData: p.mediaData,
+                    messages,
+                });
+                pushFilteredPart({ content: notice.notice });
                 continue;
             }
             pushFilteredPart(p);

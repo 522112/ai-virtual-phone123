@@ -45,6 +45,7 @@ import {
     declineRelationship,
     parseRelationshipKindLabel,
     relationshipKindLabel,
+    materializeRelationshipSpacePart,
 } from "./relationship-storage";
 import {
     createPendingChatGeneratedImageData,
@@ -1010,6 +1011,16 @@ export async function parseAndSaveResponse(
             });
             continue;
         }
+        if (p.mediaType === "relationship_space" && sess && !sess.isGroup) {
+            const notice = materializeRelationshipSpacePart({
+                characterId: sess.contactId,
+                characterName: charName,
+                mediaData: p.mediaData,
+                messages: contextMessages,
+            });
+            filteredParts.push({ content: notice.notice });
+            continue;
+        }
         if (p.mediaType === "poke") {
             const pokeSender = (p.mediaData?.pokeSender === "我" ? charName : p.mediaData?.pokeSender) || charName;
             const pokeTarget = p.mediaData?.pokeTarget || "你";
@@ -1148,6 +1159,9 @@ export async function parseAndSaveResponse(
                         return null;
                     }),
             );
+        }
+        if (saved.mediaType === "relationship_invite" && saved.mediaData?.relationshipId) {
+            attachInviteMessageId(saved.mediaData.relationshipId, saved.id);
         }
         savedMessages.push(saved);
     }

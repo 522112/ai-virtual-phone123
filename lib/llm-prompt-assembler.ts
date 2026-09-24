@@ -1237,6 +1237,16 @@ export function formatRichMediaForHistory(msg: ChatMessage, userName: string, ch
             return "[同意关系]";
         case "decline_relationship":
             return "[拒绝关系]";
+        case "relationship_space": {
+            const action = d?.spaceAction;
+            const label = d?.label || "";
+            if (action === "post_from_chat") return `[关系动态感触:${label}]`;
+            if (action === "comment") return `[关系评论:${label}]`;
+            if (action === "reply") return `[关系回评:${d?.spaceReplyTo || "对方"}:${label}]`;
+            if (action === "checkin") return label ? `[关系打卡:${label}]` : "[关系打卡]";
+            if (action === "anniversary") return `[关系纪念日:${label}:${d?.anniversaryDate || ""}]`;
+            return `[关系动态:${label}]`;
+        }
         default:
             return msg.content;
     }

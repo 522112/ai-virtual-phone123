@@ -332,4 +332,132 @@ export function parseRelationshipKindLabel(raw: string | undefined): Relationshi
   return null;
 }
 
+export type RelationshipSpaceActionKind = "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary";
+
+export function buildRelationshipChatExcerpt(messages: Array<{ role: string; content?: string; mediaType?: string }>): string {
+  return messages
+    .filter(msg => (msg.role === "user" || msg.role === "assistant") && (msg.content || "").trim() && !msg.mediaType)
+    .slice(-6)
+    .map(msg => `${msg.role === "user" ? "我" : "对方"}：${(msg.content || "").trim().slice(0, 80)}`)
+    .join("\n");
+}
+
+export function applyCharacterSpaceAction(input: {
+  characterId: string;
+  characterName: string;
+  action: RelationshipSpaceActionKind;
+  content?: string;
+  replyToAuthor?: string;
+  anniversaryDate?: string;
+  chatExcerpt?: string;
+}): { notice: string } {
+  const binding = getRelationshipByCharacter(input.characterId);
+  if (!binding || binding.status !== "active") {
+    return { notice: `${input.characterName}想在关系空间里做点什么，但你们还没有绑定关系` };
+  }
+  const spaceLabel = relationshipKindLabel(binding.kind);
+  const content = (input.content || "").trim();
+
+  if (input.action === "post" || input.action === "post_from_chat") {
+    const excerpt = input.action === "post_from_chat" ? (input.chatExcerpt || "").trim() : "";
+    if (!content && !excerpt) {
+      return { notice: `${input.characterName}想发动态，但没有写下内容` };
+    }
+    addRelationshipPost({
+      relationshipId: binding.id,
+      authorType: "character",
+      authorId: input.characterId,
+      content,
+      fromChat: input.action === "post_from_chat" && !!excerpt,
+      chatExcerpt: excerpt || undefined,
+    });
+    return { notice: `${input.characterName}在${spaceLabel}空间发布了动态` };
+  }
+
+  if (input.action === "comment" || input.action === "reply") {
+    if (!content) return { notice: `${input.characterName}想评论，但没有写下内容` };
+    const latest = loadRelationshipPosts(binding.id)[0];
+    if (!latest) return { notice: `${input.characterName}想评论，但空间里还没有动态` };
+    const replyName = input.action === "reply" ? (input.replyToAuthor || "").trim() : "";
+    const comments = loadRelationshipComments(latest.id);
+    const replyTo = replyName
+      ? [...comments].reverse().find(item =>
+          item.replyToAuthorName === replyName
+          || (item.authorType === "character" && input.characterName === replyName)
+          || (item.authorType === "user" && (replyName === "我" || replyName === "你"))
+        )
+      : undefined;
+    addRelationshipComment({
+      postId: latest.id,
+      relationshipId: binding.id,
+      authorType: "character",
+      authorId: input.characterId,
+      content,
+      replyToCommentId: replyTo?.id,
+      replyToAuthorName: replyName || undefined,
+    });
+    return { notice: replyName ? `${input.characterName}回复了${replyName}` : `${input.characterName}评论了空间动态` };
+  }
+
+  if (input.action === "checkin") {
+    const result = addCheckin(binding.id, "character", input.characterId, content || undefined);
+    if ("error" in result) return { notice: `${input.characterName}想打卡，但${result.error}` };
+    return { notice: `${input.characterName}在${spaceLabel}空间打了卡` };
+  }
+
+  const result = addAnniversary(binding.id, content, input.anniversaryDate || "");
+  if ("error" in result) return { notice: `${input.characterName}想添加纪念日，但${result.error}` };
+  return { notice: `${input.characterName}添加了纪念日「${result.title}」` };
+}
+
+export function materializeRelationshipSpacePart(input: {
+  characterId: string;
+  characterName: string;
+  mediaData?: {
+    label?: string;
+    spaceAction?: RelationshipSpaceActionKind;
+    spaceReplyTo?: string;
+    anniversaryDate?: string;
+  };
+  messages?: Array<{ role: string; content?: string; mediaType?: string }>;
+}): { notice: string } {
+  const action = input.mediaData?.spaceAction || "post";
+  return applyCharacterSpaceAction({
+    characterId: input.characterId,
+    characterName: input.characterName,
+    action,
+    content: input.mediaData?.label,
+    replyToAuthor: input.mediaData?.spaceReplyTo,
+    anniversaryDate: input.mediaData?.anniversaryDate,
+    chatExcerpt: action === "post_from_chat" ? buildRelationshipChatExcerpt(input.messages || []) : undefined,
+  });
+}
+
+export function buildRelationshipSpaceInstruction(characterId: string | undefined, isGroup?: boolean): string {
+  if (isGroup || !characterId) return "";
+  const binding = getRelationshipByCharacter(characterId);
+  const inviteHint = "若想邀请对方，输出 [关系邀请:情侣]（或闺蜜/死党/基友）。邀请后对方会收到待接收卡片。一个人同时只能绑定一段关系。";
+  if (!binding) {
+    return `【关系空间】\n${inviteHint}`;
+  }
+  const label = relationshipKindLabel(binding.kind);
+  if (binding.status === "pending") {
+    if (binding.invitedBy === "user") {
+      return `【关系空间】\n对方邀请你成为「${label}」。同意输出 [同意关系]，拒绝输出 [拒绝关系]。不要重复发送邀请。一个人同时只能绑定一段关系。`;
+    }
+    return `【关系空间】\n你已向对方发出「${label}」邀请，等待对方在卡片上处理。不要重复发送邀请。`;
+  }
+  return [
+    `【关系空间】`,
+    `你们已绑定「${label}」，可在双方空间发动态、评论、打卡和纪念日。一个人同时只能绑定一段关系。`,
+    `若要在空间做事，可在回复中单独输出以下标记（可与聊天文字并存，不要向用户解释标记本身）：`,
+    `[关系动态:内容] — 单纯发布一条动态`,
+    `[关系动态感触:内容] — 带着当前聊天的感触发布`,
+    `[关系评论:内容] — 评论空间里最近一条动态`,
+    `[关系回评:对方名字:内容] — 回复某人的评论`,
+    `[关系打卡] 或 [关系打卡:一句话] — 今日打卡`,
+    `[关系纪念日:名称:YYYY-MM-DD] — 添加纪念日`,
+  ].join("\n");
+}
+
 export { relationshipKindLabel, RELATIONSHIP_KIND_META };
