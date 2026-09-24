@@ -1242,24 +1242,24 @@ export function ChatSettingsPanel({
                                     </label>
                                 </div>
                                 <div className="chat-offline-output-styles" role="group" aria-label="线下文风">
-                                    {OFFLINE_WRITING_STYLE_OPTIONS.map(option => {
-                                        const style = describeOfflineWritingStyle(option.id, offlineWritingStyleCustom);
-                                        return (
-                                            <button
-                                                key={option.id}
-                                                type="button"
-                                                className="chat-offline-output-style-card"
-                                                data-active={offlineWritingStyleId === option.id ? "" : undefined}
-                                                onClick={() => {
-                                                    setOfflineWritingStyleId(option.id);
-                                                    setOfflineOutputHint("");
-                                                }}
-                                            >
-                                                <span className="chat-offline-output-style-name">{style.name}</span>
-                                                <span className="chat-offline-output-style-rule">{style.rules}</span>
-                                            </button>
-                                        );
-                                    })}
+                                    {OFFLINE_WRITING_STYLE_OPTIONS.map(option => (
+                                        <button
+                                            key={option.id}
+                                            type="button"
+                                            className="chat-offline-output-style-chip"
+                                            data-active={offlineWritingStyleId === option.id ? "" : undefined}
+                                            onClick={() => {
+                                                setOfflineWritingStyleId(option.id);
+                                                setOfflineOutputHint("");
+                                            }}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="chat-offline-output-style-detail">
+                                    <span className="chat-offline-output-style-name">{selectedOfflineStyle.name}</span>
+                                    <span className="chat-offline-output-style-rule">{selectedOfflineStyle.rules}</span>
                                 </div>
                                 {offlineWritingStyleId === OFFLINE_WRITING_STYLE_CUSTOM && (
                                     <textarea
@@ -1273,10 +1273,6 @@ export function ChatSettingsPanel({
                                         rows={3}
                                     />
                                 )}
-                                <div className="chat-offline-output-preview">
-                                    <span className="chat-offline-output-preview-name">{selectedOfflineStyle.name}</span>
-                                    <span className="chat-offline-output-preview-rule">{selectedOfflineStyle.rules}</span>
-                                </div>
                                 <div className="chat-offline-output-actions">
                                     <button type="button" className="ui-btn ui-btn-success" onClick={saveOfflineOutputSettings}>
                                         保存

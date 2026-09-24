@@ -19,7 +19,7 @@ export function RelationshipInviteModal({
         <div className="rel-invite-handle" />
         <div className="rel-invite-head">
           <h3>邀请 {characterName}</h3>
-          <p>选择一段关系，对方收到待接收卡片后才能进入双方空间。一个人同时只能绑定一段关系。</p>
+          <p>选择一段关系，对方收到待接收卡片后才能进入双方空间。同一角色同时只能有一份关系申请。</p>
         </div>
         <div className="rel-invite-grid">
           {RELATIONSHIP_KINDS.map(kind => {
