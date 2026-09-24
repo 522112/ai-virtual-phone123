@@ -5728,7 +5728,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         }
         showChatToast(`已转发给 ${target.name}`);
         cancelMultiSelect();
-    }, [cancelMultiSelect, character?.name, selectedMessageIds, session.id, userIdentity?.name]);
+    }, [cancelMultiSelect, character?.name, selectedMessageIds, session.id, session.isGroup, userIdentity?.name]);
 
     const toggleMultiSelectedMessage = useCallback((messageId: string) => {
         setSelectedMessageIds(prev => {
