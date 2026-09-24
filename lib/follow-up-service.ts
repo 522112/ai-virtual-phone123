@@ -1239,7 +1239,7 @@ export async function parseAndSaveResponse(
         const isGroup = sess?.isGroup === true;
         const avatar = isGroup
             ? (options?.senderCharacterId
-                ? resolveCharacterDisplayAvatar(loadCharacters().find(c => c.id === options.senderCharacterId))
+                ? (loadCharacters().find(c => c.id === options.senderCharacterId)?.avatar || null)
                 : null)
             : (sess ? resolveCharacterDisplayAvatar(loadCharacters().find(c => c.id === sess.contactId)) : null);
         const bodyPrefix = isGroup && options?.senderName ? `${options.senderName}: ` : "";

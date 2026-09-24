@@ -1897,16 +1897,17 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
           content: `[我向${userName}发起了${callLabel}]`,
         });
       }
+      const callAvatar = isGroup ? (char?.avatar || null) : resolveCharacterDisplayAvatar(char);
       setIncomingCall({
         sessionId: detail.sessionId,
         type: detail.type,
         charName,
-        charAvatar: resolveCharacterDisplayAvatar(char),
+        charAvatar: callAvatar,
         isGroup,
       });
       sendBrowserNotification("来电", {
         body: `${charName} ${isGroup ? "群" : ""}${detail.type === "voice" ? "语音通话" : "视频通话"}`,
-        icon: resolveCharacterDisplayAvatar(char) || undefined,
+        icon: callAvatar || undefined,
       });
     };
     // Chat-room dispatches this when it handles the call directly
@@ -2622,7 +2623,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
         sessionId: detail.sessionId,
         title,
         body: detail.body.trim(),
-        avatar: detail.avatar ?? resolveCharacterDisplayAvatar(char) ?? null,
+        avatar: detail.avatar ?? (isGroup ? (char?.avatar || null) : resolveCharacterDisplayAvatar(char)) ?? null,
         isGroup,
       });
       chatMessageNoticeTimerRef.current = window.setTimeout(() => {

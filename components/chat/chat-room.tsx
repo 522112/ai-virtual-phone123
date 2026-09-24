@@ -52,6 +52,7 @@ import {
     findLatestWearableCoupleAvatarImage,
     loadCharacterForDisplay,
     loadUserIdentityForDisplay,
+    overlayCharacterForDisplay,
 } from "@/lib/couple-avatar-storage";
 import { generateGroupChatCompletion, generateGroupOfflineChatCompletion, parseGroupChatResponse, buildEditableGroupRoundText } from "@/lib/group-chat-engine";
 import { appendChatOfflineTurn, deleteChatOfflineTurn, deleteChatOfflineTurnsFrom, extractThinkingTag, loadChatOfflineTurns, parseOfflineResponse, saveChatOfflineTurns, updateChatOfflineTurn, type ChatOfflineTurn } from "@/lib/chat-offline-storage";
@@ -1124,7 +1125,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [transientMessages, setTransientMessages] = useState<ChatMessage[]>([]);
     const [stickerReady, setStickerReady] = useState(false);
     const [character, setCharacter] = useState<Character | null>(() =>
-        loadCharacterForDisplay(session.contactId),
+        session.isGroup
+            ? (loadCharacters().find(item => item.id === session.contactId) || null)
+            : loadCharacterForDisplay(session.contactId),
     );
     const [avatarRevision, setAvatarRevision] = useState(0);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -1796,7 +1799,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     }, [session.contactId, session.isGroup]);
 
     useEffect(() => {
-        setUserIdentity(loadUserIdentityForDisplay(session.contactId, "chat"));
+        setUserIdentity(session.isGroup
+            ? resolveUserIdentity(undefined, "group_chat")
+            : loadUserIdentityForDisplay(session.contactId, "chat"));
         setTransientMessages([]);
         setOfflineMode(kvGet(CHAT_OFFLINE_MODE_PREFIX + session.id) === "1");
         setOfflineVisibleCount(OFFLINE_INITIAL_LOAD);
@@ -2683,6 +2688,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         sessionId: session.id,
                         senderName: session.groupName || "群聊",
                         body: `${pokeSender}: ${msg.content}`.slice(0, 80),
+                        avatar: loadCharacters().find(c => c.id === r.characterId)?.avatar || null,
                         isGroup: true,
                     });
                     continue;
@@ -2724,6 +2730,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     sessionId: session.id,
                     senderName: session.groupName || "群聊",
                     body: `${r.characterName}: ${body}`.slice(0, 80),
+                    avatar: loadCharacters().find(c => c.id === r.characterId)?.avatar || null,
                     isGroup: true,
                 });
             }
@@ -5640,14 +5647,15 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         const seen = new Set(sessions.map(item => item.isGroup ? item.id : item.contactId));
         const fromSessions = sessions.map(item => {
             const character = chars.find(c => c.id === item.contactId);
+            const display = character && !item.isGroup ? overlayCharacterForDisplay(character) : character;
             return {
                 sessionId: item.id,
                 contactId: item.contactId,
                 isGroup: !!item.isGroup,
                 name: item.isGroup
                     ? (item.groupName || "群聊")
-                    : (character?.name || "联系人"),
-                avatar: item.isGroup ? "" : (character?.avatar || ""),
+                    : (display?.name || "联系人"),
+                avatar: item.isGroup ? "" : (display?.avatar || ""),
                 groupAvatars: item.isGroup
                     ? (item.participantIds || [])
                         .map(id => chars.find(c => c.id === id)?.avatar || "")
@@ -5660,12 +5668,13 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             .filter(contact => contact.characterId !== session.contactId && !seen.has(contact.characterId))
             .map(contact => {
                 const character = chars.find(c => c.id === contact.characterId);
+                const display = character ? overlayCharacterForDisplay(character) : null;
                 return {
                     sessionId: "",
                     contactId: contact.characterId,
                     isGroup: false,
-                    name: character?.name || "联系人",
-                    avatar: character?.avatar || "",
+                    name: display?.name || "联系人",
+                    avatar: display?.avatar || "",
                     groupAvatars: [] as string[],
                 };
             });

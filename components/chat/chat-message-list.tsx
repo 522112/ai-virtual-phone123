@@ -759,8 +759,8 @@ function ContactPicker({ onClose, onSelect }: { onClose: () => void; onSelect: (
 }
 
 function SessionItem({ session, onSelect, isPinned }: { session: ChatSession, onSelect: () => void, isPinned?: boolean }) {
-    const chars = loadCharacters().map(overlayCharacterForDisplay);
-    const character = chars.find(c => c.id === session.contactId);
+    const chars = loadCharacters();
+    const rawCharacter = chars.find(c => c.id === session.contactId);
     const lastVisibleMessage = getLastVisibleSessionMessage(session.id);
     const lastOfflineTurn = getLastChatOfflineTurn(session.id);
     // 线下记录比线上消息新时（含只在线下聊过的会话），列表展示线下摘要
@@ -772,6 +772,9 @@ function SessionItem({ session, onSelect, isPinned }: { session: ChatSession, on
 
     // Group chat: build grid of participant avatars (2×2)
     const isGroup = session.isGroup;
+    const character = rawCharacter
+        ? (isGroup ? rawCharacter : overlayCharacterForDisplay(rawCharacter))
+        : undefined;
     const userIdentity = isGroup ? resolveUserIdentity(undefined, "group_chat") : null;
     const groupAvatarItems = isGroup
         ? [
