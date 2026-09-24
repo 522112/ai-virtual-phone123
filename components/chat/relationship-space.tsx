@@ -58,12 +58,14 @@ export function RelationshipSpace({
   messages,
   onClose,
   onNotice,
+  onDissolved,
 }: {
   relationshipId: string;
   character: Character | null;
   messages: ChatMessage[];
   onClose: () => void;
   onNotice: (text: string) => void;
+  onDissolved?: (binding: RelationshipBinding) => void;
 }) {
   const { binding, posts, tick } = useRelationship(relationshipId);
   const [tab, setTab] = useState<TabKey>("feed");
@@ -123,7 +125,8 @@ export function RelationshipSpace({
           className="rel-space-text-btn"
           onClick={() => {
             if (!window.confirm("解除后双方空间会关闭。确定解除？")) return;
-            dissolveRelationship(binding.id);
+            const dissolved = dissolveRelationship(binding.id);
+            if (dissolved) onDissolved?.(dissolved);
             onNotice("已解除关系");
             onClose();
           }}

@@ -110,6 +110,7 @@ function partToWeixinText(part: ParsedMessagePart, charName: string): string | n
     if (part.mediaType === "relationship_invite") return `${charName}发来了关系邀请`;
     if (part.mediaType === "accept_relationship") return `${charName}同意了关系邀请`;
     if (part.mediaType === "decline_relationship") return `${charName}拒绝了关系邀请`;
+    if (part.mediaType === "dissolve_relationship") return `对方解除了关系`;
     if (part.mediaType === "change_avatar") return `${charName}换上了你发来的情头`;
     if (part.mediaType === "change_space_cover") return `${charName}把你发的照片设成了空间背景`;
     if (part.mediaType === "relationship_space") {

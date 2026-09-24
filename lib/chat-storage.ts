@@ -120,6 +120,7 @@ export type ChatMessage = {
         | "relationship_invite"
         | "accept_relationship"
         | "decline_relationship"
+        | "dissolve_relationship"
         | "change_avatar"
         | "change_space_cover"
         | "relationship_space"
@@ -140,7 +141,7 @@ export type ChatMessage = {
         amount?: number;          // 红包/转账金额
         count?: number;           // 红包个数
         label?: string;           // 红包留言/转账备注/照片描述/位置名/表情名
-        status?: "pending" | "opened" | "received" | "declined" | "paid" | "canceled";  // 红包/转账/代付状态
+        status?: "pending" | "opened" | "received" | "declined" | "dissolved" | "paid" | "canceled";  // 红包/转账/代付/关系状态
         quoteMessageId?: string;  // 引用消息 ID
         quotePreview?: string;    // 引用消息预览文本
         quoteRole?: ChatMessageRole; // 引用消息的 role
@@ -369,6 +370,7 @@ export function getChatMessagePreview(msg: ChatMessage): string {
     if (msg.mediaType === "relationship_invite") return msg.content || "[关系邀请]";
     if (msg.mediaType === "accept_relationship") return msg.content || "[同意关系]";
     if (msg.mediaType === "decline_relationship") return msg.content || "[拒绝关系]";
+    if (msg.mediaType === "dissolve_relationship") return msg.content || "[解除关系]";
     if (msg.mediaType === "change_avatar") return msg.content || "[换上情头]";
     if (msg.mediaType === "change_space_cover") return msg.content || "[设为空间背景]";
     if (msg.mediaType === "relationship_space") return msg.content || "[关系空间]";

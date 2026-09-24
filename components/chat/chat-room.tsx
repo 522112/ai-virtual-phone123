@@ -113,7 +113,7 @@ import {
     materializeRelationshipSpacePart,
     applyCharacterSpaceCover,
 } from "@/lib/relationship-storage";
-import type { RelationshipKind } from "@/lib/relationship-types";
+import type { RelationshipBinding, RelationshipKind } from "@/lib/relationship-types";
 
 // ── Call system message detection ──────────────────────────
 // Call messages are stored with user/assistant role for correct prompt alternation,
@@ -217,6 +217,7 @@ const CHAT_VISUAL_MEDIA_TYPES = new Set([
     "relationship_invite",
     "accept_relationship",
     "decline_relationship",
+    "dissolve_relationship",
 ]);
 
 const WEIXIN_CLOUD_DELETE_TIMEOUT_MS = 15000;
@@ -265,6 +266,7 @@ const CHAT_MEDIA_BUBBLE_TYPES = new Set([
     "relationship_invite",
     "accept_relationship",
     "decline_relationship",
+    "dissolve_relationship",
 ]);
 
 const STANDALONE_CARD_BUBBLE_STYLE = {
@@ -3124,6 +3126,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             relationship_invite: "发来了一份关系邀请",
             accept_relationship: "同意了关系邀请",
             decline_relationship: "拒绝了关系邀请",
+            dissolve_relationship: "解除了关系",
             quote: "引用回复",
         };
         const getNoticeBody = (m: ChatMessage): string => {
@@ -3766,6 +3769,25 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 relationshipId: relId,
                 label,
                 status: "declined",
+            },
+        });
+        setMessages(prev => [...prev, card]);
+        setPendingGenerate(true);
+    };
+
+    const handleRelationshipDissolved = (binding: RelationshipBinding) => {
+        const label = relationshipKindLabel(binding.kind);
+        cancelFollowUp(session.id);
+        const card = pushChatMessage({
+            sessionId: session.id,
+            role: "user",
+            content: `我解除了我们的${label}关系`,
+            mediaType: "dissolve_relationship",
+            mediaData: {
+                relationshipKind: binding.kind,
+                relationshipId: binding.id,
+                label,
+                status: "dissolved",
             },
         });
         setMessages(prev => [...prev, card]);
@@ -6896,6 +6918,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     messages={messages}
                     onClose={() => setShowRelationshipSpace(false)}
                     onNotice={showChatToast}
+                    onDissolved={handleRelationshipDissolved}
                 />
             )}
 

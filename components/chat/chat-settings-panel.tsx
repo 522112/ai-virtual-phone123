@@ -224,6 +224,7 @@ const SEARCH_MEDIA_BUBBLE_TYPES = new Set<SearchResultMediaType>([
     "relationship_invite",
     "accept_relationship",
     "decline_relationship",
+    "dissolve_relationship",
 ]);
 
 const SEARCH_VISUAL_MEDIA_TYPES = new Set<SearchResultMediaType>([
