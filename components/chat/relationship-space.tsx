@@ -106,7 +106,7 @@ export function RelationshipSpace({
           type="button"
           className="rel-space-text-btn"
           onClick={() => {
-            if (!window.confirm("解除后双方空间会关闭，且一个人只能再绑定一段新关系。确定解除？")) return;
+            if (!window.confirm("解除后双方空间会关闭。确定解除？")) return;
             dissolveRelationship(binding.id);
             onNotice("已解除关系");
             onClose();

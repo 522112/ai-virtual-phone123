@@ -77,19 +77,13 @@ export function getRelationshipByCharacter(characterId: string): RelationshipBin
 }
 
 export function canStartRelationship(characterId: string): { ok: true } | { ok: false; reason: string } {
-  const active = getActiveRelationship();
-  if (active) {
-    if (active.characterId === characterId) return { ok: false, reason: "你们已经绑定了这段关系" };
-    return { ok: false, reason: "一个人只能绑定一段关系" };
-  }
-  const pending = getPendingRelationship();
-  if (pending) {
-    if (pending.characterId === characterId) {
-      return { ok: false, reason: pending.invitedBy === "user" ? "等待对方接受邀请" : "对方已发出邀请，请在聊天卡片里处理" };
-    }
-    return { ok: false, reason: "已有待处理的关系邀请" };
-  }
-  return { ok: true };
+  const existing = getRelationshipByCharacter(characterId);
+  if (!existing) return { ok: true };
+  if (existing.status === "active") return { ok: false, reason: "你们已经绑定了这段关系" };
+  return {
+    ok: false,
+    reason: existing.invitedBy === "user" ? "等待对方接受邀请" : "对方已发出邀请，请在聊天卡片里处理",
+  };
 }
 
 function createBinding(input: {
@@ -134,7 +128,9 @@ export function acceptRelationship(relationshipId: string): RelationshipBinding 
   const acceptedAt = new Date().toISOString();
   const next = items.map(item => {
     if (item.id === relationshipId) return { ...item, status: "active" as const, acceptedAt };
-    if (item.status === "pending") return { ...item, status: "declined" as const };
+    if (item.status === "pending" && item.characterId === current.characterId) {
+      return { ...item, status: "declined" as const };
+    }
     return item;
   });
   saveBindings(next);
@@ -491,7 +487,7 @@ export function materializeRelationshipSpacePart(input: {
 export function buildRelationshipSpaceInstruction(characterId: string | undefined, isGroup?: boolean): string {
   if (isGroup || !characterId) return "";
   const binding = getRelationshipByCharacter(characterId);
-  const inviteHint = "若想邀请对方，输出 [关系邀请:情侣]（或闺蜜/死党/基友）。邀请后对方会收到待接收卡片。一个人同时只能绑定一段关系。";
+  const inviteHint = "若想邀请对方，输出 [关系邀请:情侣]（或闺蜜/死党/基友）。邀请后对方会收到待接收卡片。同一角色同时只能有一份关系申请。";
   if (!binding) {
     return `【关系空间】\n${inviteHint}`;
   }
@@ -503,14 +499,14 @@ export function buildRelationshipSpaceInstruction(characterId: string | undefine
         `对方刚发来「${label}」关系邀请。请根据角色卡、记忆、当前聊天和你们的相处，自己决定接受还是拒绝。`,
         `接受：必须单独输出 [同意关系]（可同时发聊天文字）。系统收到标记后，会由你发出一张「已成为${label}」卡片。`,
         `拒绝：必须单独输出 [拒绝关系]（可同时发聊天文字）。系统收到标记后，会由你发出一张拒绝卡片。`,
-        `只口头答应或拒绝、却不输出标记，卡片会一直停在「等待对方接受」。不要重复发送邀请。一个人同时只能绑定一段关系。`,
+        `只口头答应或拒绝、却不输出标记，卡片会一直停在「等待对方接受」。不要重复发送邀请。同一角色同时只能有一份关系申请。`,
       ].join("\n");
     }
     return `【关系空间】\n你已向对方发出「${label}」邀请，等待对方在卡片上处理。不要重复发送邀请。`;
   }
   return [
     `【关系空间】`,
-    `你们已绑定「${label}」，可在双方空间发动态、评论、打卡和纪念日。一个人同时只能绑定一段关系。`,
+    `你们已绑定「${label}」，可在双方空间发动态、评论、打卡和纪念日。同一角色同时只能有一份关系申请。`,
     `若要在空间做事，可在回复中单独输出以下标记（可与聊天文字并存，不要向用户解释标记本身）：`,
     `[关系动态:内容] — 单纯发布一条动态`,
     `[关系动态感触:内容] — 带着当前聊天的感触发布`,
