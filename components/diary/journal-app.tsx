@@ -153,6 +153,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
     const page = next.pageId ? book.pages.find(item => item.id === next.pageId) : undefined;
     setAnnotateTarget(null);
     setBusy("正在生成");
+    await new Promise(resolve => window.setTimeout(resolve, 80));
     try {
       await generateJournalAnnotation({
         characterId,
@@ -381,6 +382,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         onInviteWrite={async () => {
           if (!book.characterId) return;
           setBusy("正在生成");
+          await new Promise(resolve => window.setTimeout(resolve, 80));
           try {
             const draft = await generateJournalCharacterPage({ characterId: book.characterId, book, page, mode: "together" });
             updatePageBlocks([...page.blocks, ...blocksFromCharacterDraft(book.characterId, draft)]);
@@ -395,6 +397,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         onInviteDoodle={async () => {
           if (!book.characterId) return;
           setBusy("正在生成");
+          await new Promise(resolve => window.setTimeout(resolve, 80));
           try {
             const draft = await generateJournalCharacterPage({ characterId: book.characterId, book, page, mode: "doodle" });
             updatePageBlocks([...page.blocks, ...blocksFromCharacterDraft(book.characterId, draft)]);
