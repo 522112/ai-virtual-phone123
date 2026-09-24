@@ -4335,6 +4335,34 @@
   color: var(--journal-mute);
 }
 
+.journal-toolbar .journal-sticker-btn,
+.journal-sticker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 13px 0 10px;
+  border: none;
+  border-radius: 11px;
+  background:
+    linear-gradient(180deg, #fffaf3, #f4e6d4);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 0 0 1px rgba(166, 110, 78, 0.22);
+  color: #7a4d3f;
+  font-size: calc(12px * var(--app-text-scale, 1));
+  transform: rotate(-1.2deg);
+}
+
+.journal-sticker-btn .journal-stamp {
+  width: 13px;
+  height: 13px;
+}
+
+.journal-sticker-btn:disabled {
+  opacity: 0.4;
+}
+
 .journal-annotate-switch {
   display: flex;
   flex-wrap: wrap;
@@ -4504,6 +4532,15 @@
   flex: 1;
   min-height: 0;
   margin: 0;
+}
+
+.journal-spread.is-single {
+  background: #fffdf8;
+}
+
+.journal-spread.is-single .journal-leaf-left,
+.journal-spread.is-single .journal-leaf-right {
+  box-shadow: none;
 }
 
 .journal-spread {
@@ -4725,6 +4762,15 @@
 
 .journal-flip-nav button:disabled {
   opacity: 0.4;
+}
+
+.journal-flip-nav {
+  justify-content: center;
+}
+
+.journal-flip-nav button[data-active] {
+  background: #2b2722;
+  color: #fffdf8;
 }
 
 .journal-flip-book {

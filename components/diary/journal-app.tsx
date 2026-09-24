@@ -277,37 +277,24 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
     );
   };
 
-  const renderPageAnnotate = (book: JournalBook, page: JournalPage) => {
-    if (book.kind === "couple") {
-      return (
-        <div className="journal-annotate">
-          <div className="journal-annotate-head">
-            <span>对方有感时会贴一枚贴纸，点开就能看</span>
-            <button
-              type="button"
-              disabled={Boolean(busy) || !book.characterId}
-              onClick={() => {
-                if (!book.characterId) return;
-                void handleAnnotate(book.characterId, { bookId: book.id, pageId: page.id });
-              }}
-            >
-              请对方批注
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="journal-annotate">
-        <div className="journal-annotate-head">
-          <span>有感的地方会贴一枚贴纸</span>
-          <button type="button" disabled={Boolean(busy)} onClick={() => setAnnotateTarget({ bookId: book.id, pageId: page.id })}>
-            请角色批注
-          </button>
-        </div>
-      </div>
-    );
-  };
+  const renderAnnotateButton = (book: JournalBook, page: JournalPage) => (
+    <button
+      type="button"
+      className="journal-sticker-btn"
+      disabled={Boolean(busy) || (book.kind === "couple" && !book.characterId)}
+      onClick={() => {
+        if (book.kind === "couple") {
+          if (!book.characterId) return;
+          void handleAnnotate(book.characterId, { bookId: book.id, pageId: page.id });
+          return;
+        }
+        setAnnotateTarget({ bookId: book.id, pageId: page.id });
+      }}
+    >
+      <span className="journal-stamp journal-stamp-heart" aria-hidden="true" />
+      <span>{book.kind === "couple" ? "请对方批注" : "请角色批注"}</span>
+    </button>
+  );
 
   const renderBook = (book: JournalBook) => (
     <main className="journal-page-list">
@@ -410,8 +397,8 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           }
         }}
       />
-      {renderPageAnnotate(book, page)}
       <div className="journal-toolbar">
+        {renderAnnotateButton(book, page)}
         <button type="button" onClick={() => setShareTarget({ bookId: book.id, pageId: page.id })}>分享这一摊</button>
         <button type="button" onClick={() => setPreviewTarget({ bookId: book.id, pageId: page.id })}>预览</button>
         <button type="button" onClick={() => {
