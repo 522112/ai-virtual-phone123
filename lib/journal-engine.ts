@@ -146,22 +146,49 @@ function parseCharacterPageDraft(raw: string, skill: JournalDrawingSkill): Journ
   };
 }
 
+function parseAnnotationDraft(raw: string, fallbackSide?: JournalSide): {
+  text: string;
+  stamp: JournalStampKind;
+  side?: JournalSide;
+  x?: number;
+  y?: number;
+} {
+  const parsed = extractJsonRecord(raw);
+  const text = String(parsed.text ?? "").trim()
+    || raw.replace(/```[\s\S]*?```/g, "").replace(/\{[\s\S]*\}/, "").trim();
+  const stampRaw = String(parsed.stamp ?? "").trim();
+  const stamp = JOURNAL_STAMPS.includes(stampRaw as JournalStampKind) ? stampRaw as JournalStampKind : "heart";
+  const side = parsed.side === "right" || parsed.side === "left" ? parsed.side : fallbackSide;
+  const x = Number(parsed.x);
+  const y = Number(parsed.y);
+  return {
+    text,
+    stamp,
+    side,
+    x: Number.isFinite(x) ? Math.min(80, Math.max(4, x)) : undefined,
+    y: Number.isFinite(y) ? Math.min(78, Math.max(6, y)) : undefined,
+  };
+}
+
 export async function generateJournalAnnotation(input: {
   characterId: string;
   book: JournalBook;
   page?: JournalPage;
   side?: JournalSide;
 }): Promise<string> {
+  if (input.book.kind === "couple" && input.book.characterId !== input.characterId) {
+    throw new ChatEngineError("情侣手账只能由对方批注。");
+  }
   const target = input.page
     ? (input.side ? formatJournalSidePlainText(input.page, input.side) : formatJournalPagePlainText(input.page))
     : formatJournalBookPlainText(input.book);
   const resolved = await resolveJournalGeneration(
     input.characterId,
     [
-      "【手账批注】",
-      "用户把一篇手账给你看，请用符合人设的口吻写一段短批注。",
-      "只写批注正文，不要标题、不要解释、不要用方括号指令。",
-      "控制在 40 到 90 个汉字，像写在页边的字。",
+      "【手账贴纸批注】",
+      "用户把这摊手账给你看。若某一处让你有感，就在那一处贴一枚小贴纸，贴纸里写你的话。",
+      "不要改原页上的字和画，也不要复述整页。字数随心情，一两句即可，不必凑字数，不必编完整剧情。",
+      "只输出 JSON：{\"text\":\"你的感悟\",\"stamp\":\"heart|star|flower|arrow|underline|tape\",\"side\":\"left|right\",\"x\":4到80,\"y\":6到78}",
       "",
       "手账内容：",
       target,
@@ -175,25 +202,28 @@ export async function generateJournalAnnotation(input: {
     { characterName: `手账批注:${resolved.character.name}`, userName: resolved.userName },
     { appId: "diary", appTags: ["diary", "journal"] },
   );
-  const text = raw.replace(/```[\s\S]*?```/g, "").trim();
-  if (!text) throw new ChatEngineError("角色没有写出批注。");
+  const draft = parseAnnotationDraft(raw, input.side);
+  if (!draft.text) throw new ChatEngineError("角色没有写出批注。");
   addJournalAnnotation({
     bookId: input.book.id,
     pageId: input.page?.id,
-    side: input.side,
+    side: draft.side || input.side,
     authorType: "character",
     characterId: resolved.character.id,
     characterName: resolved.character.name,
-    text,
+    text: draft.text,
+    stamp: draft.stamp,
+    x: draft.x ?? (draft.side === "right" ? 64 : 18),
+    y: draft.y ?? 16,
   });
-  return text;
+  return draft.text;
 }
 
 export async function generateJournalCharacterPage(input: {
   characterId: string;
   book: JournalBook;
   page: JournalPage;
-  mode?: "write" | "doodle";
+  mode?: "write" | "doodle" | "together";
 }): Promise<JournalCharacterPageDraft> {
   const character = loadCharacters().find(item => item.id === input.characterId);
   const skill = inferJournalDrawingSkill({
@@ -202,18 +232,21 @@ export async function generateJournalCharacterPage(input: {
     name: character?.name,
     id: character?.id || input.characterId,
   });
-  const mode = input.mode || "write";
+  const mode = input.mode || "together";
+  const modeHint = mode === "doodle"
+    ? "这次请画画。可以只涂两笔、盖个小章，也可以顺手写一句。画得怎样按你自己的水平来。"
+    : mode === "write"
+      ? "这次以写为主。字数随意，写一句或写一段都行。若人设里你也爱画，可以一起画。"
+      : "写和画都可以一起做，按人设和当下心情决定：可以只写、只画，也可以又写又画。";
   const resolved = await resolveJournalGeneration(
     input.characterId,
     [
-      mode === "doodle" ? "【情侣手账涂右页】" : "【情侣手账右页】",
-      "这是一本打开的手账。用户写在左页，请你写在右页。",
-      "用符合人设的口吻补一段完整的手账：可以写一段话、盖一个小印章，也可以决定要不要涂两笔。",
+      mode === "doodle" ? "【情侣手账来画】" : "【情侣手账一起来写】",
+      "这是一本打开的情侣手账。用户写在左页，请你像一起做手账那样随意发挥，写在右页。",
+      "不必固定字数，不必编完整剧情，也不必每页都写得很满。想到什么写什么，像随手记在本子上。",
       drawingSkillHint(skill),
-      mode === "doodle"
-        ? "这次请以涂鸦和印章为主，正文可以很短。"
-        : "这次请以文字为主，印章和涂鸦按心情决定。",
-      `只输出 JSON：{"text":"40到120字","fontSize":12|14|17,"stamp":"heart|star|flower|arrow|underline|tape|none","stampNote":"不超过16字","stampX":0到80,"stampY":0到70,"doodle":true|false}`,
+      modeHint,
+      "只输出 JSON：{\"text\":\"随意长短，也可空\",\"fontSize\":12|14|17,\"stamp\":\"heart|star|flower|arrow|underline|tape|none\",\"stampNote\":\"不超过16字\",\"stampX\":0到80,\"stampY\":0到70,\"doodle\":true|false}",
       "",
       "左页（用户）：",
       formatJournalSidePlainText(input.page, "left"),
@@ -233,7 +266,7 @@ export async function generateJournalCharacterPage(input: {
   const draft = parseCharacterPageDraft(raw, skill);
   if (!draft.text && !draft.stamp && !draft.doodle) {
     const fallback = raw.replace(/```[\s\S]*?```/g, "").replace(/\{[\s\S]*\}/, "").trim();
-    if (fallback) draft.text = fallback.slice(0, 160);
+    if (fallback) draft.text = fallback.slice(0, 400);
   }
   if (!draft.text && !draft.stamp && !draft.doodle) {
     throw new ChatEngineError("角色没有写下内容。");
@@ -248,7 +281,7 @@ export async function generateJournalCharacterWrite(input: {
   book: JournalBook;
   page: JournalPage;
 }): Promise<string> {
-  const draft = await generateJournalCharacterPage({ ...input, mode: "write" });
+  const draft = await generateJournalCharacterPage({ ...input, mode: "together" });
   if (draft.text) return draft.text;
   throw new ChatEngineError("角色没有写下内容。");
 }

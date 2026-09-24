@@ -15,7 +15,6 @@ import {
 } from "@/lib/journal-engine";
 import { sendJournalShareToCharacter } from "@/lib/journal-share";
 import {
-  addJournalAnnotation,
   createCharacterDoodleStrokes,
   createJournalBlockId,
   inferJournalDrawingSkill,
@@ -86,10 +85,8 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
   const [renameValue, setRenameValue] = useState("");
   const [shareTarget, setShareTarget] = useState<{ bookId: string; pageId?: string } | null>(null);
   const [annotateTarget, setAnnotateTarget] = useState<{ bookId: string; pageId?: string } | null>(null);
-  const [annotationCharId, setAnnotationCharId] = useState<string | null>(null);
   const [activeSide, setActiveSide] = useState<JournalSide>("left");
-  const [previewBookId, setPreviewBookId] = useState<string | null>(null);
-  const [noteDraft, setNoteDraft] = useState("");
+  const [previewTarget, setPreviewTarget] = useState<{ bookId: string; pageId?: string } | null>(null);
   const [busy, setBusy] = useState("");
   const [clips, setClips] = useState<JournalClipCandidate[]>([]);
   const [clipOpen, setClipOpen] = useState(false);
@@ -109,30 +106,16 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
     return () => window.removeEventListener(JOURNAL_UPDATED_EVENT, refresh);
   }, [refresh]);
 
-  useEffect(() => {
-    setAnnotationCharId(null);
-  }, [view]);
-
   const notify = (message: string) => onNotice?.(message);
   const currentBook = view.name === "book" || view.name === "page" ? getJournalBook(view.bookId) : null;
   const currentPage = view.name === "page" && currentBook
     ? currentBook.pages.find(page => page.id === view.pageId) || null
     : null;
 
-  const scopedAnnotations = useMemo(() => {
-    if (view.name === "page") {
-      return annotations.filter(item => item.bookId === view.bookId && item.pageId === view.pageId);
-    }
-    if (view.name === "book") {
-      return annotations.filter(item => item.bookId === view.bookId && !item.pageId);
-    }
-    return [];
+  const pageAnnotations = useMemo(() => {
+    if (view.name !== "page") return [];
+    return annotations.filter(item => item.bookId === view.bookId && item.pageId === view.pageId);
   }, [annotations, view]);
-  const annotationChars = useMemo(() => {
-    const ids = Array.from(new Set(scopedAnnotations.map(item => item.characterId)));
-    return ids.map(id => characters.find(item => item.id === id)).filter(Boolean) as Character[];
-  }, [scopedAnnotations, characters]);
-  const visibleAnnotations = scopedAnnotations.filter(item => !annotationCharId || item.characterId === annotationCharId);
 
   const coupleCandidates = useMemo(() => {
     const activeIds = new Set(
@@ -158,23 +141,27 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
     notify(page ? "已把这页手账发给对方" : "已把这册手账发给对方");
   };
 
-  const handleAnnotate = async (characterId: string) => {
-    if (!annotateTarget) return;
-    const book = getJournalBook(annotateTarget.bookId);
+  const handleAnnotate = async (characterId: string, target?: { bookId: string; pageId?: string }) => {
+    const next = target || annotateTarget;
+    if (!next) return;
+    const book = getJournalBook(next.bookId);
     if (!book) return;
-    const page = annotateTarget.pageId ? book.pages.find(item => item.id === annotateTarget.pageId) : undefined;
-    setBusy("批注中");
+    if (book.kind === "couple" && book.characterId !== characterId) {
+      notify("情侣手账只能由对方批注");
+      return;
+    }
+    const page = next.pageId ? book.pages.find(item => item.id === next.pageId) : undefined;
+    setAnnotateTarget(null);
+    setBusy("正在生成");
     try {
       await generateJournalAnnotation({
         characterId,
         book,
         page,
-        side: annotateTarget.pageId ? activeSide : undefined,
+        side: next.pageId ? activeSide : undefined,
       });
-      setAnnotationCharId(characterId);
-      setAnnotateTarget(null);
       refresh();
-      notify("批注已经写在页边");
+      notify("对方把贴纸贴在了有感的地方");
     } catch (error) {
       notify(error instanceof Error ? error.message : "批注失败");
     } finally {
@@ -289,63 +276,37 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
     );
   };
 
-  const renderAnnotations = (target: { bookId: string; pageId?: string }) => (
-    <div className="journal-annotate">
-      <div className="journal-annotate-head">
-        <span>{target.pageId ? (activeSide === "left" ? "批左页" : "批右页") : "册边批注"}</span>
-        <div className="journal-annotate-switch">
-          <button type="button" data-active={!annotationCharId ? "" : undefined} onClick={() => setAnnotationCharId(null)}>全部</button>
-          {annotationChars.map(character => (
+  const renderPageAnnotate = (book: JournalBook, page: JournalPage) => {
+    if (book.kind === "couple") {
+      return (
+        <div className="journal-annotate">
+          <div className="journal-annotate-head">
+            <span>对方有感时会贴一枚贴纸，点开就能看</span>
             <button
-              key={character.id}
               type="button"
-              data-active={annotationCharId === character.id ? "" : undefined}
-              onClick={() => setAnnotationCharId(character.id)}
+              disabled={Boolean(busy) || !book.characterId}
+              onClick={() => {
+                if (!book.characterId) return;
+                void handleAnnotate(book.characterId, { bookId: book.id, pageId: page.id });
+              }}
             >
-              {character.name}
+              请对方批注
             </button>
-          ))}
+          </div>
         </div>
-        <button type="button" onClick={() => setAnnotateTarget(target)}>请角色批注</button>
-      </div>
-      {target.pageId ? (
-        <div className="journal-note-row">
-          <input
-            className="journal-rename-input"
-            value={noteDraft}
-            placeholder={activeSide === "left" ? "给左页写一句批注" : "给右页写一句批注"}
-            onChange={event => setNoteDraft(event.target.value)}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const text = noteDraft.trim();
-              if (!text || !target.pageId) return;
-              addJournalAnnotation({
-                bookId: target.bookId,
-                pageId: target.pageId,
-                side: activeSide,
-                authorType: "user",
-                characterId: "user",
-                characterName: "我",
-                text,
-              });
-              setNoteDraft("");
-              refresh();
-            }}
-          >
-            写下
+      );
+    }
+    return (
+      <div className="journal-annotate">
+        <div className="journal-annotate-head">
+          <span>有感的地方会贴一枚贴纸</span>
+          <button type="button" disabled={Boolean(busy)} onClick={() => setAnnotateTarget({ bookId: book.id, pageId: page.id })}>
+            请角色批注
           </button>
         </div>
-      ) : null}
-      {visibleAnnotations.length === 0 ? <p className="journal-empty">还没有批注</p> : visibleAnnotations.map(item => (
-        <p key={item.id} className={`journal-annotation${item.authorType === "user" ? " is-user" : ""}`}>
-          <b>{item.characterName}{item.side === "left" ? " · 左" : item.side === "right" ? " · 右" : ""}</b>
-          {item.text}
-        </p>
-      ))}
-    </div>
-  );
+      </div>
+    );
+  };
 
   const renderBook = (book: JournalBook) => (
     <main className="journal-page-list">
@@ -370,7 +331,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         <button type="button" onClick={() => { setRenameBookId(book.id); setRenameValue(book.title); }}>重命名</button>
         <button type="button" onClick={() => { coverBookIdRef.current = book.id; coverInputRef.current?.click(); }}>换封面</button>
         <button type="button" onClick={() => setShareTarget({ bookId: book.id })}>分享整册</button>
-        <button type="button" onClick={() => setPreviewBookId(book.id)}>翻页预览</button>
+        <button type="button" onClick={() => setPreviewTarget({ bookId: book.id, pageId: book.pages[0]?.id })}>预览</button>
       </div>
       {book.pages.length === 0 ? <p className="journal-empty">这一册还是空的</p> : book.pages.map(page => (
         <button key={page.id} type="button" className="journal-page-row" onClick={() => setView({ name: "page", bookId: book.id, pageId: page.id })}>
@@ -378,7 +339,6 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           <span>{page.dateLabel}</span>
         </button>
       ))}
-      {renderAnnotations({ bookId: book.id })}
     </main>
   );
 
@@ -398,7 +358,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
       <JournalOpenBook
         book={book}
         page={page}
-        annotations={visibleAnnotations}
+        annotations={pageAnnotations}
         activeSide={activeSide}
         onActivateSide={setActiveSide}
         onChangeBlock={block => {
@@ -420,12 +380,12 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         }}
         onInviteWrite={async () => {
           if (!book.characterId) return;
-          setBusy("对方在写右页");
+          setBusy("正在生成");
           try {
-            const draft = await generateJournalCharacterPage({ characterId: book.characterId, book, page, mode: "write" });
+            const draft = await generateJournalCharacterPage({ characterId: book.characterId, book, page, mode: "together" });
             updatePageBlocks([...page.blocks, ...blocksFromCharacterDraft(book.characterId, draft)]);
             setActiveSide("right");
-            notify("对方写在右页");
+            notify(draft.doodle ? "对方写在右页，也画了两笔" : "对方写在右页");
           } catch (error) {
             notify(error instanceof Error ? error.message : "对方没有写下来");
           } finally {
@@ -434,23 +394,23 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         }}
         onInviteDoodle={async () => {
           if (!book.characterId) return;
-          setBusy("对方在涂右页");
+          setBusy("正在生成");
           try {
             const draft = await generateJournalCharacterPage({ characterId: book.characterId, book, page, mode: "doodle" });
             updatePageBlocks([...page.blocks, ...blocksFromCharacterDraft(book.characterId, draft)]);
             setActiveSide("right");
-            notify(draft.skill === "poor" ? "对方涂在右页，画得有点歪" : "对方涂在右页");
+            notify(draft.skill === "poor" ? "对方画在右页，有点歪" : "对方画在右页");
           } catch (error) {
-            notify(error instanceof Error ? error.message : "对方没有涂成");
+            notify(error instanceof Error ? error.message : "对方没有画成");
           } finally {
             setBusy("");
           }
         }}
       />
-      {renderAnnotations({ bookId: book.id, pageId: page.id })}
+      {renderPageAnnotate(book, page)}
       <div className="journal-toolbar">
         <button type="button" onClick={() => setShareTarget({ bookId: book.id, pageId: page.id })}>分享这一摊</button>
-        <button type="button" onClick={() => setPreviewBookId(book.id)}>翻页预览</button>
+        <button type="button" onClick={() => setPreviewTarget({ bookId: book.id, pageId: page.id })}>预览</button>
         <button type="button" onClick={() => {
           deleteJournalPage(book.id, page.id);
           refresh();
@@ -484,7 +444,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         </button>
         <div>
           <h1>{title}</h1>
-          <p>{busy || "写下、贴上、再装成册"}</p>
+          <p>写下、贴上、再装成册</p>
         </div>
         <span className="diary-header-spacer" />
       </header>
@@ -597,12 +557,22 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           }}
         />
       )}
-      {previewBookId && getJournalBook(previewBookId) ? (
+      {previewTarget && getJournalBook(previewTarget.bookId) ? (
         <JournalFlipPreview
-          book={getJournalBook(previewBookId)!}
+          book={getJournalBook(previewTarget.bookId)!}
+          pageId={previewTarget.pageId}
           annotations={annotations}
-          onClose={() => setPreviewBookId(null)}
+          onClose={() => setPreviewTarget(null)}
         />
+      ) : null}
+
+      {busy ? (
+        <div className="journal-busy-overlay" aria-live="polite">
+          <div className="journal-busy-card">
+            <span className="journal-busy-spin" aria-hidden="true" />
+            <p>正在生成</p>
+          </div>
+        </div>
       ) : null}
 
       {clipOpen && (
