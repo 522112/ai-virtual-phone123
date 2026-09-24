@@ -49,6 +49,7 @@ import {
   buildMusicCloudMacro,
   buildMusicLocalMacro,
   buildOfflineBilingualInstruction,
+  buildOfflineOutputInstruction,
 } from "./chat-engine";
 import { nativeToolProtocolForConfig } from "./llm-provider-adapter";
 import { stripHallucinatedTimestamps } from "./api-helpers";
@@ -73,6 +74,16 @@ import type { WeixinBotConfig } from "./weixin-storage";
 import { loadWeixinBots } from "./weixin-storage";
 import { parseAIResponse } from "./rich-message-parser";
 import { getStatusRegionConfig, isCustomStatusRegionActive } from "./chat-status-region";
+import {
+  acceptRelationship,
+  buildRelationshipSpaceInstruction,
+  createIncomingInvite,
+  declineRelationship,
+  findPendingInviteForCharacter,
+  materializeRelationshipSpacePart,
+  parseRelationshipKindLabel,
+  relationshipKindLabel,
+} from "./relationship-storage";
 
 const WEIXIN_CLOUD_CONFIG_KEY = "weixin_cloud_sync_config_v1";
 const WEIXIN_CLOUD_PREFIX = "weixin-cloud";
@@ -158,6 +169,7 @@ export type WeixinCloudPromptContext = {
   tools: string;
   chatBilingualInstruction: string;
   offlineBilingualInstruction: string;
+  offlineOutputInstruction: string;
   offlineSummaryTag: string;
   enableVision: boolean;
   /** 云端助手是否发送媒体回复（生图/表情包/语音卡）；核心模块按此开关执行 */
@@ -742,11 +754,16 @@ export function buildWeixinCloudPromptMessages(
     tools: context.tools,
     chatBilingualInstruction: context.chatBilingualInstruction,
     offlineBilingualInstruction: context.offlineBilingualInstruction,
+    offlineOutputInstruction: context.offlineOutputInstruction,
     offlineSummaryTag: context.offlineSummaryTag,
     nativeToolHistory: context.nativeToolHistory,
   });
   if (!options?.skipEmptyGenerateGuard) {
     appendEmptyGenerateGuardMessage(messages, snapshot.apiConfig, history);
+  }
+  const relationshipInstruction = buildRelationshipSpaceInstruction(snapshot.character.id, snapshot.session.isGroup);
+  if (relationshipInstruction) {
+    messages.push({ role: "system", content: relationshipInstruction });
   }
   return messages;
 }
@@ -1136,6 +1153,7 @@ async function buildWeixinCloudPromptContext(params: {
         "single",
         params.session.offlineBilingualTranslationPrompt,
       ),
+    offlineOutputInstruction: buildOfflineOutputInstruction(params.session),
     offlineSummaryTag: params.preset?.story_summary_tag?.trim() || "summary",
     enableVision: params.apiConfig.enableImageRecognition === true,
     mediaReply: true,
@@ -1977,6 +1995,63 @@ function importCloudAssistantMessage(
 
   const messages: ChatMessage[] = [];
   visibleParts.forEach((part, index) => {
+    if ((part.mediaType === "accept_relationship" || part.mediaType === "decline_relationship") && !session.isGroup) {
+      const accept = part.mediaType === "accept_relationship";
+      const pending = findPendingInviteForCharacter(stored.characterId, "user");
+      if (pending) {
+        if (accept) acceptRelationship(pending.id);
+        else declineRelationship(pending.id);
+      }
+      const kind = pending?.kind || parseRelationshipKindLabel(part.mediaData?.label) || "couple";
+      const label = relationshipKindLabel(kind);
+      messages.push(makeCloudImportedMessage(stored, session.id, createdAt, index, {
+        role: "assistant",
+        content: accept ? `${characterName}同意成为你的${label}` : `${characterName}拒绝了${label}邀请`,
+        mediaType: part.mediaType,
+        mediaData: {
+          relationshipKind: kind,
+          relationshipId: pending?.id,
+          label,
+          status: accept ? "received" : "declined",
+        },
+      }, strippedContent));
+      return;
+    }
+    if (part.mediaType === "relationship_invite" && !session.isGroup) {
+      const kind = parseRelationshipKindLabel(part.mediaData?.label) || "couple";
+      const created = createIncomingInvite(stored.characterId, kind);
+      if ("error" in created) {
+        messages.push(makeCloudImportedMessage(stored, session.id, createdAt, index, {
+          role: "assistant",
+          content: `${characterName}想邀请你成为${relationshipKindLabel(kind)}，但${created.error}`,
+        }, strippedContent));
+        return;
+      }
+      messages.push(makeCloudImportedMessage(stored, session.id, createdAt, index, {
+        role: "assistant",
+        content: "",
+        mediaType: "relationship_invite",
+        mediaData: {
+          label: relationshipKindLabel(kind),
+          relationshipKind: kind,
+          relationshipId: created.id,
+          status: "pending",
+        },
+      }, strippedContent));
+      return;
+    }
+    if (part.mediaType === "relationship_space" && !session.isGroup) {
+      const notice = materializeRelationshipSpacePart({
+        characterId: stored.characterId,
+        characterName,
+        mediaData: part.mediaData,
+      });
+      messages.push(makeCloudImportedMessage(stored, session.id, createdAt, index, {
+        role: "assistant",
+        content: notice.notice,
+      }, strippedContent));
+      return;
+    }
     if (part.mediaType === "poke") {
       const pokeSender = (part.mediaData?.pokeSender === "我" ? characterName : part.mediaData?.pokeSender) || characterName;
       const pokeTarget = part.mediaData?.pokeTarget || "你";

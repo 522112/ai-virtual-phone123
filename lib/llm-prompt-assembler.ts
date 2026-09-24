@@ -93,6 +93,7 @@ export interface AssemblerInput {
     statusRegionComposition?: string;        // {{statusRegionComposition}} — 文字聊天模式【输出构成】行
     statusRegionFullExample?: string;        // {{statusRegionFullExample}} — 完整示例中的状态值+内心行
     offlineBilingualInstruction?: string;    // offline-mode bilingual output rule for {{offlineBilingualInstruction}}
+    offlineOutputInstruction?: string;       // session offline length/style rule for {{offlineOutputInstruction}}
     offlineSummaryTag?: string;              // XML tag used for offline-mode summary output
     checkPhoneBilingualInstruction?: string; // checkphone bilingual output rule for {{checkPhoneBilingualInstruction}}
     xiaohongshuBilingualInstruction?: string; // independent Xiaohongshu bilingual output rule for {{xiaohongshuBilingualInstruction}}
@@ -686,6 +687,7 @@ export function assemblePromptPayload(input: AssemblerInput): LLMMessage[] {
         engine.statusRegionComposition = input.statusRegionComposition ?? "";
         engine.statusRegionFullExample = input.statusRegionFullExample ?? "";
         engine.offlineBilingualInstruction = input.offlineBilingualInstruction ?? "";
+        engine.offlineOutputInstruction = input.offlineOutputInstruction ?? "";
         engine.offlineSummaryTag = input.offlineSummaryTag ?? "summary";
         engine.checkPhoneBilingualInstruction = input.checkPhoneBilingualInstruction ?? "";
         engine.xiaohongshuBilingualInstruction = input.xiaohongshuBilingualInstruction ?? "";
@@ -1229,6 +1231,22 @@ export function formatRichMediaForHistory(msg: ChatMessage, userName: string, ch
         case "decline_payment_request":
             if (isGroup && d?.claimer && d?.owner) return `[${d.claimer}拒绝了${d.owner}的代付]`;
             return "[拒绝代付]";
+        case "relationship_invite":
+            return `[关系邀请:${d?.label || "关系"}]`;
+        case "accept_relationship":
+            return "[同意关系]";
+        case "decline_relationship":
+            return "[拒绝关系]";
+        case "relationship_space": {
+            const action = d?.spaceAction;
+            const label = d?.label || "";
+            if (action === "post_from_chat") return `[关系动态感触:${label}]`;
+            if (action === "comment") return `[关系评论:${label}]`;
+            if (action === "reply") return `[关系回评:${d?.spaceReplyTo || "对方"}:${label}]`;
+            if (action === "checkin") return label ? `[关系打卡:${label}]` : "[关系打卡]";
+            if (action === "anniversary") return `[关系纪念日:${label}:${d?.anniversaryDate || ""}]`;
+            return `[关系动态:${label}]`;
+        }
         default:
             return msg.content;
     }
@@ -1618,6 +1636,7 @@ export interface GroupAssemblerInput {
     statusRegionComposition?: string;
     statusRegionFullExample?: string;
     offlineBilingualInstruction?: string;
+    offlineOutputInstruction?: string;
     offlineSummaryTag?: string;
     checkPhoneBilingualInstruction?: string;
     xiaohongshuBilingualInstruction?: string;
@@ -1873,6 +1892,7 @@ export function assembleGroupPromptPayload(input: GroupAssemblerInput): LLMMessa
         engine.statusRegionComposition = input.statusRegionComposition ?? "";
         engine.statusRegionFullExample = input.statusRegionFullExample ?? "";
         engine.offlineBilingualInstruction = input.offlineBilingualInstruction ?? "";
+        engine.offlineOutputInstruction = input.offlineOutputInstruction ?? "";
         engine.offlineSummaryTag = input.offlineSummaryTag ?? "summary";
         engine.checkPhoneBilingualInstruction = input.checkPhoneBilingualInstruction ?? "";
         engine.xiaohongshuBilingualInstruction = input.xiaohongshuBilingualInstruction ?? "";
@@ -2007,6 +2027,7 @@ export function assembleGroupPromptPayload(input: GroupAssemblerInput): LLMMessa
         groupEngine.statusRegionComposition = input.statusRegionComposition ?? "";
         groupEngine.statusRegionFullExample = input.statusRegionFullExample ?? "";
         groupEngine.offlineBilingualInstruction = input.offlineBilingualInstruction ?? "";
+        groupEngine.offlineOutputInstruction = input.offlineOutputInstruction ?? "";
         groupEngine.offlineSummaryTag = input.offlineSummaryTag ?? "summary";
 
         let afterChatHistory = false;

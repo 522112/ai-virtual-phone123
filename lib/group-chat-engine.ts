@@ -18,6 +18,7 @@ import {
     buildMusicCloudMacro,
     buildChatBilingualInstruction,
     buildOfflineBilingualInstruction,
+    buildOfflineOutputInstruction,
     previewMessagesForApi,
     applyVisionImagePromptLimit,
     resolveCompressedImageDataUrl,
@@ -451,6 +452,7 @@ async function buildGroupChatPromptMessages(
         "group",
         session.offlineBilingualTranslationPrompt,
     );
+    const offlineOutputInstruction = buildOfflineOutputInstruction(session);
     const groupRoster = buildGroupRosterMacro(
         session,
         members.map(m => ({ id: m.character.id, name: m.character.name })),
@@ -490,6 +492,7 @@ async function buildGroupChatPromptMessages(
         statusRegionComposition: resolveStatusRegionComposition(statusRegionCfg),
         statusRegionFullExample: resolveStatusRegionFullExample(statusRegionCfg),
         offlineBilingualInstruction,
+        offlineOutputInstruction,
         offlineSummaryTag: preset?.story_summary_tag?.trim() || "summary",
         nativeToolHistory: usesNativeActions,
     });
