@@ -16,7 +16,7 @@ import {
 } from "@/lib/music-service";
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
-import { ListenTogetherControls } from "./listen-together";
+import { ListenTogetherControls, ListenTogetherDuoStage, useActiveListenTogetherSession } from "./listen-together";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
 
 const PLAY_MODE_ICONS: Record<PlayMode, { svg: string; label: string }> = {
@@ -72,6 +72,7 @@ export default function MusicPlayer() {
     const [palette, setPalette] = useState<CoverPalette>(DEFAULT_COVER_PALETTE);
     const [bgCfg, setBgCfg] = useState<MusicBgConfig>(() => loadMusicBg());
     const [commentTotal, setCommentTotal] = useState(0);
+    const listenTogether = useActiveListenTogetherSession();
 
     useEffect(() => {
         const handleBgChange = () => setBgCfg(loadMusicBg());
@@ -419,7 +420,7 @@ export default function MusicPlayer() {
     } as React.CSSProperties;
 
     return (
-        <div className="music-player mp-lumen" style={ambientVars}>
+        <div className="music-player mp-lumen" style={ambientVars} {...(listenTogether ? { "data-listen-together": "" } : {})}>
             {musicToast && (
                 <div className="music-toast-overlay">
                     <div className="music-toast-chip">
@@ -455,10 +456,14 @@ export default function MusicPlayer() {
                 </button>
                 <div className="mp-titles">
                     <div className="mp-song" {...(view === "lyrics" ? { "data-glow": "" } : {})}>{track.title}</div>
-                    <button className="mp-artist" onClick={openArtistPage}>
-                        {track.artist || "未知歌手"}
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m9 5 7 7-7 7" /></svg>
-                    </button>
+                    {listenTogether ? (
+                        <div className="mp-artist">和{listenTogether.characterName}一起听</div>
+                    ) : (
+                        <button className="mp-artist" onClick={openArtistPage}>
+                            {track.artist || "未知歌手"}
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m9 5 7 7-7 7" /></svg>
+                        </button>
+                    )}
                 </div>
                 <div className="mp-top-actions">
                     <button className="music-player-ctrl-btn mp-top-btn" onClick={togglePlayerStyle} title={playerStyle === "vinyl" ? "切换现代样式" : "切换黑胶样式"}>
@@ -482,7 +487,18 @@ export default function MusicPlayer() {
 
             {/* Body — cover / vinyl / glow lyrics */}
             <div className="mp-body">
-                {view === "lyrics" ? (
+                {listenTogether && view !== "lyrics" ? (
+                    <ListenTogetherDuoStage
+                        track={{
+                            id: track.id,
+                            title: track.title,
+                            artist: track.artist || "",
+                            coverUrl: track.coverUrl,
+                        }}
+                        playing={player.isPlaying}
+                        onOpenLyrics={() => setView("lyrics")}
+                    />
+                ) : view === "lyrics" ? (
                     <div className="mp-lyrics-wrap" onClick={() => setView("cover")}>
                         {hasLyrics ? (
                             <div className="mp-lyrics" ref={lyricsContainerRef}>
