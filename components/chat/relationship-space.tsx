@@ -7,6 +7,8 @@ import type { Character } from "@/lib/character-types";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { saveChatImageToIndexedDB, getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import { RelationshipKindIcon } from "./relationship-kind-icon";
+import { buildTwoLevelMomentThreads } from "@/lib/moments-comment-threading";
 import {
   RELATIONSHIP_CHANGED_EVENT,
   RELATIONSHIP_KIND_META,
@@ -126,7 +128,10 @@ export function RelationshipSpace({
         <div className="rel-space-names">
           {identity?.name || "我"} 与 {character?.name || "对方"}
         </div>
-        <div className="rel-space-badge">{meta.emoji} {meta.label} · 第 {together} 天</div>
+        <div className="rel-space-badge">
+          <RelationshipKindIcon kind={binding.kind} size="sm" />
+          <span>{meta.label} · 第 {together} 天</span>
+        </div>
       </section>
 
       <nav className="rel-space-tabs">
@@ -155,6 +160,7 @@ export function RelationshipSpace({
             posts={posts}
             character={character}
             userName={identity?.name || "我"}
+            userAvatar={identity?.avatarUrl || null}
             userId={identity?.id || "user"}
             onCompose={() => setComposing(true)}
           />
@@ -189,11 +195,30 @@ export function RelationshipSpace({
   );
 }
 
+function formatRelTimeAgo(isoStr: string): string {
+  const now = Date.now();
+  const then = Date.parse(isoStr);
+  const diff = Math.floor((now - then) / 1000);
+  if (!Number.isFinite(then) || diff < 60) return "刚刚";
+  if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
+  if (diff < 172800) return "昨天";
+  if (diff < 604800) return `${Math.floor(diff / 86400)}天前`;
+  const d = new Date(isoStr);
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+function RelAvatar({ src, alt }: { src?: string | null; alt: string }) {
+  if (src) return <img src={src} alt="" className="feed-post-author-avatar-image w-full h-full object-cover" />;
+  return <ChatFallbackAvatar alt={alt} />;
+}
+
 function RelationshipFeed({
   binding,
   posts,
   character,
   userName,
+  userAvatar,
   userId,
   onCompose,
 }: {
@@ -201,29 +226,26 @@ function RelationshipFeed({
   posts: RelationshipPost[];
   character: Character | null;
   userName: string;
+  userAvatar: string | null;
   userId: string;
   onCompose: () => void;
 }) {
-  if (posts.length === 0) {
-    return (
-      <div className="rel-space-empty">
-        <p>还没有动态。可以写此刻的感触，也可以随手发一条。</p>
-        <button type="button" className="rel-space-primary" onClick={onCompose}>发布动态</button>
-      </div>
-    );
-  }
   return (
     <div className="rel-feed">
-      <button type="button" className="rel-space-compose-btn" onClick={onCompose}>
-        <Plus size={16} /> 发布动态
+      <button type="button" className="rel-feed-compose" onClick={onCompose}>
+        <Plus size={16} strokeWidth={1.75} />
+        <span>发布动态</span>
       </button>
-      {posts.map(post => (
+      {posts.length === 0 ? (
+        <div className="rel-space-empty">还没有动态。可以写此刻的感触，也可以随手发一条。</div>
+      ) : posts.map(post => (
         <RelationshipPostCard
           key={post.id}
           post={post}
           binding={binding}
           character={character}
           userName={userName}
+          userAvatar={userAvatar}
           userId={userId}
         />
       ))}
@@ -236,21 +258,26 @@ function RelationshipPostCard({
   binding,
   character,
   userName,
+  userAvatar,
   userId,
 }: {
   post: RelationshipPost;
   binding: RelationshipBinding;
   character: Character | null;
   userName: string;
+  userAvatar: string | null;
   userId: string;
 }) {
   const [photo, setPhoto] = useState<string | null>(null);
   const [comments, setComments] = useState(() => loadRelationshipComments(post.id));
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState<RelationshipComment | null>(null);
-  const liked = post.likes.some(like => like.authorType === "user" && like.authorId === userId);
+  const [likes, setLikes] = useState(post.likes);
+  const liked = likes.some(like => like.authorType === "user" && like.authorId === userId);
   const authorName = post.authorType === "user" ? userName : (character?.name || "对方");
-  const authorAvatar = post.authorType === "user" ? null : character?.avatar;
+  const authorAvatar = post.authorType === "user" ? userAvatar : (character?.avatar || null);
+  const likeNames = likes.map(like => like.authorType === "user" ? userName : (character?.name || "对方"));
+  const commentThreads = buildTwoLevelMomentThreads(comments);
 
   useEffect(() => {
     if (!post.photoAssetId) return;
@@ -260,6 +287,13 @@ function RelationshipPostCard({
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [post.photoAssetId]);
+
+  const authorOf = (comment: RelationshipComment) => (
+    comment.authorType === "user" ? userName : (character?.name || "对方")
+  );
+  const avatarOf = (comment: RelationshipComment) => (
+    comment.authorType === "user" ? userAvatar : (character?.avatar || null)
+  );
 
   const submit = () => {
     const content = draft.trim();
@@ -271,9 +305,7 @@ function RelationshipPostCard({
       authorId: userId,
       content,
       replyToCommentId: replyTo?.id,
-      replyToAuthorName: replyTo
-        ? (replyTo.authorType === "user" ? userName : (character?.name || "对方"))
-        : undefined,
+      replyToAuthorName: replyTo ? authorOf(replyTo) : undefined,
     });
     setDraft("");
     setReplyTo(null);
@@ -281,58 +313,118 @@ function RelationshipPostCard({
   };
 
   return (
-    <article className="rel-post">
-      <div className="rel-post-head">
-        <span className="rel-post-avatar">
-          {authorAvatar ? <img src={authorAvatar} alt="" /> : <ChatFallbackAvatar alt={authorName} />}
-        </span>
-        <div>
-          <div className="rel-post-name">{authorName}</div>
-          <div className="rel-post-time">{new Date(post.createdAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+    <article className="feed-post rel-feed-post relative border-b-[2.5px] border-[var(--c-card-border)] pb-5 mb-5 w-full bg-transparent">
+      <div className="feed-post-header flex items-center gap-3 mb-3">
+        <div className="feed-post-author-avatar w-[40px] h-[40px] rounded-full shrink-0 bg-[var(--c-input)] overflow-hidden flex items-center justify-center">
+          <RelAvatar src={authorAvatar} alt={authorName} />
+        </div>
+        <div className="feed-post-author flex-1">
+          <span className="feed-post-author-name ts-16 font-medium text-[var(--c-text-title)]">{authorName}</span>
         </div>
       </div>
-      {post.fromChat && post.chatExcerpt ? (
-        <div className="rel-post-excerpt">来自聊天的感触{"\n"}{post.chatExcerpt}</div>
+
+      {post.content ? (
+        <div className="feed-post-content ts-16 leading-[1.75] text-[var(--c-text-title)] whitespace-pre-wrap break-words mb-3 w-full">
+          {post.content}
+        </div>
       ) : null}
-      {post.content ? <p className="rel-post-content">{post.content}</p> : null}
-      {photo ? <img src={photo} alt="" className="rel-post-photo" /> : null}
-      <div className="rel-post-actions">
-        <button
-          type="button"
-          className="rel-post-action"
-          data-on={liked ? "" : undefined}
-          onClick={() => toggleRelationshipPostLike(post.id, "user", userId)}
-        >
-          <Heart size={15} fill={liked ? "currentColor" : "none"} /> {post.likes.length || ""}
-        </button>
-        <span className="rel-post-action">
-          <MessageCircle size={15} /> {comments.length || ""}
-        </span>
+
+      {post.fromChat && post.chatExcerpt ? (
+        <div className="rel-feed-excerpt">{post.chatExcerpt}</div>
+      ) : null}
+
+      {photo ? <img src={photo} alt="" className="rel-feed-photo" /> : null}
+
+      <div className="feed-post-action-row flex items-center justify-between mt-4 mb-3">
+        <span className="feed-post-time ts-13 text-[var(--c-icon)]">{formatRelTimeAgo(post.createdAt)}</span>
+        <div className="feed-post-actions flex gap-4">
+          <button
+            type="button"
+            className="feed-post-like-btn border-none p-0 w-[19px] h-[19px] cursor-pointer flex items-center justify-center bg-none shrink-0"
+            onClick={() => {
+              const updated = toggleRelationshipPostLike(post.id, "user", userId);
+              if (updated) setLikes(updated.likes);
+            }}
+          >
+            <Heart size={17} strokeWidth={1.75} fill={liked ? "currentColor" : "none"} className="text-[var(--c-icon)]" />
+          </button>
+          <button
+            type="button"
+            className="feed-post-comment-btn bg-none border-none p-0 cursor-pointer flex items-center"
+            onClick={() => setReplyTo(null)}
+          >
+            <MessageCircle size={16} strokeWidth={1.75} className="text-[var(--c-icon)]" />
+          </button>
+        </div>
       </div>
-      {comments.length > 0 && (
-        <div className="rel-post-comments">
-          {comments.map(comment => {
-            const name = comment.authorType === "user" ? userName : (character?.name || "对方");
-            return (
-              <button
-                key={comment.id}
-                type="button"
-                className="rel-post-comment"
-                onClick={() => setReplyTo(comment)}
-              >
-                <strong>{name}</strong>
-                {comment.replyToAuthorName ? <span> 回复 {comment.replyToAuthorName}</span> : null}
-                ：{comment.content}
-              </button>
-            );
-          })}
+
+      {(likeNames.length > 0 || comments.length > 0) && (
+        <div className="feed-feedback-section w-full flex flex-col gap-2 mb-3 mt-1">
+          {likeNames.length > 0 && (
+            <div className="feed-like-summary flex items-start gap-1 ts-15 leading-[1.55] text-[var(--c-text-title)]">
+              <span className="feed-like-summary-icon shrink-0 mt-[4px] mr-1 text-[var(--c-icon)] opacity-80">
+                <Heart size={15} strokeWidth={1.75} />
+              </span>
+              <span className="feed-like-summary-text opacity-90">{likeNames.join("、")} 赞了</span>
+            </div>
+          )}
+          {commentThreads.length > 0 && (
+            <div className="feed-comments flex flex-col gap-1 w-full mt-1">
+              {commentThreads.map(({ root, replies }) => (
+                <div key={root.id} className="feed-comment feed-comment-root w-full">
+                  <div className="feed-comment-row flex items-start gap-2 cursor-pointer" onClick={() => setReplyTo(root)}>
+                    <div className="feed-comment-avatar feed-comment-avatar-root w-[32px] h-[32px] rounded-full shrink-0 bg-[var(--c-input)] overflow-hidden flex items-center justify-center">
+                      <RelAvatar src={avatarOf(root)} alt={authorOf(root)} />
+                    </div>
+                    <div className="feed-comment-content min-w-0 flex-1 ts-14 leading-[1.8] break-words">
+                      <div className="feed-comment-author text-[var(--c-text)] opacity-70">{authorOf(root)}</div>
+                      <div className="feed-comment-body ts-15 leading-[1.55] text-[var(--c-text-title)]">{root.content}</div>
+                      <div className="feed-comment-meta flex items-center gap-0 mt-[2px] ts-13 text-[var(--c-icon)] w-full">
+                        <span className="feed-comment-time whitespace-nowrap mr-4">{formatRelTimeAgo(root.createdAt)}</span>
+                        <button type="button" className="feed-comment-reply-btn" onClick={(e) => { e.stopPropagation(); setReplyTo(root); }}>回复</button>
+                      </div>
+                    </div>
+                  </div>
+                  {replies.length > 0 && (
+                    <div className="feed-comment-replies flex flex-col gap-1 w-full mt-1 pl-[40px]">
+                      {replies.map(reply => (
+                        <div key={reply.id} className="feed-comment feed-comment-child flex items-start gap-2 cursor-pointer" onClick={() => setReplyTo(reply)}>
+                          <div className="feed-comment-avatar feed-comment-avatar-child w-[22px] h-[22px] rounded-full shrink-0 bg-[var(--c-input)] overflow-hidden flex items-center justify-center mt-[2px]">
+                            <RelAvatar src={avatarOf(reply)} alt={authorOf(reply)} />
+                          </div>
+                          <div className="feed-comment-content min-w-0 flex-1">
+                            <div className="feed-comment-author text-[var(--c-text)] opacity-70">{authorOf(reply)}</div>
+                            <div className="feed-comment-body ts-15 leading-[1.55] text-[var(--c-text-title)]">
+                              {reply.replyToAuthorName ? (
+                                <>
+                                  <span className="feed-comment-reply-prefix">回复 </span>
+                                  <span className="feed-comment-reply-target ts-14 font-normal text-[var(--c-text)] opacity-70">{reply.replyToAuthorName}</span>
+                                  <span className="feed-comment-reply-colon">：</span>
+                                </>
+                              ) : null}
+                              {reply.content}
+                            </div>
+                            <div className="feed-comment-meta flex items-center gap-0 mt-[2px] ts-13 text-[var(--c-icon)]">
+                              <span className="feed-comment-time whitespace-nowrap mr-4">{formatRelTimeAgo(reply.createdAt)}</span>
+                              <button type="button" className="feed-comment-reply-btn" onClick={(e) => { e.stopPropagation(); setReplyTo(reply); }}>回复</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
-      <div className="rel-post-composer">
+
+      <div className="rel-feed-composer">
         <input
           value={draft}
           onChange={e => setDraft(e.target.value)}
-          placeholder={replyTo ? `回复 ${replyTo.authorType === "user" ? userName : (character?.name || "对方")}` : "评论"}
+          placeholder={replyTo ? `回复 ${authorOf(replyTo)}` : "评论"}
           onKeyDown={e => {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -341,9 +433,9 @@ function RelationshipPostCard({
           }}
         />
         {replyTo ? (
-          <button type="button" className="rel-space-text-btn" onClick={() => setReplyTo(null)}>取消</button>
+          <button type="button" className="feed-comment-reply-btn" onClick={() => setReplyTo(null)}>取消</button>
         ) : null}
-        <button type="button" className="rel-space-text-btn" onClick={submit} disabled={!draft.trim()}>发送</button>
+        <button type="button" className="feed-comment-send" onClick={submit} disabled={!draft.trim()}>发送</button>
       </div>
     </article>
   );
@@ -411,7 +503,7 @@ function RelationshipCompose({
         <input type="checkbox" checked={fromChat} onChange={e => setFromChat(e.target.checked)} />
         来自当前聊天的感触
       </label>
-      {fromChat && excerpt ? <pre className="rel-post-excerpt">{excerpt}</pre> : null}
+      {fromChat && excerpt ? <pre className="rel-feed-excerpt">{excerpt}</pre> : null}
       {fromChat && !excerpt ? <p className="rel-compose-hint">最近几条文字消息会附在动态上</p> : null}
       {photoPreview ? <img src={photoPreview} alt="" className="rel-post-photo" /> : null}
       <div className="rel-compose-tools">

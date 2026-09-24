@@ -32,6 +32,7 @@ import { toCustomAppIconId } from "@/lib/custom-app-types";
 import { ChatPluginSlot } from "@/components/chat/chat-plugin-slot";
 import { CHAT_PLUGIN_SLOTS_CHANGED_EVENT, getChatPluginRuntime } from "@/lib/chat-plugin-runtime";
 import { RELATIONSHIP_KIND_META, parseRelationshipKindLabel, relationshipKindLabel } from "@/lib/relationship-storage";
+import { RelationshipKindIcon } from "@/components/chat/relationship-kind-icon";
 
 interface MessageBubbleProps {
     msg: ChatMessage;
@@ -770,10 +771,10 @@ function RelationshipInviteBubble({
             ? `已拒绝${relationshipKindLabel(kind)}邀请`
             : meta.inviteTitle;
     const desc = msg.mediaType === "accept_relationship"
-        ? "点卡片进入双方空间，可以发动态、评论、打卡和纪念日。"
+        ? "点卡片进入双方空间"
         : msg.mediaType === "decline_relationship"
-            ? "这次邀约没有达成。"
-            : `${sender} 邀请绑定「${meta.label}」。一个人只能同时拥有一段关系。`;
+            ? "这次邀约没有达成"
+            : `${sender}邀请绑定${meta.label}`;
     const statusText = status === "received"
         ? "已同意"
         : status === "declined"
@@ -790,11 +791,16 @@ function RelationshipInviteBubble({
             }}
         >
             <div className="chat-rel-card-body">
-                <div className="chat-rel-card-kicker">{meta.emoji} 关系邀约</div>
-                <div className="chat-rel-card-title">{title}</div>
-                <div className="chat-rel-card-desc">{desc}</div>
+                <span className="chat-rel-card-mark">
+                    <RelationshipKindIcon kind={kind} size="lg" />
+                </span>
+                <div className="chat-rel-card-copy">
+                    <div className="chat-rel-card-title">{title}</div>
+                    <div className="chat-rel-card-desc">{desc}</div>
+                </div>
             </div>
             <div className="chat-rel-card-foot">
+                <span className="chat-rel-card-kicker">关系邀约</span>
                 <span className="chat-rel-card-status">{statusText}</span>
                 {incoming ? (
                     <div className="chat-rel-card-actions">

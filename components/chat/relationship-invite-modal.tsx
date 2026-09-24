@@ -1,6 +1,7 @@
 "use client";
 
 import { RELATIONSHIP_KIND_META, RELATIONSHIP_KINDS, type RelationshipKind } from "@/lib/relationship-types";
+import { RelationshipKindIcon } from "@/components/chat/relationship-kind-icon";
 
 export function RelationshipInviteModal({
   characterName,
@@ -31,7 +32,9 @@ export function RelationshipInviteModal({
                 style={{ "--rel-accent": meta.accent } as React.CSSProperties}
                 onClick={() => onConfirm(kind)}
               >
-                <span className="rel-invite-emoji" aria-hidden>{meta.emoji}</span>
+                <span className="rel-invite-mark">
+                  <RelationshipKindIcon kind={kind} />
+                </span>
                 <span className="rel-invite-label">{meta.label}</span>
                 <span className="rel-invite-hint">{meta.inviteHint}</span>
               </button>
