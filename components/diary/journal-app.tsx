@@ -427,49 +427,68 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         busy={busy}
         open={railOpen}
         onToggle={() => setRailOpen(current => !current)}
-        onAddText={() => addSideBlock({
-          id: createJournalBlockId(),
-          type: "text",
-          text: "",
-          author: "user",
-          side: "left",
-          fontFamily: "hand",
-          fontSize: 14,
-          x: 8,
-          y: 12,
-          boxW: 72,
-          boxH: 26,
-        })}
-        onAddImage={() => imageInputRef.current?.click()}
-        onAddDoodle={() => setDoodleOpen(true)}
-        onDrawOnPage={() => addSideBlock({
-          id: createJournalBlockId(),
-          type: "doodle",
-          strokes: [],
-          author: "user",
-          side: "left",
-          x: 12,
-          y: 30,
-          boxW: 70,
-          boxH: 32,
-        })}
-        onAddStamp={stamp => addSideBlock({
-          id: createJournalBlockId(),
-          type: "stamp",
-          stamp,
-          author: "user",
-          side: "left",
-          x: 60,
-          y: 10,
-        })}
+        onAddText={() => {
+          addSideBlock({
+            id: createJournalBlockId(),
+            type: "text",
+            text: "",
+            author: "user",
+            side: "left",
+            fontFamily: "hand",
+            fontSize: 14,
+            x: 8,
+            y: 12,
+            boxW: 72,
+            boxH: 26,
+          });
+          setRailOpen(false);
+        }}
+        onAddImage={() => {
+          setRailOpen(false);
+          imageInputRef.current?.click();
+        }}
+        onAddDoodle={() => {
+          setRailOpen(false);
+          setDoodleOpen(true);
+        }}
+        onDrawOnPage={() => {
+          addSideBlock({
+            id: createJournalBlockId(),
+            type: "doodle",
+            strokes: [],
+            author: "user",
+            side: "left",
+            x: 12,
+            y: 30,
+            boxW: 70,
+            boxH: 32,
+          });
+          setRailOpen(false);
+        }}
+        onAddStamp={stamp => {
+          addSideBlock({
+            id: createJournalBlockId(),
+            type: "stamp",
+            stamp,
+            author: "user",
+            side: "left",
+            x: 60,
+            y: 10,
+          });
+          setRailOpen(false);
+        }}
         onClip={async () => {
           if (!book.characterId) return;
+          setRailOpen(false);
           setClipOpen(true);
           setClips(await collectJournalClips(book.characterId));
         }}
         onInviteWrite={() => { void invite("together"); }}
         onInviteDoodle={() => { void invite("doodle"); }}
-        onAnnotateSelf={() => openUserNote(book, page)}
+        onAnnotateSelf={() => {
+          setRailOpen(false);
+          openUserNote(book, page);
+        }}
         onAnnotateOther={() => {
           if (book.kind === "couple") {
             if (!book.characterId) return;

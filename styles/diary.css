@@ -4574,7 +4574,24 @@
   margin: 0 0 6px;
 }
 
+.journal-block.is-selected .journal-font-row {
+  position: absolute;
+  left: 0;
+  right: 28px;
+  top: -28px;
+  z-index: 5;
+  margin: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.journal-block.is-selected .journal-font-row::-webkit-scrollbar {
+  display: none;
+}
+
 .journal-font-row button {
+  flex: 0 0 auto;
   min-height: 22px;
   padding: 0 8px;
   border: none;
@@ -4582,6 +4599,7 @@
   background: rgba(255, 255, 255, 0.72);
   color: var(--journal-mute);
   font-size: calc(10px * var(--app-text-scale, 1));
+  white-space: nowrap;
 }
 
 .journal-font-row button[data-active] {
@@ -4698,6 +4716,7 @@
   display: flex;
   flex-direction: column;
   min-height: 48px;
+  box-shadow: inset 0 0 0 1px rgba(122, 82, 62, 0.08);
 }
 
 .journal-block.is-float.journal-block-stamp {
@@ -4723,8 +4742,9 @@
 }
 
 .journal-block-move {
-  top: -10px;
-  left: 0;
+  top: -28px;
+  right: 0;
+  left: auto;
 }
 
 .journal-user-note-btn {
@@ -4764,6 +4784,11 @@
 
 .journal-leaf .journal-block {
   overflow: hidden;
+}
+
+.journal-leaf .journal-block.is-float,
+.journal-leaf .journal-block.is-selected {
+  overflow: visible;
 }
 
 .journal-leaf .journal-block-doodle {
