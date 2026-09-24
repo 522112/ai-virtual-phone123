@@ -241,6 +241,7 @@ export function JournalOpenBook({
   annotations,
   activeSide,
   preview,
+  previewSide,
   onActivateSide,
   onChangeBlock,
   onRemoveBlock,
@@ -250,34 +251,40 @@ export function JournalOpenBook({
   annotations: JournalAnnotation[];
   activeSide: JournalSide;
   preview?: boolean;
+  previewSide?: JournalSide;
   onActivateSide: (side: JournalSide) => void;
   onChangeBlock: (block: JournalBlock) => void;
   onRemoveBlock: (blockId: string) => void;
 }) {
+  const single = preview && previewSide;
   return (
-    <div className={`journal-spread-stage${preview ? " is-preview" : ""}`}>
-      <div className="journal-spread">
-        <JournalLeaf
-          side="left"
-          page={page}
-          annotations={annotations}
-          active={!preview && activeSide === "left"}
-          editable={!preview}
-          onActivate={() => onActivateSide("left")}
-          onChangeBlock={onChangeBlock}
-          onRemoveBlock={onRemoveBlock}
-        />
-        <span className="journal-spread-gutter" aria-hidden="true" />
-        <JournalLeaf
-          side="right"
-          page={page}
-          annotations={annotations}
-          active={!preview && activeSide === "right"}
-          editable={!preview && book.kind === "personal"}
-          onActivate={() => onActivateSide("right")}
-          onChangeBlock={onChangeBlock}
-          onRemoveBlock={onRemoveBlock}
-        />
+    <div className={`journal-spread-stage${preview ? " is-preview" : ""}${single ? " is-single" : ""}`}>
+      <div className={`journal-spread${single ? " is-single" : ""}`}>
+        {!single || previewSide === "left" ? (
+          <JournalLeaf
+            side="left"
+            page={page}
+            annotations={annotations}
+            active={!preview && activeSide === "left"}
+            editable={!preview}
+            onActivate={() => onActivateSide("left")}
+            onChangeBlock={onChangeBlock}
+            onRemoveBlock={onRemoveBlock}
+          />
+        ) : null}
+        {!single ? <span className="journal-spread-gutter" aria-hidden="true" /> : null}
+        {!single || previewSide === "right" ? (
+          <JournalLeaf
+            side="right"
+            page={page}
+            annotations={annotations}
+            active={!preview && activeSide === "right"}
+            editable={!preview && book.kind === "personal"}
+            onActivate={() => onActivateSide("right")}
+            onChangeBlock={onChangeBlock}
+            onRemoveBlock={onRemoveBlock}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -294,6 +301,7 @@ export function JournalFlipPreview({
   annotations: JournalAnnotation[];
   onClose: () => void;
 }) {
+  const [side, setSide] = useState<JournalSide>("left");
   const page = useMemo(() => {
     if (pageId) return book.pages.find(item => item.id === pageId) || book.pages[0] || null;
     return book.pages[0] || null;
@@ -316,9 +324,10 @@ export function JournalFlipPreview({
               book={book}
               page={page}
               annotations={pageNotes}
-              activeSide="left"
+              activeSide={side}
               preview
-              onActivateSide={() => undefined}
+              previewSide={side}
+              onActivateSide={setSide}
               onChangeBlock={() => undefined}
               onRemoveBlock={() => undefined}
             />
@@ -326,6 +335,12 @@ export function JournalFlipPreview({
         ) : (
           <p className="journal-empty">这一册还是空的</p>
         )}
+        {page ? (
+          <div className="journal-flip-nav">
+            <button type="button" data-active={side === "left" ? "" : undefined} onClick={() => setSide("left")}>左面</button>
+            <button type="button" data-active={side === "right" ? "" : undefined} onClick={() => setSide("right")}>右面</button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

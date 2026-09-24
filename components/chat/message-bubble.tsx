@@ -915,9 +915,19 @@ function AppCardBubble({ msg, characterId, characterName }: { msg: ChatMessage; 
                 <iframe
                     title={title}
                     className="chat-app-custom-card-frame"
-                    sandbox=""
+                    sandbox="allow-same-origin"
                     style={{ height: layout.height }}
                     srcDoc={buildAppCardSrcDoc(layout.html)}
+                    onLoad={event => {
+                        try {
+                            const height = event.currentTarget.contentDocument?.documentElement?.scrollHeight;
+                            if (height) {
+                                event.currentTarget.style.height = `${Math.min(520, Math.max(96, height))}px`;
+                            }
+                        } catch {
+                            // srcDoc 读不到高度时沿用 layout.height
+                        }
+                    }}
                 />
             </div>
         );
