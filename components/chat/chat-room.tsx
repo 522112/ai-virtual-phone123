@@ -3792,6 +3792,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         });
         setMessages(prev => [...prev, card]);
         setPendingGenerate(true);
+        void triggerAIResponse();
     };
 
     const sendSystemInstruction = (content: string): boolean => {
