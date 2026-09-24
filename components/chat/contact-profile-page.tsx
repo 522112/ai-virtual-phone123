@@ -128,7 +128,9 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
 
     useEffect(() => {
         window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true }));
-        return () => window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: false }));
+        return () => {
+            window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: false }));
+        };
     }, []);
 
     const showNotice = (text: string) => {
