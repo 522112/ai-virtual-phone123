@@ -3,7 +3,6 @@ import { loadCharacters } from "./character-storage";
 import { PENDING_REPLY_PREFIX } from "./friend-request-engine";
 import { kvSet } from "./kv-db";
 import type { JournalBlock, JournalBook, JournalPage } from "./journal-types";
-import { blocksOnSide } from "./journal-storage";
 
 function escapeHtml(text: string): string {
   return text
@@ -27,37 +26,30 @@ function blockAuthorLabel(block: JournalBlock, book: JournalBook, names: Map<str
   return names.get(id) || "对方";
 }
 
-function sideAuthorLabel(page: JournalPage, side: "left" | "right", book: JournalBook, names: Map<string, string>): string {
-  const authors = Array.from(new Set(blocksOnSide(page, side).map(block => blockAuthorLabel(block, book, names))));
-  if (authors.length === 0) return side === "left" ? "用户" : (names.get(book.characterId || "") || "对方");
-  return authors.join("、");
+function blockLine(block: JournalBlock): string {
+  if (block.type === "text" && block.text.trim()) return block.text.trim();
+  if (block.type === "image") return block.caption?.trim() || "[手账图片]";
+  if (block.type === "doodle") return "[手账涂鸦]";
+  if (block.type === "stamp") return block.note?.trim() || "[手账印章]";
+  if (block.type === "clip" && block.text.trim()) return `${block.sourceLabel || "摘录"}：${block.text.trim()}`;
+  return "";
 }
 
-function sideExcerpt(page: JournalPage, side: "left" | "right"): string {
-  return blocksOnSide(page, side)
-    .map(block => {
-      if (block.type === "text") return block.text.trim();
-      if (block.type === "clip") return block.text.trim();
-      if (block.type === "image") return block.caption?.trim() || "";
-      if (block.type === "stamp") return block.note?.trim() || "";
-      return "";
-    })
+function pageExcerpt(page: JournalPage, limit = 80): string {
+  return page.blocks
+    .map(blockLine)
     .filter(Boolean)
     .join(" ")
-    .slice(0, 48);
+    .slice(0, limit);
 }
 
-function formatSideForShare(page: JournalPage, side: "left" | "right", book: JournalBook, names: Map<string, string>): string {
-  const author = sideAuthorLabel(page, side, book, names);
-  const lines = blocksOnSide(page, side).map(block => {
-    if (block.type === "text" && block.text.trim()) return block.text.trim();
-    if (block.type === "image") return block.caption?.trim() || "[手账图片]";
-    if (block.type === "doodle") return "[手账涂鸦]";
-    if (block.type === "stamp") return block.note?.trim() || "[手账印章]";
-    if (block.type === "clip" && block.text.trim()) return `${block.sourceLabel || "摘录"}：${block.text.trim()}`;
-    return "";
+function formatPageForShare(page: JournalPage, book: JournalBook, names: Map<string, string>): string {
+  const lines = page.blocks.map(block => {
+    const text = blockLine(block);
+    if (!text) return "";
+    return `${blockAuthorLabel(block, book, names)}：${text}`;
   }).filter(Boolean);
-  return [`${side === "left" ? "左面" : "右面"}（${author}）`, ...lines].join("\n");
+  return lines.join("\n");
 }
 
 export function formatJournalShareHistory(input: {
@@ -71,7 +63,7 @@ export function formatJournalShareHistory(input: {
   const lines = ["【手账分享】"];
 
   if (input.book.kind === "couple" && isPartner) {
-    lines.push("用户把你们一起做的手账发给你看。左面多半是用户写的，右面是你写的。按人设看看、回一句就好。");
+    lines.push("用户把你们一起做的手账发给你看。这一页上有你们各自写下或画下的内容。按人设看看、回一句就好。");
   } else if (input.book.kind === "couple") {
     lines.push(`用户把一篇手账发给你看。这是用户和${partnerName}一起做的情侣手账，不是你写的。`);
     lines.push("你可以看见上面的字和画，按自己的人设反应：可以好奇、吃醋、点评或开玩笑，但不要装作这是你写的，也不要改口称自己是作者。");
@@ -86,14 +78,12 @@ export function formatJournalShareHistory(input: {
   if (input.page) {
     if (input.page.title) lines.push(input.page.title);
     if (input.page.dateLabel) lines.push(input.page.dateLabel);
-    lines.push(formatSideForShare(input.page, "left", input.book, names));
-    lines.push(formatSideForShare(input.page, "right", input.book, names));
+    lines.push(formatPageForShare(input.page, input.book, names));
   } else {
     lines.push(input.book.kind === "couple" ? "情侣手账" : "个人手账");
     input.book.pages.forEach((page, index) => {
-      lines.push(`第${index + 1}面 ${page.title || ""}`.trim());
-      lines.push(formatSideForShare(page, "left", input.book, names));
-      lines.push(formatSideForShare(page, "right", input.book, names));
+      lines.push(`第${index + 1}页 ${page.title || ""}`.trim());
+      lines.push(formatPageForShare(page, input.book, names));
     });
   }
   return lines.join("\n");
@@ -107,8 +97,7 @@ function estimateShareCardHeight(input: { page?: boolean; image?: boolean; excer
 
 export function buildJournalPageCardHtml(book: JournalBook, page: JournalPage): string {
   const image = firstImage(page);
-  const left = sideExcerpt(page, "left");
-  const right = sideExcerpt(page, "right");
+  const excerpt = pageExcerpt(page);
   return `
 <section style="width:100%;box-sizing:border-box;margin:0;padding:10px 11px 9px;background:linear-gradient(180deg,#fffdf8,#f4efe6);color:#2b2722;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;">
   <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;letter-spacing:0.1em;opacity:0.5;">
@@ -118,16 +107,7 @@ export function buildJournalPageCardHtml(book: JournalBook, page: JournalPage): 
   <h3 style="margin:5px 0 3px;font-size:15px;line-height:1.3;font-weight:600;">${escapeHtml(page.title || book.title)}</h3>
   <p style="margin:0 0 8px;font-size:11px;line-height:1.4;opacity:0.55;">《${escapeHtml(book.title)}》</p>
   ${image ? `<img src="${image}" alt="" style="display:block;width:100%;height:72px;object-fit:cover;border-radius:8px;margin:0 0 8px;" />` : ""}
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-    <div style="min-width:0;padding:7px 8px;border-radius:8px;background:rgba(255,255,255,0.62);">
-      <div style="font-size:10px;opacity:0.42;margin-bottom:3px;">左面</div>
-      <p style="margin:0;font-size:11px;line-height:1.5;word-break:break-word;">${escapeHtml(left || "空白")}</p>
-    </div>
-    <div style="min-width:0;padding:7px 8px;border-radius:8px;background:rgba(255,255,255,0.62);">
-      <div style="font-size:10px;opacity:0.42;margin-bottom:3px;">右面</div>
-      <p style="margin:0;font-size:11px;line-height:1.5;word-break:break-word;">${escapeHtml(right || "空白")}</p>
-    </div>
-  </div>
+  <p style="margin:0;padding:7px 8px;border-radius:8px;background:rgba(255,255,255,0.62);font-size:11px;line-height:1.5;word-break:break-word;">${escapeHtml(excerpt || "这一页还是空的")}</p>
 </section>`;
 }
 
@@ -142,7 +122,7 @@ export function buildJournalBookCardHtml(book: JournalBook): string {
   <div style="min-width:0;flex:1;">
     <div style="font-size:10px;letter-spacing:0.1em;opacity:0.5;margin-bottom:4px;">${book.kind === "couple" ? "情侣手账" : "手账"}</div>
     <h3 style="margin:0 0 4px;font-size:15px;line-height:1.3;">${escapeHtml(book.title)}</h3>
-    <p style="margin:0;font-size:12px;line-height:1.5;opacity:0.72;word-break:break-word;">共 ${book.pages.length} 面${titles ? ` · ${titles}` : ""}</p>
+    <p style="margin:0;font-size:12px;line-height:1.5;opacity:0.72;word-break:break-word;">共 ${book.pages.length} 页${titles ? ` · ${titles}` : ""}</p>
   </div>
 </section>`;
 }
@@ -161,8 +141,7 @@ export function sendJournalShareToCharacter(input: {
     page: input.page,
     recipientId: input.characterId,
   });
-  const left = input.page ? sideExcerpt(input.page, "left") : "";
-  const right = input.page ? sideExcerpt(input.page, "right") : "";
+  const excerpt = input.page ? pageExcerpt(input.page) : "";
   const image = firstImage(input.page);
   const html = input.page
     ? buildJournalPageCardHtml(input.book, input.page)
@@ -170,7 +149,7 @@ export function sendJournalShareToCharacter(input: {
   const height = estimateShareCardHeight({
     page: isPage,
     image: Boolean(image || (!isPage && input.book.coverImage)),
-    excerpt: Math.max(left.length, right.length),
+    excerpt: excerpt.length,
   });
   const message = pushChatMessage({
     sessionId: session.id,
@@ -181,24 +160,21 @@ export function sendJournalShareToCharacter(input: {
       appId: "diary",
       appName: "手账",
       appCardTitle: title,
-      appCardBody: [left, right].filter(Boolean).join(" / ") || `《${input.book.title}》`,
-      appCardSummary: [left, right].filter(Boolean).join(" / ").slice(0, 80),
+      appCardBody: excerpt || `《${input.book.title}》`,
+      appCardSummary: excerpt.slice(0, 80),
       appHistoryText: history,
       appCardLayout: {
         appLabel: "手账",
         title,
         subtitle: input.book.title,
-        body: [left, right].filter(Boolean).join(" / "),
+        body: excerpt,
         html,
         height,
         background: "#fffdf8",
         accentColor: "#7a523e",
         sections: input.page
-          ? [
-              { title: "左面", text: left || "空白" },
-              { title: "右面", text: right || "空白" },
-            ]
-          : [{ title: `${input.book.pages.length} 面`, text: input.book.pages.map(page => page.title).filter(Boolean).join(" · ") }],
+          ? [{ title: input.page.title || "这一页", text: excerpt || "空白" }]
+          : [{ title: `${input.book.pages.length} 页`, text: input.book.pages.map(page => page.title).filter(Boolean).join(" · ") }],
       },
     },
   });

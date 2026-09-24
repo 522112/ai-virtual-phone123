@@ -65,6 +65,7 @@ export type JournalAnnotation = {
   characterId: string;
   characterName: string;
   text: string;
+  quote?: string;
   stamp?: JournalStampKind;
   x?: number;
   y?: number;

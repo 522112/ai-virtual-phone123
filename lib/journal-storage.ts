@@ -199,6 +199,7 @@ function normalizeAnnotation(value: unknown): JournalAnnotation | null {
     characterId,
     characterName: typeof item.characterName === "string" ? item.characterName : (authorType === "user" ? "我" : "对方"),
     text: item.text,
+    quote: typeof item.quote === "string" && item.quote.trim() ? item.quote.trim().slice(0, 48) : undefined,
     stamp: JOURNAL_STAMPS.includes(item.stamp as JournalStampKind) ? item.stamp as JournalStampKind : undefined,
     x: typeof item.x === "number" && Number.isFinite(item.x) ? Math.min(86, Math.max(0, item.x)) : undefined,
     y: typeof item.y === "number" && Number.isFinite(item.y) ? Math.min(86, Math.max(0, item.y)) : undefined,
@@ -445,6 +446,14 @@ export function blocksOnSide(page: JournalPage, side: JournalSide): JournalBlock
   return page.blocks.filter(block => (block.side || (block.author === "character" ? "right" : "left")) === side);
 }
 
+export function isJournalPageFull(page: JournalPage): boolean {
+  const textLen = page.blocks.reduce((sum, block) => (
+    block.type === "text" || block.type === "clip" ? sum + block.text.trim().length : sum
+  ), 0);
+  const heavy = page.blocks.filter(block => block.type === "image" || block.type === "doodle").length;
+  return textLen >= 160 || page.blocks.length >= 5 || heavy >= 2;
+}
+
 function appendBlockLine(lines: string[], block: JournalBlock): void {
   if (block.type === "text" && block.text.trim()) lines.push(block.text.trim());
   else if (block.type === "image") lines.push(block.caption?.trim() || "[手账图片]");
@@ -456,35 +465,14 @@ function appendBlockLine(lines: string[], block: JournalBlock): void {
 }
 
 export function formatJournalSidePlainText(page: JournalPage, side: JournalSide): string {
-  const lines = [page.title, page.dateLabel, side === "left" ? "左页" : "右页"].filter(Boolean);
+  const lines = [page.title, page.dateLabel].filter(Boolean);
   for (const block of blocksOnSide(page, side)) appendBlockLine(lines, block);
   return lines.join("\n");
 }
 
 export function formatJournalPagePlainText(page: JournalPage): string {
   const lines = [page.title, page.dateLabel].filter(Boolean);
-  const left = blocksOnSide(page, "left");
-  const right = blocksOnSide(page, "right");
-  if (left.length || right.length) {
-    if (left.length) {
-      lines.push("左页");
-      for (const block of left) appendBlockLine(lines, block);
-    }
-    if (right.length) {
-      lines.push("右页");
-      for (const block of right) appendBlockLine(lines, block);
-    }
-    return lines.join("\n");
-  }
-  for (const block of page.blocks) {
-    if (block.type === "text" && block.text.trim()) lines.push(block.text.trim());
-    else if (block.type === "image") lines.push(block.caption?.trim() || "[手账图片]");
-    else if (block.type === "doodle") lines.push("[手账涂鸦]");
-    else if (block.type === "stamp") lines.push(block.note?.trim() || "[手账印章]");
-    else if (block.type === "clip" && block.text.trim()) {
-      lines.push(`${block.sourceLabel || "摘录"}：${block.text.trim()}`);
-    }
-  }
+  for (const block of page.blocks) appendBlockLine(lines, block);
   return lines.join("\n");
 }
 

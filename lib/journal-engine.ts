@@ -135,7 +135,7 @@ function parseCharacterPageDraft(raw: string, skill: JournalDrawingSkill): Journ
   const stampX = Number(parsed.stampX);
   const stampY = Number(parsed.stampY);
   return {
-    text: text || undefined,
+    text: text ? text.slice(0, 140) : undefined,
     fontSize: Number.isFinite(fontSize) ? Math.min(22, Math.max(11, fontSize)) : undefined,
     stamp,
     stampNote: String(parsed.stampNote ?? "").trim().slice(0, 16) || undefined,
@@ -146,28 +146,28 @@ function parseCharacterPageDraft(raw: string, skill: JournalDrawingSkill): Journ
   };
 }
 
-function parseAnnotationDraft(raw: string, fallbackSide?: JournalSide): {
+function pickQuoteFromPage(page?: JournalPage, preferred?: string): string | undefined {
+  const wanted = preferred?.trim();
+  if (wanted) return wanted.slice(0, 48);
+  const text = page?.blocks.find(block => block.type === "text" && block.text.trim())?.text.trim() || "";
+  if (!text) return undefined;
+  const slice = text.slice(0, 16).trim();
+  return slice || undefined;
+}
+
+function parseAnnotationDraft(raw: string, page?: JournalPage): {
   text: string;
-  stamp: JournalStampKind;
-  side?: JournalSide;
-  x?: number;
-  y?: number;
+  quote?: string;
+  blockId?: string;
 } {
   const parsed = extractJsonRecord(raw);
   const text = String(parsed.text ?? "").trim()
     || raw.replace(/```[\s\S]*?```/g, "").replace(/\{[\s\S]*\}/, "").trim();
-  const stampRaw = String(parsed.stamp ?? "").trim();
-  const stamp = JOURNAL_STAMPS.includes(stampRaw as JournalStampKind) ? stampRaw as JournalStampKind : "heart";
-  const side = parsed.side === "right" || parsed.side === "left" ? parsed.side : fallbackSide;
-  const x = Number(parsed.x);
-  const y = Number(parsed.y);
-  return {
-    text,
-    stamp,
-    side,
-    x: Number.isFinite(x) ? Math.min(80, Math.max(4, x)) : undefined,
-    y: Number.isFinite(y) ? Math.min(78, Math.max(6, y)) : undefined,
-  };
+  const quote = pickQuoteFromPage(page, String(parsed.quote ?? ""));
+  const blockId = String(parsed.blockId ?? "").trim() || page?.blocks.find(block => (
+    block.type === "text" && quote && block.text.includes(quote)
+  ))?.id;
+  return { text, quote, blockId };
 }
 
 export async function generateJournalAnnotation(input: {
@@ -185,10 +185,10 @@ export async function generateJournalAnnotation(input: {
   const resolved = await resolveJournalGeneration(
     input.characterId,
     [
-      "【手账贴纸批注】",
-      "用户把这摊手账给你看。若某一处让你有感，就在那一处贴一枚小贴纸，贴纸里写你的话。",
-      "不要改原页上的字和画，也不要复述整页。字数随心情，一两句即可，不必凑字数，不必编完整剧情。",
-      "只输出 JSON：{\"text\":\"你的感悟\",\"stamp\":\"heart|star|flower|arrow|underline|tape\",\"side\":\"left|right\",\"x\":4到80,\"y\":6到78}",
+      "【手账划线批注】",
+      "用户把这一页手账给你看。若某一句让你有感，就划出那几个字，再写你的批注。",
+      "不要改原页上的字和画，也不要复述整页。字数随心情，一两句即可。",
+      "只输出 JSON：{\"quote\":\"从原文里原样摘出的短句\",\"text\":\"你的感悟\"}",
       "",
       "手账内容：",
       target,
@@ -202,19 +202,18 @@ export async function generateJournalAnnotation(input: {
     { characterName: `手账批注:${resolved.character.name}`, userName: resolved.userName },
     { appId: "diary", appTags: ["diary", "journal"] },
   );
-  const draft = parseAnnotationDraft(raw, input.side);
+  const draft = parseAnnotationDraft(raw, input.page);
   if (!draft.text) throw new ChatEngineError("角色没有写出批注。");
   addJournalAnnotation({
     bookId: input.book.id,
     pageId: input.page?.id,
-    side: draft.side || input.side,
+    side: input.side,
+    blockId: draft.blockId,
     authorType: "character",
     characterId: resolved.character.id,
     characterName: resolved.character.name,
     text: draft.text,
-    stamp: draft.stamp,
-    x: draft.x ?? (draft.side === "right" ? 64 : 18),
-    y: draft.y ?? 16,
+    quote: draft.quote,
   });
   return draft.text;
 }
@@ -241,18 +240,16 @@ export async function generateJournalCharacterPage(input: {
   const resolved = await resolveJournalGeneration(
     input.characterId,
     [
-      mode === "doodle" ? "【情侣手账来画】" : "【情侣手账一起来写】",
-      "这是一本打开的情侣手账。用户写在左页，请你像一起做手账那样随意发挥，写在右页。",
-      "不必固定字数，不必编完整剧情，也不必每页都写得很满。想到什么写什么，像随手记在本子上。",
+      mode === "doodle" ? "【情侣手账来画】" : "【情侣手账接着写】",
+      "这是一页手账。用户已经写了一些，请你接着写或画在同一页上，不要另开左右页。",
+      "这一页能放下多少写多少，字不要太多。写不下就少写一点，后面还可以再写下一页。",
+      "不必编完整剧情，像一起做手账那样随意发挥。",
       drawingSkillHint(skill),
       modeHint,
-      "只输出 JSON：{\"text\":\"随意长短，也可空\",\"fontSize\":12|14|17,\"stamp\":\"heart|star|flower|arrow|underline|tape|none\",\"stampNote\":\"不超过16字\",\"stampX\":0到80,\"stampY\":0到70,\"doodle\":true|false}",
+      "只输出 JSON：{\"text\":\"这一页放得下的几句，也可空\",\"fontSize\":12|14|17,\"stamp\":\"heart|star|flower|arrow|underline|tape|none\",\"stampNote\":\"不超过16字\",\"doodle\":true|false}",
       "",
-      "左页（用户）：",
-      formatJournalSidePlainText(input.page, "left"),
-      "",
-      "右页（你这边现有的内容）：",
-      formatJournalSidePlainText(input.page, "right"),
+      "这一页现有的内容：",
+      formatJournalPagePlainText(input.page),
     ].join("\n"),
   );
   const raw = await sendLLMRequest(
@@ -260,7 +257,7 @@ export async function generateJournalCharacterPage(input: {
     resolved.preset,
     resolved.messages,
     resolved.regexes,
-    { characterName: `手账右页:${resolved.character.name}`, userName: resolved.userName },
+    { characterName: `手账这一页:${resolved.character.name}`, userName: resolved.userName },
     { appId: "diary", appTags: ["diary", "journal"] },
   );
   const draft = parseCharacterPageDraft(raw, skill);
