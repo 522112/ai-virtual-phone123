@@ -29,7 +29,8 @@ export type IconId =
   | "worldbuilder"
   | "realitybridge"
   | "qa"
-  | "mixology";
+  | "mixology"
+  | "douyin";
 
 // 桌面文件夹：以 folder: 前缀的 id 伪装成图标占一个格子参与拖拽/换页，
 // 内容（名字 + 成员图标）另存 DesktopFolderMap。文件夹不允许进 dock。
@@ -62,6 +63,7 @@ export const PAGE_2_DEFAULT: IconId[] = [
   "game",
   "appmarket",
   "xiaohongshu",
+  "douyin",
   "dwelling",
   "story",
   "vnmode",
@@ -86,6 +88,12 @@ export const ICONS: Record<IconId, IconMeta> = {
     id: "xiaohongshu",
     label: "\u5C0F\u7EA2\u4E66",
     tone: "var(--c-icon-rose)",
+    placeholder: false
+  },
+  douyin: {
+    id: "douyin",
+    label: "抖音",
+    tone: "#25F4EE66",
     placeholder: false
   },
   checkphone: { id: "checkphone", label: "查手机", tone: "var(--c-icon-slate)", placeholder: false },

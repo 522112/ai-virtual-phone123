@@ -27,6 +27,7 @@ import { RealityBridgeApp } from "@/components/reality-bridge-app";
 import { REALITY_BRIDGE_APP_EVENT_NAME, REALITY_BRIDGE_DATA_EVENT } from "@/lib/reality-bridge/types";
 import { DiaryApp } from "@/components/diary/diary-app";
 import { XiaohongshuApp } from "@/components/xiaohongshu/xiaohongshu-app";
+import { DouyinApp } from "@/components/douyin/douyin-app";
 import { StoryApp } from "@/components/story/story-app";
 import { VnApp } from "@/components/vn/vn-app";
 import ReadingApp from "@/components/reading/reading-app";
@@ -1083,6 +1084,7 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
   const [dwellingMounted, setDwellingMounted] = useState(false);
   const [xiaohongshuMounted, setXiaohongshuMounted] = useState(false);
   const [xiaohongshuBusy, setXiaohongshuBusy] = useState(false);
+  const [douyinMounted, setDouyinMounted] = useState(false);
   const [shoppingMounted, setShoppingMounted] = useState(false);
   const [shoppingBusy, setShoppingBusy] = useState(false);
   useEffect(() => {
@@ -1092,6 +1094,7 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
 
   if (activeApp === "dwelling" && !dwellingMounted) setDwellingMounted(true);
   if (activeApp === "xiaohongshu" && !xiaohongshuMounted) setXiaohongshuMounted(true);
+  if (activeApp === "douyin" && !douyinMounted) setDouyinMounted(true);
   if (activeApp === "shopping" && !shoppingMounted) setShoppingMounted(true);
   const [widgets, setWidgets] = useState<WidgetInstance[]>([]);
   const [incomingCall, setIncomingCall] = useState<{
@@ -3935,6 +3938,11 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     setXiaohongshuMounted(false);
   }, [xiaohongshuBusy]);
 
+  const handleCloseDouyin = useCallback(() => {
+    setActiveApp(null);
+    setDouyinMounted(false);
+  }, []);
+
   const handleCloseShopping = useCallback((isBusy?: boolean) => {
     const shouldKeepMounted = isBusy ?? shoppingBusy;
     setActiveApp(null);
@@ -4122,6 +4130,10 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     }
 
     if (activeApp === "xiaohongshu") {
+      return null;
+    }
+
+    if (activeApp === "douyin") {
       return null;
     }
 
@@ -4649,7 +4661,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                   </>
                 ) : (
                   <>
-                    <section className="phone-app-pane" style={activeApp === "dwelling" || activeApp === "xiaohongshu" || activeApp === "shopping" ? { display: "none" } : undefined}>
+                    <section className="phone-app-pane" style={activeApp === "dwelling" || activeApp === "xiaohongshu" || activeApp === "douyin" || activeApp === "shopping" ? { display: "none" } : undefined}>
                       {renderAppBody()}
                     </section>
                     {/* DwellingApp stays mounted while generating — auto-unmounts when idle */}
@@ -4677,6 +4689,14 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                           setXiaohongshuMounted(false);
                         }
                       }}
+                    />
+                  </section>
+                )}
+                {douyinMounted && (
+                  <section className="phone-app-pane" style={activeApp !== "douyin" ? { display: "none" } : undefined}>
+                    <DouyinApp
+                      onClose={handleCloseDouyin}
+                      visible={activeApp === "douyin"}
                     />
                   </section>
                 )}

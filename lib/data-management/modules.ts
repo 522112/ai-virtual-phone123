@@ -224,6 +224,7 @@ const PRIMARY_DATA_MODULES: DataModuleDefinition[] = [
           "ai_phone_character_worlds_v1",
           "ai_phone_character_world_layout_v1",
           "ai_phone_xiaohongshu_state_v1",
+          "ai_phone_douyin_state_v1",
           "ai_phone_friend_requests_v1",
           "ai_phone_relationships_v1",
           "ai_phone_rel_posts_v1",

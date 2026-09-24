@@ -142,6 +142,12 @@ export const CONTENT_SCOPE_TAG_GROUPS: TagGroupProfile[] = [
             profile("xiaohongshu", "mention", "@提及回复", ["xiaohongshu", "mention"]),
         ],
     },
+    {
+        id: "douyin",
+        label: "抖音",
+        tags: ["douyin"],
+        minors: [commonMinor("douyin", ["douyin"])],
+    },
     { id: "story", label: "剧情", tags: ["story"], minors: [commonMinor("story", ["story"])] },
     { id: "vn", label: "漫卷", tags: ["vn"], minors: [commonMinor("vn", ["vn"])] },
     { id: "calendar", label: "日历", tags: ["calendar"], minors: [commonMinor("calendar", ["calendar"])] },
