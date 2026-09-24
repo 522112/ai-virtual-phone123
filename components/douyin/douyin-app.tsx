@@ -161,8 +161,8 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
     const identity = resolveUserIdentity();
     if (!loginName) setLoginName(identity?.name || state.session.nickname);
     if (!loginHandle) setLoginHandle(state.session.handle);
-    if (!loginPersona) setLoginPersona(state.session.persona || "");
-  }, [visible]);
+    setLoginPersona(state.session.persona || loginPersona || "");
+  }, [visible, state.session.persona]);
 
   const notice = (message: string) => {
     setToast(message);
@@ -386,18 +386,22 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
               <button type="button" className="dy-icon-btn" aria-label="返回" onClick={() => setTab("home")}>
                 <ChevronLeft size={18} />
               </button>
-              <h2 className="dy-panel-title">创作中心</h2>
+              <h2 className="dy-panel-title">创作</h2>
               {busy ? <div className="dy-busy">{busy}</div> : null}
 
-              <div className="dy-card">
-                <div className="dy-field">
-                  <label>发一条视频动态</label>
-                  <textarea value={createCaption} onChange={e => setCreateCaption(e.target.value)} placeholder="这一刻想分享什么…" />
-                </div>
+              <section className="dy-create-block">
+                <h3>发作品</h3>
+                <textarea
+                  className="dy-create-textarea"
+                  value={createCaption}
+                  onChange={e => setCreateCaption(e.target.value)}
+                  placeholder="这一刻想分享什么…"
+                  rows={4}
+                />
                 <button
                   type="button"
                   className="dy-btn"
-                  style={{ width: "100%", marginTop: 8 }}
+                  style={{ width: "100%" }}
                   onClick={() => {
                     setState(publishDouyinVideo(createCaption));
                     setCreateCaption("");
@@ -405,24 +409,26 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
                     notice("已发布到推荐流");
                   }}
                 >
-                  发布作品
+                  发布
                 </button>
-              </div>
+              </section>
 
-              <div className="dy-card">
-                <div className="dy-field">
-                  <label>开直播</label>
-                  <input value={liveTitle} onChange={e => setLiveTitle(e.target.value)} placeholder="直播间标题" />
-                </div>
+              <section className="dy-create-block">
+                <h3>开直播</h3>
+                <input
+                  className="dy-create-input"
+                  value={liveTitle}
+                  onChange={e => setLiveTitle(e.target.value)}
+                  placeholder="直播间标题"
+                />
                 {myLive ? (
-                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                    <button type="button" className="dy-btn dy-btn-cyan" style={{ flex: 1 }} onClick={() => setActiveLiveId(myLive.id)}>
+                  <div className="dy-create-actions">
+                    <button type="button" className="dy-btn dy-btn-cyan" onClick={() => setActiveLiveId(myLive.id)}>
                       回到直播间
                     </button>
                     <button
                       type="button"
                       className="dy-btn dy-btn-ghost"
-                      style={{ flex: 1 }}
                       onClick={() => {
                         setState(endMyDouyinLive());
                         setWalletBalance(getWalletBalance(loadWalletState()));
@@ -436,13 +442,13 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
                   <button
                     type="button"
                     className="dy-btn dy-btn-cyan"
-                    style={{ width: "100%", marginTop: 8 }}
+                    style={{ width: "100%" }}
                     onClick={() => {
                       const next = startMyDouyinLive(liveTitle);
                       setState(next);
                       setActiveLiveId(next.myLiveRoomId);
                       setLiveTitle("");
-                      notice("直播已开始，观众身份按人设刷新");
+                      notice("直播已开始");
                       if (next.myLiveRoomId) {
                         void generateDouyinAudienceDanmaku(next.myLiveRoomId, "用户开播").then(refresh);
                       }
@@ -451,78 +457,8 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
                     开始直播
                   </button>
                 )}
-              </div>
-
-              <div className="dy-card">
-                <strong style={{ fontSize: 13 }}>NPC 立绘库</strong>
-                <p style={{ margin: "6px 0 10px", color: "var(--dy-muted)", fontSize: 12 }}>
-                  刷新直播时会随机抽立绘生成人设开播
-                </p>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={e => { void handleUploadPortrait(e.target.files?.[0] || null); }}
-                />
-                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                  <button type="button" className="dy-btn dy-btn-ghost" style={{ flex: 1 }} onClick={() => fileRef.current?.click()}>
-                    <ImagePlus size={14} style={{ display: "inline", marginRight: 4 }} />上传立绘
-                  </button>
-                  <button type="button" className="dy-btn" style={{ flex: 1 }} onClick={() => { void handleRefreshNpcLives(); }} disabled={!!busy}>
-                    <RefreshCw size={14} style={{ display: "inline", marginRight: 4 }} />刷新直播
-                  </button>
-                </div>
-                <div className="dy-npc-grid">
-                  {portraits.map(portrait => (
-                    <div key={portrait.id} className="dy-npc-card">
-                      <div className="dy-npc-thumb" style={{ backgroundImage: portraitUrls[portrait.id] ? `url(${portraitUrls[portrait.id]})` : undefined }}>
-                        {!portraitUrls[portrait.id] ? portrait.name.slice(0, 1) : null}
-                      </div>
-                      <div className="dy-npc-meta">
-                        <strong>{portrait.name}</strong>
-                        <button
-                          type="button"
-                          className="dy-link-btn"
-                          onClick={() => { void deleteDouyinNpcPortrait(portrait.id).then(refreshPortraits); }}
-                        >
-                          删除
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {portraits.length === 0 ? <div className="dy-empty" style={{ padding: 12 }}>还没有立绘</div> : null}
-              </div>
-
-              <div className="dy-card">
-                <strong style={{ fontSize: 13 }}>参与角色</strong>
-                <p style={{ margin: "6px 0 10px", color: "var(--dy-muted)", fontSize: 12 }}>
-                  按人设决定是否发作品/开播；进直播间时另调角色互动，观众弹幕每次 15 条
-                </p>
-                {characters.length === 0 ? <div className="dy-empty" style={{ padding: 8 }}>暂无角色</div> : null}
-                {characters.map(character => {
-                  const selected = participantIds.includes(character.id);
-                  return (
-                    <div key={character.id} className="dy-char-row">
-                      <button
-                        type="button"
-                        className="dy-chip"
-                        {...(selected ? { "data-on": "" } : {})}
-                        onClick={() => toggleParticipant(character.id)}
-                      >
-                        {character.name}
-                      </button>
-                      <button type="button" className="dy-link-btn" disabled={!!busy} onClick={() => { void handleCharacterPublish(character.id); }}>
-                        刷新作品
-                      </button>
-                      <button type="button" className="dy-link-btn" disabled={!!busy} onClick={() => { void handleCharacterLive(character.id); }}>
-                        开播
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+                <p className="dy-create-hint">NPC / 角色设置请到「我」页</p>
+              </section>
             </div>
           ) : null}
 
@@ -606,7 +542,6 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
                 <Avatar name={state.session.nickname} tone={state.session.avatarTone} size={72} />
                 <strong style={{ fontSize: 18 }}>{state.session.nickname}</strong>
                 <span style={{ color: "var(--dy-muted)", fontSize: 12 }}>抖音号：{state.session.handle}</span>
-                <span style={{ color: "var(--dy-muted)", fontSize: 12 }}>{state.session.persona || state.session.bio}</span>
               </div>
               <div className="dy-stats">
                 <div>
@@ -622,17 +557,126 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
                   <span>作品</span>
                 </div>
               </div>
+
+              <section className="dy-settings-block">
+                <h3>账号人设</h3>
+                <p className="dy-settings-desc">影响开播观众人数与观众身份</p>
+                <textarea
+                  className="dy-create-textarea"
+                  value={loginPersona}
+                  onChange={e => setLoginPersona(e.target.value)}
+                  placeholder="例如：爱看练舞和生活号的学生"
+                  rows={3}
+                />
+                <button
+                  type="button"
+                  className="dy-btn dy-btn-ghost"
+                  style={{ width: "100%", marginTop: 8 }}
+                  onClick={() => {
+                    setState(loginDouyinAccount({
+                      nickname: state.session.nickname,
+                      handle: state.session.handle,
+                      persona: loginPersona,
+                    }));
+                    notice("人设已保存");
+                  }}
+                >
+                  保存人设
+                </button>
+              </section>
+
+              <section className="dy-settings-block">
+                <div className="dy-settings-head">
+                  <h3>NPC 立绘库</h3>
+                  <span>{portraits.length}</span>
+                </div>
+                <p className="dy-settings-desc">刷新直播时随机抽立绘生成人设开播</p>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  onChange={e => { void handleUploadPortrait(e.target.files?.[0] || null); }}
+                />
+                <div className="dy-create-actions">
+                  <button type="button" className="dy-btn dy-btn-ghost" onClick={() => fileRef.current?.click()}>
+                    <ImagePlus size={14} style={{ display: "inline", marginRight: 4 }} />上传
+                  </button>
+                  <button type="button" className="dy-btn" disabled={!!busy} onClick={() => { void handleRefreshNpcLives(); }}>
+                    <RefreshCw size={14} style={{ display: "inline", marginRight: 4 }} />刷新直播
+                  </button>
+                </div>
+                {portraits.length > 0 ? (
+                  <div className="dy-npc-grid" style={{ marginTop: 10 }}>
+                    {portraits.map(portrait => (
+                      <div key={portrait.id} className="dy-npc-card">
+                        <div
+                          className="dy-npc-thumb"
+                          style={{ backgroundImage: portraitUrls[portrait.id] ? `url(${portraitUrls[portrait.id]})` : undefined }}
+                        >
+                          {!portraitUrls[portrait.id] ? portrait.name.slice(0, 1) : null}
+                        </div>
+                        <div className="dy-npc-meta">
+                          <strong>{portrait.name}</strong>
+                          <button
+                            type="button"
+                            className="dy-link-btn"
+                            onClick={() => { void deleteDouyinNpcPortrait(portrait.id).then(refreshPortraits); }}
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="dy-empty" style={{ padding: 14 }}>还没有立绘</div>
+                )}
+              </section>
+
+              <section className="dy-settings-block">
+                <h3>参与角色</h3>
+                <p className="dy-settings-desc">勾选后按人设发作品 / 开播；进房另调角色互动，观众弹幕每次 15 条</p>
+                {busy ? <div className="dy-busy">{busy}</div> : null}
+                {characters.length === 0 ? <div className="dy-empty" style={{ padding: 12 }}>暂无角色，请先在角色页创建</div> : null}
+                <div className="dy-char-list">
+                  {characters.map(character => {
+                    const selected = participantIds.includes(character.id);
+                    return (
+                      <div key={character.id} className="dy-char-item">
+                        <button
+                          type="button"
+                          className="dy-chip"
+                          {...(selected ? { "data-on": "" } : {})}
+                          onClick={() => toggleParticipant(character.id)}
+                        >
+                          {selected ? "✓ " : ""}{character.name}
+                        </button>
+                        <div className="dy-char-item-actions">
+                          <button type="button" className="dy-link-btn" disabled={!!busy} onClick={() => { void handleCharacterPublish(character.id); }}>
+                            发作品
+                          </button>
+                          <button type="button" className="dy-link-btn" disabled={!!busy} onClick={() => { void handleCharacterLive(character.id); }}>
+                            开播
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
               <div className="dy-wallet-card">
                 <h3><Wallet size={14} style={{ display: "inline", marginRight: 6 }} />聊天钱包</h3>
                 <p>
                   {state.session.walletLinked
-                    ? `已连接 · 余额 ¥${formatWalletAmount(walletBalance)}（直播礼物结束折合入账）`
-                    : "连接后可在直播间用余额刷礼物，主播侧礼物结束入账"}
+                    ? `已连接 · 余额 ¥${formatWalletAmount(walletBalance)}`
+                    : "连接后可用余额刷礼物，结束直播折合入账"}
                 </p>
                 <div className="dy-wallet-actions">
                   {state.session.walletLinked ? (
                     <button type="button" className="dy-btn dy-btn-ghost" onClick={() => { setState(linkDouyinWallet(false)); notice("已断开钱包"); }}>
-                      断开连接
+                      断开
                     </button>
                   ) : (
                     <button type="button" className="dy-btn dy-btn-cyan" onClick={handleLinkWallet}>
@@ -648,7 +692,7 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
                       notice("已退出登录");
                     }}
                   >
-                    退出登录
+                    退出
                   </button>
                 </div>
               </div>
@@ -945,7 +989,7 @@ function LiveRoom({
   onBurst: () => void;
   onEnd: () => void;
 }) {
-  const recent = room.danmaku.slice(-10);
+  const recent = room.danmaku.slice(-8);
 
   return (
     <div className="dy-live-room">
@@ -953,117 +997,115 @@ function LiveRoom({
         className="dy-live-stage"
         style={{
           background: spriteUrl
-            ? `linear-gradient(180deg, rgba(0,0,0,0.15), rgba(0,0,0,0.72)), url(${spriteUrl}) center/cover no-repeat`
-            : room.coverTone,
+            ? `linear-gradient(180deg, rgba(0,0,0,0.2), rgba(0,0,0,0.55)), url(${spriteUrl}) center/cover no-repeat`
+            : `linear-gradient(160deg, ${room.coverTone}, #0a0a0c 70%)`,
         }}
       >
-        <div className="dy-live-overlay">
-          <div className="dy-live-top">
-            <div className="dy-live-host">
-              <Avatar name={room.hostName} tone={room.hostTone} size={28} />
-              <div>
-                <strong>{room.hostName}</strong>
-                <span>{formatDouyinCount(room.viewers)} 在看 · 礼物 {room.giftCoins}</span>
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {isHost ? (
-                <button type="button" className="dy-btn" style={{ padding: "8px 12px" }} onClick={onEnd}>结束</button>
-              ) : null}
-              <button type="button" className="dy-icon-btn" aria-label="关闭" onClick={onClose}><X size={16} /></button>
+        <div className="dy-live-top">
+          <div className="dy-live-host">
+            <Avatar name={room.hostName} tone={room.hostTone} size={28} />
+            <div>
+              <strong>{room.hostName}</strong>
+              <span>{formatDouyinCount(room.viewers)} 在看 · 礼物 {room.giftCoins}</span>
             </div>
           </div>
-
-          {room.pk?.active ? (
-            <div className="dy-pk-bar">
-              <div>
-                <strong>PK · {room.pk.topic}</strong>
-                <span>{room.hostName} {room.pk.myScore} : {room.pk.opponentScore} {room.pk.opponentName}</span>
-              </div>
-              <div className="dy-pk-meter">
-                <i style={{ width: `${Math.max(8, (room.pk.myScore / Math.max(1, room.pk.myScore + room.pk.opponentScore)) * 100)}%` }} />
-              </div>
-            </div>
-          ) : null}
-
-          <div>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: "var(--dy-accent)", fontWeight: 700, marginBottom: 4 }}>
-                <Radio size={12} style={{ display: "inline", marginRight: 4 }} />LIVE
-                {room.persona ? ` · ${room.persona.slice(0, 28)}` : ""}
-              </div>
-              <div style={{ fontSize: 16, fontWeight: 750 }}>{room.title}</div>
-              {room.speakLines?.length ? (
-                <div className="dy-speak-line">{room.speakLines[room.speakLines.length - 1]}</div>
-              ) : null}
-              {room.viewerHints?.length ? (
-                <div className="dy-viewer-hints">观众：{room.viewerHints.slice(0, 3).join(" · ")}</div>
-              ) : null}
-            </div>
-            <div className="dy-danmaku-lane">
-              {recent.map(item => (
-                <div key={item.id} className="dy-danmaku" style={{ color: item.tone }}>
-                  {item.authorName ? `${item.authorName}：` : ""}{item.text}
-                </div>
-              ))}
-            </div>
-            {busy ? <div className="dy-busy">{busy}</div> : null}
-            <div className="dy-live-tools">
-              <button type="button" onClick={onPk}><Swords size={14} /> {room.pk?.active ? "结束PK" : "PK"}</button>
-              <button type="button" onClick={onBurst}><RefreshCw size={14} /> 刷弹幕</button>
-              {isHost ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!draft.trim()) return;
-                    onSpeak(draft.trim());
-                    onDraft("");
-                  }}
-                >
-                  <Mic size={14} /> 讲话
-                </button>
-              ) : null}
-            </div>
-            {!isHost ? (
-              <div className="dy-gift-row">
-                {GIFT_OPTIONS.map(gift => (
-                  <button
-                    key={gift.label}
-                    type="button"
-                    onClick={() => onGift(gift.coins, gift.label)}
-                    title={walletLinked ? `¥${gift.coins}` : "需先连接钱包"}
-                  >
-                    {gift.label} ¥{gift.coins}
-                  </button>
-                ))}
-              </div>
+          <div className="dy-live-top-actions">
+            {isHost ? (
+              <button type="button" className="dy-live-end" onClick={onEnd}>结束</button>
             ) : null}
-            <div className="dy-live-actions">
-              <input
-                value={draft}
-                onChange={e => onDraft(e.target.value)}
-                placeholder={isHost ? "讲话或发弹幕…" : "说点什么…"}
-                onKeyDown={e => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (!draft.trim()) return;
-                    onDanmaku(draft.trim());
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="dy-btn"
-                style={{ padding: "11px 16px" }}
-                onClick={() => {
-                  if (!draft.trim()) return;
-                  onDanmaku(draft.trim());
-                }}
-              >
-                弹幕
-              </button>
+            <button type="button" className="dy-icon-btn" aria-label="关闭" onClick={onClose}><X size={16} /></button>
+          </div>
+        </div>
+
+        {room.pk?.active ? (
+          <div className="dy-pk-bar">
+            <div>
+              <strong>PK · {room.pk.topic}</strong>
+              <span>{room.hostName} {room.pk.myScore} : {room.pk.opponentScore} {room.pk.opponentName}</span>
+            </div>
+            <div className="dy-pk-meter">
+              <i style={{ width: `${Math.max(8, (room.pk.myScore / Math.max(1, room.pk.myScore + room.pk.opponentScore)) * 100)}%` }} />
             </div>
           </div>
+        ) : null}
+
+        <div className="dy-live-meta">
+          <div className="dy-live-badge-row">
+            <Radio size={12} /> LIVE
+            {room.hostType === "character" ? " · 角色" : room.hostType === "user" ? " · 我" : " · NPC"}
+          </div>
+          <div className="dy-live-title">{room.title}</div>
+          {room.speakLines?.length ? (
+            <div className="dy-speak-line">{room.speakLines[room.speakLines.length - 1]}</div>
+          ) : null}
+        </div>
+
+        <div className="dy-danmaku-lane">
+          {recent.map(item => (
+            <div key={item.id} className="dy-danmaku" style={{ color: item.tone }}>
+              {item.authorName ? <em>{item.authorName}</em> : null}
+              {item.text}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="dy-live-dock">
+        {busy ? <div className="dy-busy">{busy}</div> : null}
+        <div className="dy-live-tools">
+          <button type="button" onClick={onPk}><Swords size={14} /> {room.pk?.active ? "结束PK" : "PK"}</button>
+          <button type="button" onClick={onBurst}><RefreshCw size={14} /> 刷弹幕</button>
+          {isHost ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!draft.trim()) return;
+                onSpeak(draft.trim());
+                onDraft("");
+              }}
+            >
+              <Mic size={14} /> 讲话
+            </button>
+          ) : null}
+        </div>
+        {!isHost ? (
+          <div className="dy-gift-row">
+            {GIFT_OPTIONS.map(gift => (
+              <button
+                key={gift.label}
+                type="button"
+                onClick={() => onGift(gift.coins, gift.label)}
+                title={walletLinked ? `¥${gift.coins}` : "需先连接钱包"}
+              >
+                {gift.label} ¥{gift.coins}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="dy-live-actions">
+          <input
+            value={draft}
+            onChange={e => onDraft(e.target.value)}
+            placeholder={isHost ? "讲话或发弹幕…" : "说点什么…"}
+            onKeyDown={e => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (!draft.trim()) return;
+                onDanmaku(draft.trim());
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="dy-btn"
+            style={{ padding: "11px 16px" }}
+            onClick={() => {
+              if (!draft.trim()) return;
+              onDanmaku(draft.trim());
+            }}
+          >
+            发送
+          </button>
         </div>
       </div>
     </div>
