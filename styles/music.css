@@ -3381,19 +3381,129 @@
     border-color: rgba(240, 215, 176, 0.42);
 }
 
-.lt-chip {
+.music-player[data-listen-together] .mp-artist {
+    cursor: default;
+}
+
+.lt-duo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    min-height: 0;
+    padding: 8px 24px 4px;
+    cursor: pointer;
+}
+
+.lt-duo-faces {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lt-duo-avatar {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+    flex: 0 0 auto;
+}
+
+.lt-duo-avatar + .lt-duo-link + .lt-duo-avatar {
+    margin-left: -10px;
+}
+
+.lt-duo-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.lt-duo-ring {
     position: absolute;
-    left: 16px;
-    right: 16px;
-    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
-    z-index: 6;
-    min-height: 34px;
-    border: none;
-    border-radius: 999px;
-    background: rgba(20, 18, 24, 0.72);
+    inset: 0;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 2px rgba(240, 215, 176, 0.78);
+    pointer-events: none;
+}
+
+.lt-duo-avatar[data-playing] .lt-duo-ring {
+    animation: lt-duo-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes lt-duo-breathe {
+    0%, 100% { box-shadow: inset 0 0 0 2px rgba(240, 215, 176, 0.7), 0 0 0 0 rgba(240, 215, 176, 0.18); }
+    50% { box-shadow: inset 0 0 0 2px rgba(240, 215, 176, 0.95), 0 0 0 8px rgba(240, 215, 176, 0); }
+}
+
+.lt-duo-link {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    margin: 0 -4px;
+    border-radius: 50%;
+    background: rgba(18, 16, 20, 0.62);
+    color: #f0d7b0;
+    backdrop-filter: blur(8px);
+}
+
+.lt-duo-caption {
+    font-size: calc(13px * var(--app-text-scale, 1));
+    font-weight: 650;
+    letter-spacing: 0.06em;
     color: #f4efe8;
+}
+
+.lt-duo-now {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 240px;
+}
+
+.lt-duo-disc {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 255, 255, 0.08);
+    color: #f0d7b0;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.lt-duo-disc img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.lt-duo-now strong,
+.lt-duo-now span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.lt-duo-now strong {
+    font-size: calc(13px * var(--app-text-scale, 1));
+}
+
+.lt-duo-now span {
+    margin-top: 2px;
     font-size: calc(11px * var(--app-text-scale, 1));
-    backdrop-filter: blur(12px);
+    opacity: 0.62;
 }
 
 .lt-overlay {
