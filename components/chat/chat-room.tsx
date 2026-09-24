@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, Fragment, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChatSession, ChatMessage, CHAT_APP_SETTINGS_UPDATED_EVENT, CHAT_INITIAL_VISIBLE_MESSAGE_COUNT, CHAT_LOAD_MORE_MESSAGE_COUNT, CHAT_REQUEST_REPLY_EVENT, loadChatAppSettings, loadChatMessages, loadChatContacts, loadChatSessions, createOrGetSession, saveChatSessions, pushChatMessage, updateChatMessage, deleteChatMessage, deleteChatMessagesFrom, deleteChatMessagesByIds, retractChatMessage, editChatMessage, updateMessageMediaData, replaceResponseBatchWithParts, replaceGroupResponseRound, isReadingDiscussMessage, isSystemInstructionMessage, createResponseBatchId, createResponseRoundId, getLatestStateValues, getLatestCharacterStateValues, compareChatMessages, isSessionStreamingEnabled, classifyForwardedKind, buildForwardedPreview } from "@/lib/chat-storage";
+import { ChatSession, ChatMessage, CHAT_APP_SETTINGS_UPDATED_EVENT, CHAT_INITIAL_VISIBLE_MESSAGE_COUNT, CHAT_LOAD_MORE_MESSAGE_COUNT, CHAT_REQUEST_REPLY_EVENT, loadChatAppSettings, loadChatMessages, loadChatContacts, loadChatSessions, createOrGetSession, saveChatSessions, pushChatMessage, updateChatMessage, deleteChatMessage, deleteChatMessagesFrom, deleteChatMessagesByIds, retractChatMessage, editChatMessage, updateMessageMediaData, replaceResponseBatchWithParts, replaceGroupResponseRound, isReadingDiscussMessage, isSystemInstructionMessage, createResponseBatchId, createResponseRoundId, getLatestStateValues, getLatestCharacterStateValues, compareChatMessages, isSessionStreamingEnabled, isForwardedChatRecord, buildForwardedChatTitle, buildForwardedRecordPreview, toForwardedChatItem } from "@/lib/chat-storage";
 import { cleanStreamText, splitStreamPreviewSegments, stripLiteralTexts, stripXmlTagBlocks } from "@/lib/stream-preview";
 import type { StateValue } from "@/lib/chat-storage";
 import { parseStateValues, mergeStateValues } from "@/lib/state-value-parser";
@@ -42,6 +42,7 @@ import { GroupCallScreen } from "./group-call-screen";
 import { TransferTargetModal } from "./transfer-target-modal";
 import { GiftPickerModal } from "./gift-picker-modal";
 import { ConfirmDialog } from "@/components/ui/modal";
+import { usePhoneBack } from "@/lib/phone-navigation";
 import { deleteWeixinCloudMessagesFromCloud, emitWeixinSyncToast, syncAllWeixinBotRuntimesToCloud } from "@/lib/weixin-cloud-sync";
 import { loadBindingConfig, loadPresets, loadRegexes, resolveBinding, resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import {
@@ -5625,6 +5626,28 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         setShowForwardPicker(false);
     }, []);
 
+    usePhoneBack(() => {
+        if (mediaDetailMsg) { setMediaDetailMsg(null); return true; }
+        if (showForwardPicker) { setShowForwardPicker(false); return true; }
+        if (isMultiSelectMode) { cancelMultiSelect(); return true; }
+        if (showRelationshipSpace) { setShowRelationshipSpace(false); return true; }
+        if (showRelationshipInvite) { setShowRelationshipInvite(false); return true; }
+        if (richModal) { setRichModal(null); return true; }
+        if (showSettings) { setShowSettings(false); return true; }
+        if (reasoningSheetText) { setReasoningSheetText(null); return true; }
+        if (showEmojiPanel || showStickerPanel || showPlusMenu) {
+            setShowEmojiPanel(false);
+            setShowStickerPanel(false);
+            setShowPlusMenu(false);
+            return true;
+        }
+        if ((showVoiceCall || showVideoCall) && !callMinimized) {
+            setCallMinimized(true);
+            return true;
+        }
+        return false;
+    }, 40);
+
     const forwardTargets = useMemo(() => {
         if (!showForwardPicker) return [];
         const chars = loadCharacters();
@@ -5674,27 +5697,26 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             return;
         }
         const dest = target.sessionId || createOrGetSession(target.contactId).id;
-        for (const msg of selected) {
+        const items = selected.map(msg => {
             const originalName = msg.role === "user"
                 ? (userIdentity?.name || "我")
                 : (msg.senderName || character?.name || "对方");
-            const kind = classifyForwardedKind(msg);
-            pushChatMessage({
-                sessionId: dest,
-                role: "user",
-                content: msg.content,
-                mediaType: msg.mediaType,
-                mediaUrl: msg.mediaUrl,
-                mediaData: {
-                    ...msg.mediaData,
-                    forwardedFromName: originalName,
-                    forwardedFromSessionId: session.id,
-                    forwardedKind: kind,
-                    forwardedPreview: buildForwardedPreview(msg),
-                    forwardedVoiceText: kind === "voice" ? (msg.mediaData?.label || msg.mediaData?.forwardedVoiceText) : undefined,
-                },
-            });
-        }
+            return toForwardedChatItem(msg, originalName);
+        });
+        const title = buildForwardedChatTitle(items.map(item => item.name));
+        const preview = buildForwardedRecordPreview(items);
+        pushChatMessage({
+            sessionId: dest,
+            role: "user",
+            content: preview,
+            mediaData: {
+                forwardedFromName: title,
+                forwardedTitle: title,
+                forwardedFromSessionId: session.id,
+                forwardedPreview: preview,
+                forwardedItems: items,
+            },
+        });
         kvSet(PENDING_REPLY_PREFIX + dest, "1");
         if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: dest } }));
@@ -6238,7 +6260,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     const cardStateValues = msg.freshStateValues ?? msg.stateValues;
                     const isSilentThought = !visibleContent && !renderMsg.mediaType && hasFoldedPanel && msg.role !== "user";
                     const isStandaloneHtmlPreview = !renderMsg.mediaType && isStandaloneHtmlPreviewContent(bubbleDisplayContent);
-                    const isForwardCard = Boolean(renderMsg.mediaData?.forwardedFromName);
+                    const isForwardCard = isForwardedChatRecord(renderMsg);
                     const isMediaBubble = (renderMsg.mediaType && CHAT_MEDIA_BUBBLE_TYPES.has(renderMsg.mediaType)) || isStandaloneHtmlPreview || isForwardCard;
                     // Empty bubble: no visible content AND no visual media AND no folded panel.
                     const isEmptyBubble = !isVisualMedia && !visibleContent && uiRole(msg) !== "system" && !hasFoldedPanel;
@@ -7078,7 +7100,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             )}
 
             {/* Red Packet / Transfer Detail Modal */}
-            {mediaDetailMsg?.mediaData?.forwardedFromName ? (
+            {mediaDetailMsg && isForwardedChatRecord(mediaDetailMsg) ? (
                 <ForwardDetailOverlay
                     msg={mediaDetailMsg}
                     characterId={mediaDetailMsg.senderCharacterId || session.contactId}

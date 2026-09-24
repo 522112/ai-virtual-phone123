@@ -149,16 +149,30 @@ function parseCharacterPageDraft(raw: string, skill: JournalDrawingSkill): Journ
   };
 }
 
+function shortenQuote(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  const clause = trimmed.split(/[。！？!?；;\n]/).map(item => item.trim()).find(Boolean) || trimmed;
+  return clause.slice(0, 18);
+}
+
 function pickQuoteFromPage(page?: JournalPage, preferred?: string): string | undefined {
   const wanted = preferred?.trim();
-  if (wanted) return wanted.slice(0, 48);
-  const written = page?.blocks.find((block): block is Extract<JournalBlock, { type: "text" }> => (
-    block.type === "text" && Boolean(block.text.trim())
-  ));
-  const text = written?.text.trim() || "";
-  if (!text) return undefined;
-  const slice = text.slice(0, 16).trim();
-  return slice || undefined;
+  if (wanted) {
+    const host = page?.blocks.find(block => (
+      (block.type === "text" || block.type === "clip") && block.text.includes(wanted)
+    ) || (block.type === "image" && (block.caption || "").includes(wanted)));
+    const source = host && (host.type === "text" || host.type === "clip")
+      ? host.text
+      : host && host.type === "image"
+        ? (host.caption || wanted)
+        : wanted;
+    if (wanted.length > 22 || (source && wanted.length > Math.max(18, source.length * 0.45))) {
+      return shortenQuote(wanted) || undefined;
+    }
+    return wanted.slice(0, 22);
+  }
+  return undefined;
 }
 
 function parseAnnotationDraft(raw: string, page?: JournalPage): {
@@ -170,8 +184,10 @@ function parseAnnotationDraft(raw: string, page?: JournalPage): {
   const text = String(parsed.text ?? "").trim()
     || raw.replace(/```[\s\S]*?```/g, "").replace(/\{[\s\S]*\}/, "").trim();
   const quote = pickQuoteFromPage(page, String(parsed.quote ?? ""));
-  const blockId = String(parsed.blockId ?? "").trim() || page?.blocks.find(block => (
-    block.type === "text" && quote && block.text.includes(quote)
+  const statedId = String(parsed.blockId ?? "").trim();
+  const blockId = statedId || page?.blocks.find(block => (
+    ((block.type === "text" || block.type === "clip") && quote && block.text.includes(quote))
+    || (block.type === "image" && quote && ((block.caption || "").includes(quote) || quote === "这张图"))
   ))?.id;
   return { text, quote, blockId };
 }
@@ -195,10 +211,11 @@ export async function generateJournalAnnotation(input: {
     input.characterId,
     [
       "【手账划线批注】",
-      "用户把这一页手账给你看。用户已经写过的字、画和批注你都看得见，按人设接下去。",
-      "若某一句让你有感，就划出那几个字，再写你的批注。",
-      "不要改原页上的字和画，也不要复述整页。字数随心情，一两句即可。",
-      "只输出 JSON：{\"quote\":\"从原文里原样摘出的短句\",\"text\":\"你的感悟\"}",
+      "用户把这一页手账给你看。用户已经写过的字、画、图和批注你都看得见，按人设接下去。",
+      "只挑让你真正有感的一句来划，最多十几个字。不要整段划，不要每句都批，没有感觉就少写。",
+      "如果被打动的是一张图，quote 写图下那几个字，或写「这张图」。",
+      "不要改原页上的字和画，也不要复述整页。",
+      "只输出 JSON：{\"quote\":\"从原文里原样摘出的一句短句\",\"text\":\"你的一句感悟\",\"blockId\":\"可选，图的话写上\"}",
       "",
       "手账内容：",
       target,

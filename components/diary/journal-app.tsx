@@ -36,6 +36,7 @@ import {
 import type { JournalAnnotation, JournalBlock, JournalBook, JournalBookKind, JournalClipCandidate, JournalPage } from "@/lib/journal-types";
 import { JOURNAL_COVER_COLORS } from "@/lib/journal-types";
 import { loadRelationshipBindings } from "@/lib/relationship-storage";
+import { usePhoneBack } from "@/lib/phone-navigation";
 
 type JournalAppProps = {
   onBack: () => void;
@@ -125,6 +126,30 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
   const currentPage = view.name === "page" && currentBook
     ? currentBook.pages.find(page => page.id === view.pageId) || null
     : null;
+
+  usePhoneBack(() => {
+    if (deleteConfirm) { setDeleteConfirm(null); return true; }
+    if (userNote) { setUserNote(null); return true; }
+    if (doodleOpen) { setDoodleOpen(false); return true; }
+    if (previewTarget) { setPreviewTarget(null); return true; }
+    if (shareTarget) { setShareTarget(null); return true; }
+    if (annotateTarget) { setAnnotateTarget(null); return true; }
+    if (createCoupleOpen) { setCreateCoupleOpen(false); return true; }
+    if (railOpen) { setRailOpen(false); return true; }
+    if (view.name === "page" && currentBook) {
+      setView({ name: "book", bookId: currentBook.id });
+      return true;
+    }
+    if (view.name === "book" && currentBook) {
+      setView({ name: "books", kind: currentBook.kind });
+      return true;
+    }
+    if (view.name === "books") {
+      setView({ name: "home" });
+      return true;
+    }
+    return false;
+  }, 30);
 
   const pageAnnotations = useMemo(() => {
     if (view.name !== "page") return [];
@@ -269,7 +294,11 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
   };
 
   const openUserNote = (book: JournalBook, page: JournalPage, block?: JournalBlock) => {
-    const quote = block && (block.type === "text" || block.type === "clip") ? block.text.trim().slice(0, 24) : "";
+    const quote = block?.type === "image"
+      ? (block.caption?.trim().slice(0, 24) || "这张图")
+      : block && (block.type === "text" || block.type === "clip")
+        ? block.text.trim().slice(0, 24)
+        : "";
     setUserNote({ bookId: book.id, pageId: page.id, blockId: block?.id, quote });
     setUserNoteQuote(quote);
     setUserNoteText("");

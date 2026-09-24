@@ -94,6 +94,17 @@ export type StateValue = { name: string; value: number };
 export type NativeToolCallRecord = { id: string; name: string; args: Record<string, unknown>; thoughtSignature?: string };
 export type NativeToolResultRecord = { toolCallId: string; name: string; content: string };
 
+export type ForwardedChatItem = {
+    name: string;
+    role?: ChatMessageRole;
+    content?: string;
+    kind?: "text" | "image" | "video" | "voice" | "album" | "file";
+    preview?: string;
+    mediaUrl?: string;
+    albumUrls?: string[];
+    voiceText?: string;
+};
+
 export type ChatMessage = {
     id: string;
     sessionId: string;
@@ -257,6 +268,8 @@ export type ChatMessage = {
         forwardedPreview?: string;
         forwardedKind?: "text" | "image" | "video" | "voice" | "album" | "file";
         forwardedVoiceText?: string;
+        forwardedTitle?: string;
+        forwardedItems?: ForwardedChatItem[];
     };
     isTyping?: boolean; // temporary flag for UI rendering
     statusPanel?: string; // AI display-only status content from [状态栏] tags
@@ -352,9 +365,9 @@ export function getChatMessagePreview(msg: ChatMessage): string {
     // Retracted: "你/对方撤回了一条消息"
     if (msg.isRetracted) return (msg.role === "user" ? "你" : "对方") + "撤回了一条消息";
 
-    if (msg.mediaData?.forwardedFromName) {
-        const preview = msg.mediaData.forwardedPreview || msg.content || classifyForwardedKindLabel(msg);
-        return `[转发] ${preview}`.trim();
+    if (isForwardedChatRecord(msg)) {
+        const title = msg.mediaData?.forwardedTitle || msg.mediaData?.forwardedFromName || "聊天记录";
+        return `[聊天记录] ${title}`;
     }
 
     if (msg.mediaType === "tool_result" || msg.mediaType === "tool_call") return "";
@@ -468,6 +481,38 @@ export function getChatMessagePreview(msg: ChatMessage): string {
     }
 
     return msg.content;
+}
+
+export function isForwardedChatRecord(msg: Pick<ChatMessage, "mediaData">): boolean {
+    return Boolean(msg.mediaData?.forwardedItems?.length || msg.mediaData?.forwardedFromName);
+}
+
+export function buildForwardedChatTitle(names: string[]): string {
+    const unique = [...new Set(names.map(item => item.trim()).filter(Boolean))];
+    if (unique.length >= 2) return `${unique[0]}和${unique[1]}的聊天记录`;
+    if (unique.length === 1) return `${unique[0]}的聊天记录`;
+    return "聊天记录";
+}
+
+export function toForwardedChatItem(msg: ChatMessage, name: string): ForwardedChatItem {
+    const kind = classifyForwardedKind(msg);
+    return {
+        name,
+        role: msg.role,
+        content: msg.content,
+        kind,
+        preview: buildForwardedPreview(msg),
+        mediaUrl: msg.mediaUrl,
+        albumUrls: msg.mediaData?.albumUrls,
+        voiceText: kind === "voice" ? (msg.mediaData?.label || msg.mediaData?.forwardedVoiceText) : undefined,
+    };
+}
+
+export function buildForwardedRecordPreview(items: ForwardedChatItem[]): string {
+    return items.slice(0, 4).map(item => {
+        const body = (item.preview || item.content || "").replace(/\s+/g, " ").trim().slice(0, 36);
+        return `${item.name}：${body || " "}`;
+    }).join("\n");
 }
 
 export function classifyForwardedKind(msg: Pick<ChatMessage, "mediaType" | "mediaData">): NonNullable<ChatMessage["mediaData"]>["forwardedKind"] {

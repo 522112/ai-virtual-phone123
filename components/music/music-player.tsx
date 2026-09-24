@@ -17,6 +17,7 @@ import {
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
 import { ListenTogetherControls, ListenTogetherDuoStage, useActiveListenTogetherSession } from "./listen-together";
+import { usePhoneBack } from "@/lib/phone-navigation";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
 
 const PLAY_MODE_ICONS: Record<PlayMode, { svg: string; label: string }> = {
@@ -73,6 +74,13 @@ export default function MusicPlayer() {
     const [bgCfg, setBgCfg] = useState<MusicBgConfig>(() => loadMusicBg());
     const [commentTotal, setCommentTotal] = useState(0);
     const listenTogether = useActiveListenTogetherSession();
+    usePhoneBack(() => {
+        if (artistView) { setArtistView(null); return true; }
+        if (showComments) { setShowComments(false); return true; }
+        if (showQueue) { setShowQueue(false); return true; }
+        player.closeFullPlayer();
+        return true;
+    }, 15);
 
     useEffect(() => {
         const handleBgChange = () => setBgCfg(loadMusicBg());

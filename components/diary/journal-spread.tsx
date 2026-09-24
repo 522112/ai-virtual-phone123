@@ -47,16 +47,7 @@ function TextWithMarks({
     fontFamily: journalFontCss(fontFamily),
   };
   if (marks.length === 0) {
-    const fallback = notes[0];
-    return (
-      <p className="journal-page-text" style={style}>
-        {fallback ? (
-          <button type="button" className="journal-mark" onClick={() => onOpen(fallback)}>
-            {text}
-          </button>
-        ) : text}
-      </p>
-    );
+    return <p className="journal-page-text" style={style}>{text}</p>;
   }
   const parts: Array<{ text: string; note?: JournalAnnotation }> = [];
   let rest = text;
@@ -126,8 +117,12 @@ export function JournalBlockView({
   const scale = block.scale || 1;
   const boxW = block.boxW || (floated ? 54 : undefined);
   const boxH = block.boxH;
-  const canAnnotate = Boolean(editable && onAnnotate && block.author === "character" && (block.type === "text" || block.type === "clip"));
-  const contentEditing = editing && !locked;
+  const showChrome = editing && !locked;
+  const contentEditing = showChrome && (block.type === "doodle" || (block.type === "text" && block.author === "user"));
+  const canAnnotate = Boolean(editable && showChrome && onAnnotate && (
+    block.type === "image"
+    || (block.author === "character" && (block.type === "text" || block.type === "clip"))
+  ));
 
   useEffect(() => {
     const el = textRef.current;
@@ -230,7 +225,7 @@ export function JournalBlockView({
         onBeginEdit();
       }}
     >
-      {editable && selected ? (
+      {editable && showChrome ? (
         <button type="button" className="journal-block-move" aria-label="移动" onPointerDown={beginDrag}>
           移动
         </button>
@@ -282,9 +277,21 @@ export function JournalBlockView({
         </>
       ) : null}
       {block.type === "image" ? (
-        <figure>
+        <figure className={notes[0] ? "journal-image-noted" : undefined}>
           <img src={block.src} alt="" />
           {block.caption ? <figcaption>{block.caption}</figcaption> : null}
+          {notes[0] ? (
+            <button
+              type="button"
+              className="journal-image-mark"
+              onClick={event => {
+                event.stopPropagation();
+                onOpenNote(notes[0]);
+              }}
+            >
+              批
+            </button>
+          ) : null}
         </figure>
       ) : null}
       {block.type === "doodle" ? (
@@ -307,7 +314,13 @@ export function JournalBlockView({
       {block.type === "clip" ? (
         <blockquote>
           <small>{block.sourceLabel || "摘录"}</small>
-          <p style={textStyle}>{block.text}</p>
+          <TextWithMarks
+            text={block.text}
+            notes={notes}
+            fontSize={fontSize}
+            fontFamily={block.fontFamily}
+            onOpen={onOpenNote}
+          />
         </blockquote>
       ) : null}
       {canAnnotate ? (
@@ -315,7 +328,7 @@ export function JournalBlockView({
           批注
         </button>
       ) : null}
-      {editable && (selected || contentEditing) && (block.type === "text" || block.type === "doodle" || block.type === "image" || block.type === "clip") ? (
+      {editable && showChrome && (block.type === "text" || block.type === "doodle" || block.type === "image" || block.type === "clip") ? (
         <span
           className="journal-resize-handle"
           onPointerDown={event => {
@@ -332,7 +345,7 @@ export function JournalBlockView({
           }}
         />
       ) : null}
-      {editable ? (
+      {editable && showChrome ? (
         <button type="button" className="journal-block-remove" onClick={onRemove} aria-label="删除这块">
           <Trash2 size={14} />
         </button>
@@ -341,8 +354,8 @@ export function JournalBlockView({
   );
 }
 
-function isContentEditableType(type: JournalBlock["type"]): boolean {
-  return type === "text" || type === "doodle";
+function isContentEditableType(_type: JournalBlock["type"]): boolean {
+  return true;
 }
 
 function JournalLeaf({

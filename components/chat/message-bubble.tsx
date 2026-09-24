@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback, useRef, useMemo, memo } from "react";
 import { findCustomStickerByName, resolveCustomStickerUrl } from "@/lib/custom-sticker-storage";
 import { isMediaStoreRef, loadMediaObjectUrl } from "@/lib/media-cache-storage";
 import { getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
-import { ChatMessage, classifyForwardedKind, createOrGetSession, updateMessageMediaStatus, updateMessageMediaData } from "@/lib/chat-storage";
+import { ChatMessage, classifyForwardedKind, createOrGetSession, isForwardedChatRecord, updateMessageMediaStatus, updateMessageMediaData, type ForwardedChatItem } from "@/lib/chat-storage";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import { usePhoneBack } from "@/lib/phone-navigation";
 import { resolveCloudSttConfig, transcribeAudioBlob } from "@/lib/stt-cloud";
 import { resolveContactCard } from "@/lib/contact-card";
 import { loadCharacters } from "@/lib/character-storage";
@@ -94,7 +95,7 @@ function PluginKindBubble({ msg, kind }: { msg: ChatMessage; kind: string }) {
  * Falls back to ReactMarkdown for plain text messages.
  */
 export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charName, userName, onSystemMessage, groupSize, onShowDetail, characterId, onMusicPlay, onActionSelect, onRelationshipAction, displayContent, defaultTranslationExpanded = false }: MessageBubbleProps) {
-    if (msg.mediaData?.forwardedFromName) {
+    if (isForwardedChatRecord(msg)) {
         return <ForwardCardBubble msg={msg} displayContent={displayContent} onOpen={() => onShowDetail?.(msg)} />;
     }
     switch (msg.mediaType) {
@@ -161,7 +162,9 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
         if (prev.msg.mediaData?.status !== next.msg.mediaData?.status) return false;
         if (prev.msg.mediaData?.label !== next.msg.mediaData?.label) return false;
         if (prev.msg.mediaData?.forwardedFromName !== next.msg.mediaData?.forwardedFromName) return false;
+        if (prev.msg.mediaData?.forwardedTitle !== next.msg.mediaData?.forwardedTitle) return false;
         if (prev.msg.mediaData?.forwardedPreview !== next.msg.mediaData?.forwardedPreview) return false;
+        if ((prev.msg.mediaData?.forwardedItems?.length || 0) !== (next.msg.mediaData?.forwardedItems?.length || 0)) return false;
         if (prev.msg.mediaData?.forwardedVoiceText !== next.msg.mediaData?.forwardedVoiceText) return false;
         if (prev.msg.mediaData?.claimedBy?.length !== next.msg.mediaData?.claimedBy?.length) return false;
         if (prev.msg.mediaData?.appName !== next.msg.mediaData?.appName) return false;
@@ -206,6 +209,21 @@ function useResolvedMediaUrl(raw?: string) {
     return url;
 }
 
+function forwardedItemsOf(msg: ChatMessage, displayContent?: string): ForwardedChatItem[] {
+    if (msg.mediaData?.forwardedItems?.length) return msg.mediaData.forwardedItems;
+    const kind = msg.mediaData?.forwardedKind || classifyForwardedKind(msg);
+    return [{
+        name: msg.mediaData?.forwardedFromName || "对方",
+        role: msg.role,
+        content: displayContent || msg.content,
+        kind,
+        preview: msg.mediaData?.forwardedPreview,
+        mediaUrl: msg.mediaUrl,
+        albumUrls: msg.mediaData?.albumUrls,
+        voiceText: msg.mediaData?.forwardedVoiceText || msg.mediaData?.label,
+    }];
+}
+
 function ForwardCardBubble({
     msg,
     displayContent,
@@ -215,61 +233,49 @@ function ForwardCardBubble({
     displayContent?: string;
     onOpen: () => void;
 }) {
-    const kind = msg.mediaData?.forwardedKind || classifyForwardedKind(msg);
-    const title = msg.mediaData?.forwardedFromName || "聊天记录";
-    const preview = msg.mediaData?.forwardedPreview
-        || (kind === "text" ? (displayContent || msg.content || "") : "")
-        || (kind === "voice" ? (msg.mediaData?.label || "[语音]") : "")
-        || (kind === "image" ? "[图片]" : "")
-        || (kind === "album" ? "[一组照片]" : "")
-        || (kind === "video" ? "[视频]" : "[聊天记录]");
-    const thumbRaw = kind === "image" || kind === "album" || kind === "video"
-        ? (msg.mediaUrl || msg.mediaData?.albumUrls?.[0] || "")
-        : "";
-    const thumb = useResolvedMediaUrl(thumbRaw);
+    const items = forwardedItemsOf(msg, displayContent);
+    const title = msg.mediaData?.forwardedTitle
+        || (items.length > 1
+            ? `${items[0].name}和${items.find(item => item.name !== items[0].name)?.name || items[0].name}的聊天记录`
+            : msg.mediaData?.forwardedFromName || "聊天记录");
+    const lines = (msg.mediaData?.forwardedPreview || items.slice(0, 4).map(item => {
+        const body = (item.preview || item.content || "").replace(/\s+/g, " ").trim().slice(0, 36);
+        return `${item.name}：${body || " "}`;
+    }).join("\n")).split("\n").filter(Boolean);
 
     return (
         <button type="button" className="chat-forward-card" onClick={event => { event.stopPropagation(); onOpen(); }}>
             <div className="chat-forward-card-title">{title}</div>
-            <div className="chat-forward-card-body">
-                {thumb && kind !== "video" ? <img src={thumb} alt="" className="chat-forward-card-thumb" /> : null}
-                {thumb && kind === "video" ? (
-                    <span className="chat-forward-card-video">
-                        <img src={thumb} alt="" />
-                        <span>视频</span>
-                    </span>
-                ) : null}
-                <p>{preview}</p>
+            <div className="chat-forward-card-lines">
+                {lines.slice(0, 4).map((line, index) => (
+                    <p key={`${line}-${index}`}>{line}</p>
+                ))}
             </div>
             <div className="chat-forward-card-foot">聊天记录</div>
         </button>
     );
 }
 
-export function ForwardDetailOverlay({
-    msg,
+function ForwardRecordItemView({
+    item,
     characterId,
-    onClose,
-    onUpdate,
 }: {
-    msg: ChatMessage;
+    item: ForwardedChatItem;
     characterId?: string;
-    onClose: () => void;
-    onUpdate?: (updated: ChatMessage) => void;
 }) {
-    const kind = msg.mediaData?.forwardedKind || classifyForwardedKind(msg);
-    const urls = [msg.mediaUrl, ...(msg.mediaData?.albumUrls || [])].filter(Boolean) as string[];
-    const firstUrl = useResolvedMediaUrl(urls[0]);
+    const firstUrl = useResolvedMediaUrl(item.mediaUrl || item.albumUrls?.[0] || "");
     const [albumUrls, setAlbumUrls] = useState<string[]>([]);
-    const [voiceText, setVoiceText] = useState(msg.mediaData?.forwardedVoiceText || msg.mediaData?.label || "");
+    const [voiceText, setVoiceText] = useState(item.voiceText || "");
     const [voiceBusy, setVoiceBusy] = useState(false);
     const [voiceError, setVoiceError] = useState("");
+    const mine = item.role === "user";
 
     useEffect(() => {
+        const raws = [item.mediaUrl, ...(item.albumUrls || [])].filter(Boolean) as string[];
+        if (raws.length === 0) return;
         let cancelled = false;
-        const resolved: string[] = [];
         const revokes: string[] = [];
-        Promise.all(urls.map(async raw => {
+        Promise.all(raws.map(async raw => {
             if (!isMediaStoreRef(raw)) return raw;
             const obj = await loadMediaObjectUrl(raw);
             if (obj) revokes.push(obj);
@@ -279,17 +285,14 @@ export function ForwardDetailOverlay({
         });
         return () => {
             cancelled = true;
-            revokes.forEach(item => URL.revokeObjectURL(item));
+            revokes.forEach(url => URL.revokeObjectURL(url));
         };
-    }, [msg.id, msg.mediaUrl, msg.mediaData?.albumUrls?.join("|")]);
+    }, [item.mediaUrl, item.albumUrls?.join("|")]);
 
     useEffect(() => {
-        if (kind !== "voice" || voiceText || voiceBusy || voiceError) return;
-        const raw = msg.mediaUrl;
-        if (!raw) {
-            setVoiceError("这条语音没有可识别的音频");
-            return;
-        }
+        if (item.kind !== "voice" || voiceText || voiceBusy || voiceError) return;
+        const raw = item.mediaUrl;
+        if (!raw) return;
         const config = resolveCloudSttConfig(characterId);
         if (!config) {
             setVoiceError("还没有配置语音转文字");
@@ -303,51 +306,77 @@ export function ForwardDetailOverlay({
             const blob = await fetch(src).then(res => res.blob());
             const text = await transcribeAudioBlob(blob, config);
             if (cancelled) return;
-            const next = text.trim();
-            setVoiceText(next || "没有听清");
+            setVoiceText(text.trim() || "没有听清");
             setVoiceBusy(false);
-            if (next && onUpdate) {
-                const mediaData = { ...msg.mediaData, forwardedVoiceText: next, label: msg.mediaData?.label || next };
-                updateMessageMediaData(msg.id, mediaData);
-                onUpdate({ ...msg, mediaData });
-            }
         })().catch(error => {
             if (cancelled) return;
             setVoiceBusy(false);
             setVoiceError(error instanceof Error ? error.message : "转文字失败");
         });
         return () => { cancelled = true; };
-    }, [characterId, kind, msg.id, msg.mediaUrl, onUpdate, voiceBusy, voiceError, voiceText]);
+    }, [characterId, item.kind, item.mediaUrl, voiceBusy, voiceError, voiceText]);
+
+    const photos = albumUrls.length > 0 ? albumUrls : firstUrl ? [firstUrl] : [];
+    return (
+        <div className={`chat-forward-record-row${mine ? " is-me" : ""}`}>
+            <span className="chat-forward-record-name">{item.name}</span>
+            <div className={`chat-forward-record-bubble${mine ? " is-me" : ""}`}>
+                {item.kind === "image" || item.kind === "album" ? photos.map((url, index) => (
+                    <img key={`${url}-${index}`} src={url} alt="" className="chat-forward-detail-photo" />
+                )) : null}
+                {item.kind === "video" && (firstUrl || photos[0]) ? (
+                    <video className="chat-forward-detail-video" src={firstUrl || photos[0]} controls playsInline />
+                ) : null}
+                {item.kind === "voice" ? (
+                    <div className="chat-forward-detail-voice">
+                        {item.mediaUrl ? <audio src={firstUrl || item.mediaUrl} controls /> : null}
+                        <p>{voiceBusy ? "正在转成文字…" : (voiceText || voiceError || item.preview || "语音")}</p>
+                    </div>
+                ) : null}
+                {(!item.kind || item.kind === "text" || item.kind === "file") && (item.content || item.preview) ? (
+                    <p>{item.content || item.preview}</p>
+                ) : null}
+            </div>
+        </div>
+    );
+}
+
+export function ForwardDetailOverlay({
+    msg,
+    characterId,
+    onClose,
+}: {
+    msg: ChatMessage;
+    characterId?: string;
+    onClose: () => void;
+    onUpdate?: (updated: ChatMessage) => void;
+}) {
+    const items = forwardedItemsOf(msg);
+    usePhoneBack(() => {
+        onClose();
+        return true;
+    }, 50);
+    const title = msg.mediaData?.forwardedTitle
+        || (items.length > 1
+            ? `${items[0].name}和${items.find(item => item.name !== items[0].name)?.name || items[0].name}的聊天记录`
+            : msg.mediaData?.forwardedFromName || "聊天记录");
 
     return (
-        <div className="chat-forward-detail-overlay" data-ui="modal" onClick={onClose}>
+        <div className="chat-forward-detail-overlay" data-ui="modal">
             <div className="chat-forward-detail" data-ui="modal-dialog" onClick={event => event.stopPropagation()}>
                 <header className="chat-forward-detail-head">
                     <button type="button" onClick={onClose}>返回</button>
-                    <strong>聊天记录</strong>
+                    <strong>{title}</strong>
                     <span />
                 </header>
                 <div className="chat-forward-detail-body">
-                    <div className="chat-forward-detail-meta">
-                        <span className="chat-forward-detail-avatar"><ChatFallbackAvatar alt={msg.mediaData?.forwardedFromName || "对方"} /></span>
-                        <b>{msg.mediaData?.forwardedFromName || "聊天记录"}</b>
-                    </div>
-                    {kind === "text" || (!kind && msg.content) ? (
-                        <p className="chat-forward-detail-text">{msg.content}</p>
-                    ) : null}
-                    {(kind === "image" || kind === "album") && (albumUrls.length > 0 ? albumUrls : firstUrl ? [firstUrl] : []).map((url, index) => (
-                        <img key={`${url}-${index}`} src={url} alt="" className="chat-forward-detail-photo" />
+                    {items.map((item, index) => (
+                        <ForwardRecordItemView
+                            key={`${item.name}-${index}-${item.preview || item.content || ""}`}
+                            item={item}
+                            characterId={characterId}
+                        />
                     ))}
-                    {kind === "video" && (firstUrl || albumUrls[0]) ? (
-                        <video className="chat-forward-detail-video" src={firstUrl || albumUrls[0]} controls playsInline />
-                    ) : null}
-                    {kind === "voice" ? (
-                        <div className="chat-forward-detail-voice">
-                            {msg.mediaUrl ? <audio src={firstUrl || msg.mediaUrl} controls /> : null}
-                            <p>{voiceBusy ? "正在转成文字…" : (voiceText || voiceError || "语音")}</p>
-                        </div>
-                    ) : null}
-                    {kind === "file" && msg.content ? <p className="chat-forward-detail-text">{msg.content}</p> : null}
                 </div>
             </div>
         </div>

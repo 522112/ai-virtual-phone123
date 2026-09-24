@@ -48,6 +48,28 @@ export function buildListenTogetherCardHtml(session: ListenTogetherSession): str
 </section>`;
 }
 
+export function sendListenTogetherRefuse(input: {
+  characterId: string;
+  characterName: string;
+  texts: string[];
+}): { sessionId: string; messageIds: string[] } {
+  addChatContact(input.characterId);
+  const chat = createOrGetSession(input.characterId);
+  const parts = input.texts.map(item => item.trim()).filter(Boolean);
+  if (parts.length === 0) parts.push("这会儿不太方便一起听。");
+  const messageIds = parts.map(text => pushChatMessage({
+    sessionId: chat.id,
+    role: "assistant",
+    content: text,
+    senderName: input.characterName,
+    senderCharacterId: input.characterId,
+  }).id);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: chat.id } }));
+  }
+  return { sessionId: chat.id, messageIds };
+}
+
 export function sendListenTogetherShare(input: {
   characterId: string;
   session: ListenTogetherSession;

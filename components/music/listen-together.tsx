@@ -7,9 +7,10 @@ import { ChatFallbackAvatar } from "@/components/chat/chat-fallback-avatar";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
-import { generateListenTogetherReply, type ListenTogetherAction } from "@/lib/listen-together-engine";
+import { generateListenTogetherReply, splitListenTogetherBubbles, type ListenTogetherAction } from "@/lib/listen-together-engine";
 import { getMusicControlBridge } from "@/lib/music-control-bridge";
-import { buildListenTogetherCardHtml, sendListenTogetherShare } from "@/lib/listen-together-share";
+import { buildListenTogetherCardHtml, sendListenTogetherRefuse, sendListenTogetherShare } from "@/lib/listen-together-share";
+import { usePhoneBack } from "@/lib/phone-navigation";
 import {
   LISTEN_TOGETHER_UPDATED_EVENT,
   appendListenTogetherMessage,
@@ -173,6 +174,17 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
     setHistory(loadListenTogetherSessions());
   }, []);
 
+  const appendBubbles = useCallback(async (sessionId: string, author: "user" | "character", text: string) => {
+    const parts = splitListenTogetherBubbles(text);
+    for (let index = 0; index < parts.length; index += 1) {
+      appendListenTogetherMessage(sessionId, { author, text: parts[index] });
+      refresh();
+      if (index < parts.length - 1) {
+        await new Promise(resolve => window.setTimeout(resolve, 160));
+      }
+    }
+  }, [refresh]);
+
   useEffect(() => {
     window.addEventListener(LISTEN_TOGETHER_UPDATED_EVENT, refresh);
     return () => window.removeEventListener(LISTEN_TOGETHER_UPDATED_EVENT, refresh);
@@ -196,7 +208,7 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
       } else if (action.kind === "skip") {
         if (action.action === "prev") bridge?.prev();
         else bridge?.next();
-      } else if (action.kind === "end") {
+      } else if (action.kind === "end" || action.kind === "refuse") {
         const active = getActiveListenTogetherSession();
         if (active) {
           const ended = endListenTogetherSession(active.id);
@@ -229,14 +241,14 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
       trackChanged: true,
     }).then(async reply => {
       if (cancelled) return;
-      if (reply.text) appendListenTogetherMessage(session.id, { author: "character", text: reply.text });
+      if (reply.text) await appendBubbles(session.id, "character", reply.text);
       await applyActions(reply.actions);
       refresh();
     }).catch(() => undefined).finally(() => {
       if (!cancelled) setBusy("");
     });
     return () => { cancelled = true; };
-  }, [applyActions, session?.id, session?.status, track.id]);
+  }, [applyActions, appendBubbles, session?.id, session?.status, track.id]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -254,26 +266,52 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
 
   const notify = (message: string) => onNotice?.(message);
 
+  usePhoneBack(() => {
+    if (panel === "closed") return false;
+    setPanel("closed");
+    return true;
+  }, 40);
+
   const startWith = async (character: Character) => {
-    const next = startListenTogetherSession({
+    const draftSession: ListenTogetherSession = {
+      id: "invite",
       characterId: character.id,
       characterName: character.name,
-      track,
-    });
-    setSession(next);
-    setPanel("chat");
-    announcedTrackRef.current = track.id;
-    setBusy("正在接通");
+      startedAt: new Date().toISOString(),
+      tracks: track ? [track] : [],
+      messages: [],
+      status: "active",
+    };
+    setBusy("正在邀请");
     try {
       const reply = await generateListenTogetherReply({
         characterId: character.id,
-        session: next,
+        session: draftSession,
         currentTrack: track,
         lyrics: track.lyrics,
         opening: true,
       });
-      if (reply.text) appendListenTogetherMessage(next.id, { author: "character", text: reply.text });
-      await applyActions(reply.actions);
+      const refused = reply.actions.some(item => item.kind === "refuse");
+      if (refused) {
+        sendListenTogetherRefuse({
+          characterId: character.id,
+          characterName: character.name,
+          texts: splitListenTogetherBubbles(reply.text),
+        });
+        notify("对方没有一起来，理由已经发到聊天");
+        setPanel("closed");
+        return;
+      }
+      const next = startListenTogetherSession({
+        characterId: character.id,
+        characterName: character.name,
+        track,
+      });
+      setSession(next);
+      setPanel("chat");
+      announcedTrackRef.current = track.id;
+      if (reply.text) await appendBubbles(next.id, "character", reply.text);
+      await applyActions(reply.actions.filter(item => item.kind !== "refuse"));
       refresh();
     } catch (error) {
       notify(error instanceof Error ? error.message : "对方还没开口");
@@ -287,8 +325,7 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
     const text = draft.trim();
     if (!text) return;
     setDraft("");
-    appendListenTogetherMessage(session.id, { author: "user", text });
-    refresh();
+    await appendBubbles(session.id, "user", text);
     setBusy("正在回复");
     try {
       const latest = getActiveListenTogetherSession();
@@ -300,7 +337,15 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
         currentTrack: track,
         lyrics: track.lyrics,
       });
-      if (reply.text) appendListenTogetherMessage(latest.id, { author: "character", text: reply.text });
+      if (reply.actions.some(item => item.kind === "refuse")) {
+        sendListenTogetherRefuse({
+          characterId: latest.characterId,
+          characterName: latest.characterName,
+          texts: splitListenTogetherBubbles(reply.text),
+        });
+      } else if (reply.text) {
+        await appendBubbles(latest.id, "character", reply.text);
+      }
       await applyActions(reply.actions);
       refresh();
     } catch (error) {

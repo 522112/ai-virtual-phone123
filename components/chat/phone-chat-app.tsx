@@ -17,6 +17,7 @@ import { formatXiaohongshuShareForPrompt, type ChatSharePayload } from "@/lib/ch
 import { CHAT_OPEN_SESSION_EVENT, CHAT_OPEN_ADD_CONTACT_EVENT } from "@/lib/chat-notification-events";
 import { CHAT_SESSIONS_MERGED_EVENT, type ChatSessionsMergedDetail } from "@/lib/chat-session-merge";
 import { getMascotSettingsSnapshot } from "@/lib/mascot-settings";
+import { usePhoneBack } from "@/lib/phone-navigation";
 
 type TabKey = "messages" | "contacts" | "feeds" | "me";
 
@@ -40,6 +41,22 @@ export const PhoneChatApp = memo(function PhoneChatApp({ onClose, initialSession
     const [visitedSessions, setVisitedSessions] = useState<Map<string, ChatSession>>(new Map());
     const [dbReady, setDbReady] = useState(false);
     const [hideTabBar, setHideTabBar] = useState(false);
+
+    usePhoneBack(() => {
+        if (activeSession) {
+            setActiveSession(null);
+            return true;
+        }
+        if (activeMascot) {
+            setActiveMascot(false);
+            return true;
+        }
+        if (activeTab !== "messages") {
+            setActiveTab("messages");
+            return true;
+        }
+        return false;
+    }, 10);
 
     // Hydrate IndexedDB → in-memory caches on mount
     useEffect(() => {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BookOpenText, ChevronLeft, NotebookPen, StickyNote } from "lucide-react";
+import { usePhoneBack } from "@/lib/phone-navigation";
 
 import { DiaryEntriesApp } from "./diary-entries-app";
 import { JournalApp } from "./journal-app";
@@ -18,6 +19,13 @@ const NOTE_WALL_UI_ENABLED = false;
 
 export function DiaryApp({ onClose, onNotice }: DiaryAppProps) {
   const [view, setView] = useState<DiaryView>("home");
+  usePhoneBack(() => {
+    if (view !== "home") {
+      setView("home");
+      return true;
+    }
+    return false;
+  }, 10);
   const todayLabel = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "2-digit",

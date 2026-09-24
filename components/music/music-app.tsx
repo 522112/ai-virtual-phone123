@@ -25,6 +25,7 @@ import {
     type NeteaseDjRadio, type NeteaseDjProgram, type NeteaseAlbumSub, type NeteaseUserEvent,
 } from "@/lib/music-service";
 import { clearMusicCloudSyncData } from "@/lib/chat-engine";
+import { usePhoneBack } from "@/lib/phone-navigation";
 import MusicCommentsPage from "./music-comments";
 import {
     loadMusicBg, saveMusicBg, clearMusicBg, fileToCompressedDataUrl, appBgStyle,
@@ -44,6 +45,13 @@ export default function MusicApp({ onClose }: Props) {
     const [customCss, setCustomCss] = useState("");
     const [activePlaylist, setActivePlaylist] = useState<NeteasePlaylist | null>(null);
     const [dailyView, setDailyView] = useState<NeteaseSearchResult[] | null>(null);
+    usePhoneBack(() => {
+        if (showCssEditor) { setShowCssEditor(false); return true; }
+        if (showSettings) { setShowSettings(false); return true; }
+        if (dailyView) { setDailyView(null); return true; }
+        if (activePlaylist) { setActivePlaylist(null); return true; }
+        return false;
+    }, 20);
     const [playlists, setPlaylists] = useState<NeteasePlaylist[]>([]);
     const [playlistsLoading, setPlaylistsLoading] = useState(true);
     const [musicToast, setMusicToast] = useState<string | null>(null);

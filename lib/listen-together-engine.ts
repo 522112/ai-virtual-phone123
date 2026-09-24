@@ -30,12 +30,20 @@ type ResolvedListenGeneration = {
 export type ListenTogetherAction =
   | { kind: "play"; query: string }
   | { kind: "skip"; action: "next" | "prev" }
-  | { kind: "end" };
+  | { kind: "end" }
+  | { kind: "refuse" };
 
 export type ListenTogetherReply = {
   text: string;
   actions: ListenTogetherAction[];
 };
+
+export function splitListenTogetherBubbles(text: string): string[] {
+  const normalized = (text || "").replace(/\r\n/g, "\n").trim();
+  if (!normalized) return [];
+  const parts = normalized.split(/\n\n+/).map(item => item.trim()).filter(Boolean);
+  return parts.length ? parts : [normalized];
+}
 
 async function resolveListenGeneration(
   characterId: string,
@@ -165,9 +173,13 @@ export function parseListenTogetherActions(raw: string): ListenTogetherReply {
     actions.push({ kind: "end" });
     return "";
   });
+  text = text.replace(/\[(?:执行动作:)?拒绝一起听(?:\((?:\{\})?\))?\]/g, () => {
+    actions.push({ kind: "refuse" });
+    return "";
+  });
 
   text = text.replace(/```[\s\S]*?```/g, "").replace(/^\s*["「]|["」]\s*$/g, "").trim();
-  return { text: text.slice(0, 160), actions };
+  return { text, actions };
 }
 
 export async function generateListenTogetherReply(input: {
@@ -190,10 +202,12 @@ export async function generateListenTogetherReply(input: {
     [
       "【一起听】",
       "你们正在同一首歌里听歌聊天，像网易云一起听那样随口说话。",
-      "只回一两句，像发消息，不要列点，不要复述整首歌。",
+      "按人设回，长短随人设，不要固定字数，不要凑字数，也不要写成一整段小作文。",
+      "一条气泡说完一件事。多句就空一行，系统会拆成多条消息。保持聊天格式。",
+      "若要私聊，【私聊】单独占一行，下一行再写正文。",
       "你听得见正在放的歌词，但要像这个人正在听歌：可以走神、接话、吐槽、哼一句，也可以聊别的。不必句句围着歌转。",
       input.opening
-        ? "用户刚邀请你一起听。先应一声，可以提一句正在放的歌。"
+        ? "用户刚邀请你一起听。按人设决定接不接。想听就应一声，可以提一句正在放的歌。不想听就拒绝，并写一句符合人设的理由（可自拟当下的原因，比如在忙、困了、不喜欢这首、要出门），同时输出 [执行动作:拒绝一起听]。"
         : input.trackChanged
           ? "歌切了。若人设会接一句就接，不想说可以只回很短的一声，或输出动作不闲聊。"
           : "用户刚发了一句，按人设接着聊。",
@@ -204,10 +218,11 @@ export async function generateListenTogetherReply(input: {
       recent ? `刚才的对话：\n${recent}` : "",
       input.userText ? `用户说：${input.userText}` : "",
       "",
-      "若人设此刻想换歌、搜自己想听的、或结束一起听，可在回复里单独输出（可与闲聊并存）：",
+      "若人设此刻想换歌、搜自己想听的、结束一起听，或刚被邀请时要拒绝，可在回复里单独输出（可与闲聊并存）：",
       '[执行动作:播放音乐({"query":"歌名"})]',
       '[执行动作:切换音乐({"action":"next"})] 或 prev',
       "[执行动作:结束一起听]",
+      "[执行动作:拒绝一起听]",
       "不要向用户解释这些标记。",
     ].filter(Boolean).join("\n"),
   );

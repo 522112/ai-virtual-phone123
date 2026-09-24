@@ -16,6 +16,8 @@ import MusicApp from "@/components/music/music-app";
 import MusicPlayer from "@/components/music/music-player";
 import MiniAppWindow from "@/components/music/mini-app-window";
 import { PhoneDynamicIsland } from "@/components/phone-dynamic-island";
+import { PhoneHomeBar, type PhoneRecentApp } from "@/components/phone-home-bar";
+import { PHONE_HOME_EVENT, PHONE_RECENTS_EVENT, requestPhoneBack } from "@/lib/phone-navigation";
 import { PhoneCalendarApp } from "@/components/calendar-app";
 import { PhoneQaApp } from "@/components/phone-qa-app";
 import { ChatPluginPageBoundary } from "@/components/chat/chat-plugin-page-boundary";
@@ -1056,6 +1058,8 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
   const [glassPaintPass, setGlassPaintPass] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [activeApp, setActiveApp] = useState<DesktopIconId | null>(null);
+  const [recentAppIds, setRecentAppIds] = useState<DesktopIconId[]>([]);
+  const [recentsOpen, setRecentsOpen] = useState(false);
   const [customApps, setCustomApps] = useState<InstalledCustomApp[]>([]);
   // 自定义 APP 桌面图标样式偏好（global = 忽略上传图标走全局效果）
   const [customAppIconStyles, setCustomAppIconStyles] = useState<Record<string, CustomAppIconStyle>>({});
@@ -1080,6 +1084,11 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
   const [xiaohongshuBusy, setXiaohongshuBusy] = useState(false);
   const [shoppingMounted, setShoppingMounted] = useState(false);
   const [shoppingBusy, setShoppingBusy] = useState(false);
+  useEffect(() => {
+    if (!activeApp) return;
+    setRecentAppIds(prev => [activeApp, ...prev.filter(id => id !== activeApp)].slice(0, 8));
+  }, [activeApp]);
+
   if (activeApp === "dwelling" && !dwellingMounted) setDwellingMounted(true);
   if (activeApp === "xiaohongshu" && !xiaohongshuMounted) setXiaohongshuMounted(true);
   if (activeApp === "shopping" && !shoppingMounted) setShoppingMounted(true);
@@ -2431,6 +2440,43 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     window.addEventListener("open-mini-chat", handler);
     return () => window.removeEventListener("open-mini-chat", handler);
   }, []);
+
+  const goPhoneHome = useCallback(() => {
+    setRecentsOpen(false);
+    musicOverlayControllerRef.current?.closeFullPlayer();
+    setShowMiniChat(false);
+    setOpenFolderId(null);
+    setActiveApp(null);
+  }, []);
+
+  const handlePhoneBack = useCallback(() => {
+    if (recentsOpen) {
+      setRecentsOpen(false);
+      return;
+    }
+    if (requestPhoneBack()) return;
+    if (showMiniChat) {
+      setShowMiniChat(false);
+      return;
+    }
+    if (openFolderId) {
+      setOpenFolderId(null);
+      return;
+    }
+    musicOverlayControllerRef.current?.closeFullPlayer();
+    if (activeApp) setActiveApp(null);
+  }, [activeApp, openFolderId, recentsOpen, showMiniChat]);
+
+  useEffect(() => {
+    const onHome = () => goPhoneHome();
+    const onRecents = () => setRecentsOpen(true);
+    window.addEventListener(PHONE_HOME_EVENT, onHome);
+    window.addEventListener(PHONE_RECENTS_EVENT, onRecents);
+    return () => {
+      window.removeEventListener(PHONE_HOME_EVENT, onHome);
+      window.removeEventListener(PHONE_RECENTS_EVENT, onRecents);
+    };
+  }, [goPhoneHome]);
 
   const openChatSessionFromNotice = useCallback((sessionId: string) => {
     if (chatMessageNoticeTimerRef.current !== null) {
@@ -4933,6 +4979,40 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                   </div>
                 );
               })()}
+
+              <PhoneHomeBar
+                recents={recentAppIds.map(id => {
+                  const meta = getDesktopIconMeta(id);
+                  if (!meta) return null;
+                  const skinId = activeIconSkins[id];
+                  const skinUrl = skinId ? themeAssets[skinId] ?? null : null;
+                  const customUrl = meta.customApp && customAppIconStyles[meta.customApp.id] !== "global"
+                    ? meta.customApp.iconDataUrl ?? null
+                    : null;
+                  return {
+                    id,
+                    label: meta.label,
+                    tone: meta.tone,
+                    iconUrl: skinUrl || customUrl || undefined,
+                  } as PhoneRecentApp;
+                }).filter((item): item is PhoneRecentApp => Boolean(item))}
+                recentsOpen={recentsOpen}
+                onBack={handlePhoneBack}
+                onHome={goPhoneHome}
+                onOpenRecents={() => setRecentsOpen(true)}
+                onCloseRecents={() => setRecentsOpen(false)}
+                onSwitchApp={iconId => {
+                  setRecentsOpen(false);
+                  openApp(iconId);
+                }}
+                onDismissApp={iconId => {
+                  setRecentAppIds(prev => prev.filter(id => id !== iconId));
+                  if (activeApp === iconId) {
+                    musicOverlayControllerRef.current?.closeFullPlayer();
+                    setActiveApp(null);
+                  }
+                }}
+              />
 
               {/* Drag ghost — absolutely positioned INSIDE .phone-shell so the
                   clone keeps theme variables + glass effect selectors
