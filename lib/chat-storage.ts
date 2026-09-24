@@ -66,6 +66,14 @@ export type ChatSession = {
      * 关掉就只调一次 API，那一轮没摘要（不进短期记忆的事件流）。按次计费的接口想省一半调用时关它。
      */
     offlineSummaryRetry?: boolean;
+    /** 线下 <content> 汉字字数下限；未填则不限制 */
+    offlineOutputMinChars?: number;
+    /** 线下 <content> 汉字字数上限；未填则不限制 */
+    offlineOutputMaxChars?: number;
+    /** 线下文风：none / 预设 id / custom */
+    offlineWritingStyleId?: string;
+    /** 线下自定义文风说明 */
+    offlineWritingStyleCustom?: string;
     // Group chat fields
     isGroup?: boolean;
     groupName?: string;
@@ -109,6 +117,10 @@ export type ChatMessage = {
         | "music" | "music_share" | "music_notify" | "music_not_found"
         | "xiaohongshu_note_share"
         | "gift"
+        | "relationship_invite"
+        | "accept_relationship"
+        | "decline_relationship"
+        | "relationship_space"
         | "contact_card"
         | "app_card"
         | "tool_notice"
@@ -231,6 +243,11 @@ export type ChatMessage = {
         appTags?: string[];
         appHistoryText?: string;
         appHistoryRole?: ChatMessageRole;
+        relationshipKind?: "couple" | "bestie" | "buddy" | "bros";
+        relationshipId?: string;
+        spaceAction?: "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary";
+        spaceReplyTo?: string;
+        anniversaryDate?: string;
     };
     isTyping?: boolean; // temporary flag for UI rendering
     statusPanel?: string; // AI display-only status content from [状态栏] tags
@@ -347,6 +364,10 @@ export function getChatMessagePreview(msg: ChatMessage): string {
         || msg.mediaType === "group_admin_notice") {
         return toYou(msg.content);
     }
+    if (msg.mediaType === "relationship_invite") return msg.content || "[关系邀请]";
+    if (msg.mediaType === "accept_relationship") return msg.content || "[同意关系]";
+    if (msg.mediaType === "decline_relationship") return msg.content || "[拒绝关系]";
+    if (msg.mediaType === "relationship_space") return msg.content || "[关系空间]";
 
     // Call messages: stored as assistant/user role, detect by content
     const callInit = msg.content?.match(/\[我向(.+?)发起了((?:语音|视频)通话)\]/);

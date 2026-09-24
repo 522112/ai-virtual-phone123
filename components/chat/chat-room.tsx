@@ -27,7 +27,7 @@ import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 import { createPortal } from "react-dom";
 
-import { loadCharacters } from "@/lib/character-storage";
+import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { Character } from "@/lib/character-types";
 import { loadCustomAppChatPlusActions, type RegisteredCustomAppChatPlusAction } from "@/lib/custom-app-chat-directives";
 import { CUSTOM_APPS_UPDATED_EVENT, getInstalledCustomApp } from "@/lib/custom-app-storage";
@@ -43,7 +43,8 @@ import { TransferTargetModal } from "./transfer-target-modal";
 import { GiftPickerModal } from "./gift-picker-modal";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { deleteWeixinCloudMessagesFromCloud, emitWeixinSyncToast, syncAllWeixinBotRuntimesToCloud } from "@/lib/weixin-cloud-sync";
-import { loadBindingConfig, loadPresets, loadRegexes, resolveBinding, resolveUserIdentity } from "@/lib/settings-storage";
+import { loadBindingConfig, loadPresets, loadRegexes, resolveBinding, resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
+import { applyCoupleAvatarIfUserSentPair } from "@/lib/couple-avatar-storage";
 import { generateGroupChatCompletion, generateGroupOfflineChatCompletion, parseGroupChatResponse, buildEditableGroupRoundText } from "@/lib/group-chat-engine";
 import { appendChatOfflineTurn, deleteChatOfflineTurn, deleteChatOfflineTurnsFrom, extractThinkingTag, loadChatOfflineTurns, parseOfflineResponse, saveChatOfflineTurns, updateChatOfflineTurn, type ChatOfflineTurn } from "@/lib/chat-offline-storage";
 import { applyDisplayRegex, applyEditRegex } from "@/lib/llm-prompt-assembler";
@@ -52,7 +53,7 @@ import { useKeyboardDismissAutoSend } from "@/components/chat/use-keyboard-dismi
 import { cancelBailoutKey } from "@/lib/push-bailout-client";
 import { PENDING_REPLY_PREFIX } from "@/lib/friend-request-engine";
 import type { UserIdentity } from "@/components/settings/user-identity";
-import { AlertCircle, Blocks, Check, Trash2, User, ChevronLeft, ChevronRight, Clapperboard, Clock, Gift, Languages, Loader2, MoreHorizontal, X } from "lucide-react";
+import { AlertCircle, Blocks, Check, Trash2, User, ChevronLeft, ChevronRight, Clapperboard, Clock, Gift, Heart, Languages, Loader2, MoreHorizontal, X } from "lucide-react";
 import { setDebugChatState } from "@/lib/debug-store";
 import { SessionCustomCSS } from "@/components/ui/session-custom-css";
 import { setChatActive } from "@/lib/music-action-queue";
@@ -88,6 +89,22 @@ import { extractTextToolDirectiveText } from "@/lib/text-tool-protocol";
 import { emitChatPluginEvent, getChatPluginHookBus, runChatPluginTransform } from "@/lib/chat-plugin-hooks";
 import { CHAT_PLUGIN_TOAST_EVENT, getChatPluginRuntime } from "@/lib/chat-plugin-runtime";
 import { ChatPluginSlot } from "@/components/chat/chat-plugin-slot";
+import { RelationshipInviteModal } from "@/components/chat/relationship-invite-modal";
+import { RelationshipSpace } from "@/components/chat/relationship-space";
+import {
+    acceptRelationship,
+    attachInviteMessageId,
+    canStartRelationship,
+    createIncomingInvite,
+    createOutgoingInvite,
+    declineRelationship,
+    getRelationshipByCharacter,
+    getRelationshipById,
+    parseRelationshipKindLabel,
+    relationshipKindLabel,
+    materializeRelationshipSpacePart,
+} from "@/lib/relationship-storage";
+import type { RelationshipKind } from "@/lib/relationship-types";
 
 // ── Call system message detection ──────────────────────────
 // Call messages are stored with user/assistant role for correct prompt alternation,
@@ -188,6 +205,9 @@ const CHAT_VISUAL_MEDIA_TYPES = new Set([
     "video",
     "quote",
     "media_file",
+    "relationship_invite",
+    "accept_relationship",
+    "decline_relationship",
 ]);
 
 const WEIXIN_CLOUD_DELETE_TIMEOUT_MS = 15000;
@@ -233,6 +253,9 @@ const CHAT_MEDIA_BUBBLE_TYPES = new Set([
     "xiaohongshu_note_share",
     "app_card",
     "media_file",
+    "relationship_invite",
+    "accept_relationship",
+    "decline_relationship",
 ]);
 
 const STANDALONE_CARD_BUBBLE_STYLE = {
@@ -624,6 +647,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
     onOpenCustomPlusAction: (action: RegisteredCustomAppChatPlusAction) => void;
     onStartVideoCall: () => void;
     onStartVoiceCall: () => void;
+    onOpenRelationship: () => void;
     onSendText: (text: string, options?: { autoReply?: boolean }) => boolean;
     onStopGeneration: () => void;
     onTriggerAIResponse: () => void;
@@ -655,6 +679,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
     onOpenCustomPlusAction,
     onStartVideoCall,
     onStartVoiceCall,
+    onOpenRelationship,
     onSendText,
     onStopGeneration,
     onTriggerAIResponse,
@@ -729,6 +754,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
         { icon: <Gift size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "礼物", onClick: () => onOpenRichModal("gift") },
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>, label: "位置", onClick: () => onOpenRichModal("location") },
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="22" /><line x1="8" y1="22" x2="16" y2="22" /></svg>, label: "语音条", onClick: () => onOpenRichModal("voice_msg") },
+        ...(!isGroup ? [{ icon: <Heart size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "关系", onClick: onOpenRelationship }] : []),
         ...customPlusActions.map(action => ({
             icon: action.appIconDataUrl
                 ? <span className="chat-plus-custom-app-icon" style={{ backgroundImage: `url(${action.appIconDataUrl})` }} aria-hidden="true" />
@@ -1129,6 +1155,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [userIdentity, setUserIdentity] = useState<UserIdentity | null>(null);
     const [enterToSendEnabled, setEnterToSendEnabled] = useState(() => loadChatAppSettings().enterToSendEnabled === true);
 
+    const [showRelationshipInvite, setShowRelationshipInvite] = useState(false);
+    const [showRelationshipSpace, setShowRelationshipSpace] = useState(false);
+    const [spaceRelationshipId, setSpaceRelationshipId] = useState<string | null>(null);
     // Rich media input modals
     const [richModal, setRichModal] = useState<RichModalKind | null>(null);
     const [transferTarget, setTransferTarget] = useState<Character | null>(null);
@@ -1538,6 +1567,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             const detail = (e as CustomEvent).detail;
             if (detail?.sessionId === session.id) {
                 syncMessagesFromStorage();
+                const pendingKey = PENDING_REPLY_PREFIX + session.id;
+                if (kvGet(pendingKey)) {
+                    kvRemove(pendingKey);
+                    window.dispatchEvent(new CustomEvent(CHAT_REQUEST_REPLY_EVENT, { detail: { sessionId: session.id } }));
+                }
             }
         };
         window.addEventListener("chat-messages-updated", onExternalMessageUpdate);
@@ -1673,7 +1707,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 part.mediaType === "accept_transfer" ||
                 part.mediaType === "decline_transfer" ||
                 part.mediaType === "accept_payment_request" ||
-                part.mediaType === "decline_payment_request"
+                part.mediaType === "decline_payment_request" ||
+                part.mediaType === "accept_relationship" ||
+                part.mediaType === "decline_relationship"
             ) {
                 return [];
             }
@@ -1719,6 +1755,23 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         () => loadDeliveredShoppingGifts(),
         [messages],
     );
+
+    useEffect(() => {
+        const refreshAvatars = () => {
+            if (session.isGroup) {
+                setUserIdentity(resolveUserIdentity(undefined, "group_chat"));
+                return;
+            }
+            setCharacter(loadCharacters().find(item => item.id === session.contactId) || null);
+            setUserIdentity(resolveUserIdentity(session.contactId, "chat"));
+        };
+        window.addEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
+        window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
+        return () => {
+            window.removeEventListener(CHARACTERS_UPDATED_EVENT, refreshAvatars);
+            window.removeEventListener(USER_IDENTITIES_UPDATED_EVENT, refreshAvatars);
+        };
+    }, [session.contactId, session.isGroup]);
 
     useEffect(() => {
         setUserIdentity(resolveUserIdentity(session.contactId, "chat"));
@@ -2154,6 +2207,40 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 payerCharacterId: session.contactId,
                 payerCharacterName: charN,
             });
+        } else if (actionType === "accept_relationship" || actionType === "decline_relationship") {
+            const targetInvite = [...messages].reverse().find(
+                m => m.role === "user" && m.mediaType === "relationship_invite" && m.mediaData?.status === "pending"
+            );
+            if (!targetInvite) return;
+            const accept = actionType === "accept_relationship";
+            const relId = targetInvite.mediaData?.relationshipId;
+            const kind = targetInvite.mediaData?.relationshipKind || parseRelationshipKindLabel(targetInvite.mediaData?.label) || "couple";
+            if (relId) {
+                if (accept) acceptRelationship(relId);
+                else declineRelationship(relId);
+            }
+            const updatedInvite = {
+                ...targetInvite.mediaData,
+                status: accept ? "received" as const : "declined" as const,
+            };
+            updateMessageMediaData(targetInvite.id, updatedInvite);
+            setMessages(prev => prev.map(m => m.id === targetInvite.id ? { ...m, mediaData: updatedInvite } : m));
+            const label = relationshipKindLabel(kind);
+            const relMsg = pushChatMessage({
+                sessionId: session.id,
+                role: "assistant",
+                content: accept ? `${charN}同意成为你的${label}` : `${charN}拒绝了${label}邀请`,
+                mediaType: actionType as ChatMessage["mediaType"],
+                mediaData: {
+                    relationshipKind: kind,
+                    relationshipId: relId,
+                    label,
+                    status: accept ? "received" : "declined",
+                },
+                ...buildAssistantActionEditMeta(accept ? "[同意关系]" : "[拒绝关系]"),
+            });
+            setMessages(prev => [...prev, relMsg]);
+            return;
         } else {
             newStatus = "declined";
             sysText = `${charN}拒收了${userN}的转账`;
@@ -2837,8 +2924,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             if (p.mediaType === "video_call") { triggerCall = "video"; continue; }
             if (p.mediaType === "accept_red_packet" || p.mediaType === "decline_red_packet"
                 || p.mediaType === "accept_transfer" || p.mediaType === "decline_transfer"
-                || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request") {
-                if (p.mediaType === "decline_red_packet" || p.mediaType === "decline_transfer" || p.mediaType === "decline_payment_request") {
+                || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
+                || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship") {
+                if (p.mediaType === "decline_red_packet" || p.mediaType === "decline_transfer" || p.mediaType === "decline_payment_request" || p.mediaType === "decline_relationship") {
                     hasDecline = true;
                 }
                 throwIfGenerationStopped(options);
@@ -2865,6 +2953,35 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     mediaType: "poke",
                     mediaData: { pokeSender, pokeTarget },
                 });
+                continue;
+            }
+            if (p.mediaType === "relationship_invite" && !session.isGroup) {
+                const kind = parseRelationshipKindLabel(p.mediaData?.label) || "couple";
+                const created = createIncomingInvite(session.contactId, kind);
+                if ("error" in created) {
+                    pushFilteredPart({ content: `${charN}想邀请你成为${relationshipKindLabel(kind)}，但${created.error}` });
+                    continue;
+                }
+                pushFilteredPart({
+                    content: "",
+                    mediaType: "relationship_invite",
+                    mediaData: {
+                        label: relationshipKindLabel(kind),
+                        relationshipKind: kind,
+                        relationshipId: created.id,
+                        status: "pending",
+                    },
+                }, (message) => attachInviteMessageId(created.id, message.id));
+                continue;
+            }
+            if (p.mediaType === "relationship_space" && !session.isGroup) {
+                const notice = materializeRelationshipSpacePart({
+                    characterId: session.contactId,
+                    characterName: charN,
+                    mediaData: p.mediaData,
+                    messages,
+                });
+                pushFilteredPart({ content: notice.notice });
                 continue;
             }
             pushFilteredPart(p);
@@ -2940,6 +3057,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             music_share: "分享了音乐",
             xiaohongshu_note_share: "分享了一条小红书帖子",
             app_card: "分享了一张应用卡片",
+            relationship_invite: "发来了一份关系邀请",
+            accept_relationship: "同意了关系邀请",
             quote: "引用回复",
         };
         const getNoticeBody = (m: ChatMessage): string => {
@@ -3448,9 +3567,132 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             mediaData: walletDebit.mediaData,
             ...(mediaUrl ? { mediaUrl } : {}),
         });
-        setMessages(prev => [...prev, newMsg]);
+        const coupleNotice = !session.isGroup && mediaType === "image"
+            ? applyCoupleAvatarIfUserSentPair({
+                sessionId: session.id,
+                characterId: session.contactId,
+                userImage: mediaUrl,
+                characterName: character?.name,
+            })
+            : null;
+        if (coupleNotice) {
+            setCharacter(loadCharacters().find(item => item.id === session.contactId) || character);
+        }
+        setMessages(prev => coupleNotice ? [...prev, newMsg, coupleNotice] : [...prev, newMsg]);
         setPendingGenerate(true);
         return true;
+    };
+
+    const handleOpenRelationship = () => {
+        if (session.isGroup) return;
+        setShowPlusMenu(false);
+        const existing = getRelationshipByCharacter(session.contactId);
+        if (existing?.status === "active") {
+            setSpaceRelationshipId(existing.id);
+            setShowRelationshipSpace(true);
+            return;
+        }
+        const gate = canStartRelationship(session.contactId);
+        if (!gate.ok) {
+            showChatToast(gate.reason);
+            return;
+        }
+        setShowRelationshipInvite(true);
+    };
+
+    const handleConfirmRelationshipInvite = (kind: RelationshipKind) => {
+        const created = createOutgoingInvite(session.contactId, kind);
+        if ("error" in created) {
+            showChatToast(created.error);
+            setShowRelationshipInvite(false);
+            return;
+        }
+        setShowRelationshipInvite(false);
+        if (isGenerating) {
+            showChatToast("请先等待对方回复");
+            declineRelationship(created.id);
+            return;
+        }
+        cancelFollowUp(session.id);
+        const label = relationshipKindLabel(kind);
+        const newMsg = pushChatMessage({
+            sessionId: session.id,
+            role: "user",
+            content: `我想和你成为${label}`,
+            mediaType: "relationship_invite",
+            mediaData: {
+                label,
+                relationshipKind: kind,
+                relationshipId: created.id,
+                status: "pending",
+            },
+        });
+        attachInviteMessageId(created.id, newMsg.id);
+        setMessages(prev => [...prev, newMsg]);
+        setPendingGenerate(true);
+    };
+
+    const handleRelationshipAction = (msg: ChatMessage, action: "accept" | "decline" | "open") => {
+        if (action === "open") {
+            const id = msg.mediaData?.relationshipId
+                || getRelationshipByCharacter(session.contactId)?.id
+                || getRelationshipById(msg.mediaData?.relationshipId || "")?.id;
+            const bound = id ? getRelationshipById(id) : getRelationshipByCharacter(session.contactId);
+            if (bound?.status === "active") {
+                setSpaceRelationshipId(bound.id);
+                setShowRelationshipSpace(true);
+                return;
+            }
+            showChatToast("还没有可进入的空间");
+            return;
+        }
+        const relId = msg.mediaData?.relationshipId;
+        if (!relId) return;
+        const kind = msg.mediaData?.relationshipKind || parseRelationshipKindLabel(msg.mediaData?.label) || "couple";
+        const label = relationshipKindLabel(kind);
+        if (action === "accept") {
+            const accepted = acceptRelationship(relId);
+            if (!accepted) {
+                showChatToast("无法接受这段邀请");
+                return;
+            }
+            const updated = { ...msg.mediaData, status: "received" as const };
+            updateMessageMediaData(msg.id, updated);
+            setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, mediaData: updated } : m));
+            const card = pushChatMessage({
+                sessionId: session.id,
+                role: "user",
+                content: `我同意成为你的${label}`,
+                mediaType: "accept_relationship",
+                mediaData: {
+                    relationshipKind: accepted.kind,
+                    relationshipId: accepted.id,
+                    label,
+                    status: "received",
+                },
+            });
+            setMessages(prev => [...prev, card]);
+            setPendingGenerate(true);
+            return;
+        }
+        declineRelationship(relId);
+        const updated = { ...msg.mediaData, status: "declined" as const };
+        updateMessageMediaData(msg.id, updated);
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, mediaData: updated } : m));
+        const card = pushChatMessage({
+            sessionId: session.id,
+            role: "user",
+            content: `我拒绝了${label}邀请`,
+            mediaType: "decline_relationship",
+            mediaData: {
+                relationshipKind: kind,
+                relationshipId: relId,
+                label,
+                status: "declined",
+            },
+        });
+        setMessages(prev => [...prev, card]);
+        setPendingGenerate(true);
     };
 
     const sendSystemInstruction = (content: string): boolean => {
@@ -4456,7 +4698,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     part.mediaType === "accept_transfer" ||
                     part.mediaType === "decline_transfer" ||
                     part.mediaType === "accept_payment_request" ||
-                    part.mediaType === "decline_payment_request"
+                    part.mediaType === "decline_payment_request" ||
+                    part.mediaType === "accept_relationship" ||
+                    part.mediaType === "decline_relationship"
                 )
             ) {
                 return [];
@@ -6033,6 +6277,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                 }}
                                                 onMusicPlay={handleMusicCardPlay}
                                                 onActionSelect={(text) => chatTextInputRef.current?.appendText(text)}
+                                                onRelationshipAction={handleRelationshipAction}
                                                 defaultTranslationExpanded={session.collapseBilingualTranslation !== false ? false : true}
                                             />
                                         </div>
@@ -6251,6 +6496,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 onOpenCustomPlusAction={handleOpenCustomPlusAction}
                 onStartVideoCall={() => { cancelFollowUp(session.id); setShowPlusMenu(false); setCallInitiator("user"); setShowVideoCall(true); }}
                 onStartVoiceCall={() => { cancelFollowUp(session.id); setShowPlusMenu(false); setCallInitiator("user"); setShowVoiceCall(true); }}
+                onOpenRelationship={handleOpenRelationship}
                 onSendText={handleSendText}
                 onStopGeneration={clearStuckGeneration}
                 onTriggerAIResponse={triggerAIResponse}
@@ -6536,6 +6782,23 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showRelationshipInvite && !session.isGroup && (
+                <RelationshipInviteModal
+                    characterName={character?.name || "对方"}
+                    onClose={() => setShowRelationshipInvite(false)}
+                    onConfirm={handleConfirmRelationshipInvite}
+                />
+            )}
+            {showRelationshipSpace && spaceRelationshipId && !session.isGroup && (
+                <RelationshipSpace
+                    relationshipId={spaceRelationshipId}
+                    character={character}
+                    messages={messages}
+                    onClose={() => setShowRelationshipSpace(false)}
+                    onNotice={showChatToast}
+                />
             )}
 
             {/* Red Packet / Transfer Detail Modal */}

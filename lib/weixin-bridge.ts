@@ -106,6 +106,16 @@ function partToWeixinText(part: ParsedMessagePart, charName: string): string | n
     });
     if (part.mediaType === "accept_payment_request") return `${charName}接受了代付`;
     if (part.mediaType === "decline_payment_request") return `${charName}拒绝了代付`;
+    if (part.mediaType === "relationship_invite") return `${charName}发来了关系邀请`;
+    if (part.mediaType === "accept_relationship") return `${charName}同意了关系邀请`;
+    if (part.mediaType === "decline_relationship") return `${charName}拒绝了关系邀请`;
+    if (part.mediaType === "relationship_space") {
+        const action = data.spaceAction;
+        if (action === "comment" || action === "reply") return `${charName}评论了关系空间动态`;
+        if (action === "checkin") return `${charName}在关系空间打了卡`;
+        if (action === "anniversary") return `${charName}添加了纪念日`;
+        return `${charName}在关系空间发布了动态`;
+    }
 
     return content || null;
 }
@@ -965,7 +975,8 @@ async function handleIncomingMessage(
         if (p.mediaType === "voice_call" || p.mediaType === "video_call") continue;
         if (p.mediaType === "accept_red_packet" || p.mediaType === "decline_red_packet"
             || p.mediaType === "accept_transfer" || p.mediaType === "decline_transfer"
-            || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request") continue;
+            || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
+            || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship") continue;
         if (p.mediaType === "poke") {
             const pokeSender = (p.mediaData?.pokeSender === "我" ? charName : p.mediaData?.pokeSender) || charName;
             const pokeTarget = p.mediaData?.pokeTarget || "你";

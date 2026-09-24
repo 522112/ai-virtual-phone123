@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useSyncExternalStore } from "react";
 import { loadChatContacts, ChatContact, createOrGetSession, ChatSession, addChatContact, pushChatMessage, loadChatMessages } from "@/lib/chat-storage";
-import { resolveUserIdentity } from "@/lib/settings-storage";
+import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import { PENDING_REPLY_PREFIX } from "@/lib/friend-request-engine";
-import { loadCharacters } from "@/lib/character-storage";
+import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { Character } from "@/lib/character-types";
+import { ContactProfilePage } from "./contact-profile-page";
 import { loadMomentPosts } from "@/lib/moments-storage";
 import {
     getPendingFriendRequests,
@@ -48,6 +49,7 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
     const [selectedRequest, setSelectedRequest] = useState<FriendRequest | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
+    const [profileCharacterId, setProfileCharacterId] = useState<string | null>(null);
     const [addQuery, setAddQuery] = useState("");
     const [addResult, setAddResult] = useState<Character | null | undefined>(undefined);
     const [isSendingAdd, setIsSendingAdd] = useState(false);
@@ -57,8 +59,8 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
     const mascotSettings = useSyncExternalStore(subscribeMascotSettings, getMascotSettingsSnapshot, getMascotSettingsSnapshot);
     const [mascotAvatarUrl, setMascotAvatarUrl] = useState(mascotSettings.avatarImage || DEFAULT_MASCOT_AVATAR);
 
-    const identity = useMemo(() => resolveUserIdentity(), []);
-    const chars = useMemo(() => loadCharacters(), []);
+    const [identity, setIdentity] = useState(() => resolveUserIdentity());
+    const [chars, setChars] = useState(() => loadCharacters());
     const deferredContactFilter = useDeferredValue(contactFilter);
     const bodyRef = useRef<HTMLDivElement>(null);
     const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -101,10 +103,13 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
     }
 
     const refresh = useCallback(() => {
+        const latestChars = loadCharacters();
+        setChars(latestChars);
+        setIdentity(resolveUserIdentity());
         const rawContacts = loadChatContacts();
         const enriched = rawContacts.map(c => ({
             ...c,
-            char: chars.find(ch => ch.id === c.characterId)
+            char: latestChars.find(ch => ch.id === c.characterId)
         })).filter(c => c.char);
         enriched.sort((a, b) => (a.char?.name || "").localeCompare(b.char?.name || ""));
         setContacts(enriched);
@@ -124,7 +129,13 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
         refresh();
         const handler = () => refresh();
         window.addEventListener("friend-requests-updated", handler);
-        return () => window.removeEventListener("friend-requests-updated", handler);
+        window.addEventListener(CHARACTERS_UPDATED_EVENT, handler);
+        window.addEventListener(USER_IDENTITIES_UPDATED_EVENT, handler);
+        return () => {
+            window.removeEventListener("friend-requests-updated", handler);
+            window.removeEventListener(CHARACTERS_UPDATED_EVENT, handler);
+            window.removeEventListener(USER_IDENTITIES_UPDATED_EVENT, handler);
+        };
     }, [refresh]);
 
     /** Group contacts by pinyin initial */
@@ -209,6 +220,7 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                 <div className="pt-5 pb-1">
                     <div className="flex items-center justify-between mb-4 mt-2">
                         <span className="ts-28 font-bold text-[var(--c-text-title)]">Contacts</span>
+                        <span className="menu-desc">点头像可换双方头像和情头</span>
                     </div>
                     <div className="chat-search-bar">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--c-icon)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -280,7 +292,14 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                                             }}
                                             className="minimal-list-item"
                                         >
-                                            <div className="minimal-avatar-wrapper">
+                                            <div
+                                                className="minimal-avatar-wrapper"
+                                                title="更换双方头像"
+                                                onClick={event => {
+                                                    event.stopPropagation();
+                                                    setProfileCharacterId(char.id);
+                                                }}
+                                            >
                                                 {char.avatar ? (
                                                     <img src={char.avatar} className="w-full h-full object-cover rounded-full" alt="" />
                                                 ) : (
@@ -568,6 +587,19 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                     )}
                 </PageShell>
                 </div>
+                </div>
+            )}
+
+            {profileCharacterId && (
+                <div style={{ position: "absolute", inset: 0, zIndex: 9999, background: "var(--c-page-body-bg)" }}>
+                    <ContactProfilePage
+                        characterId={profileCharacterId}
+                        onBack={() => setProfileCharacterId(null)}
+                        onSelectSession={session => {
+                            setProfileCharacterId(null);
+                            onSelectSession(session);
+                        }}
+                    />
                 </div>
             )}
         </div>

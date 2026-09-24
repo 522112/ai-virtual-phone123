@@ -369,6 +369,70 @@ const RICH_PATTERNS: {
         regex: /\[拒绝代付\]/,
         build: () => ({ content: "", mediaType: "decline_payment_request" as const }),
     },
+    {
+        regex: /\[关系邀请[：:]([^\]]+)\]/,
+        build: (m) => ({
+            content: "",
+            mediaType: "relationship_invite" as const,
+            mediaData: { label: m[1]?.trim() || "关系", status: "pending" as const },
+        }),
+    },
+    {
+        regex: /\[(?:同意|接受)关系\]/,
+        build: () => ({ content: "", mediaType: "accept_relationship" as const }),
+    },
+    {
+        regex: /\[拒绝关系\]/,
+        build: () => ({ content: "", mediaType: "decline_relationship" as const }),
+    },
+    {
+        regex: new RegExp(`\\[关系动态感触${C}([^\\]]+)\\]`),
+        build: (m) => ({
+            content: "",
+            mediaType: "relationship_space" as const,
+            mediaData: { label: m[1]?.trim() || "", spaceAction: "post_from_chat" as const },
+        }),
+    },
+    {
+        regex: new RegExp(`\\[关系动态${C}([^\\]]+)\\]`),
+        build: (m) => ({
+            content: "",
+            mediaType: "relationship_space" as const,
+            mediaData: { label: m[1]?.trim() || "", spaceAction: "post" as const },
+        }),
+    },
+    {
+        regex: new RegExp(`\\[关系回评${C}([^\\]:：]+)${C}([^\\]]+)\\]`),
+        build: (m) => ({
+            content: "",
+            mediaType: "relationship_space" as const,
+            mediaData: { label: m[2]?.trim() || "", spaceAction: "reply" as const, spaceReplyTo: m[1]?.trim() },
+        }),
+    },
+    {
+        regex: new RegExp(`\\[关系评论${C}([^\\]]+)\\]`),
+        build: (m) => ({
+            content: "",
+            mediaType: "relationship_space" as const,
+            mediaData: { label: m[1]?.trim() || "", spaceAction: "comment" as const },
+        }),
+    },
+    {
+        regex: new RegExp(`\\[关系纪念日${C}([^\\]:：]+)${C}(\\d{4}-\\d{2}-\\d{2})\\]`),
+        build: (m) => ({
+            content: "",
+            mediaType: "relationship_space" as const,
+            mediaData: { label: m[1]?.trim() || "", spaceAction: "anniversary" as const, anniversaryDate: m[2] },
+        }),
+    },
+    {
+        regex: new RegExp(`\\[关系打卡(?:${C}([^\\]]+))?\\]`),
+        build: (m) => ({
+            content: "",
+            mediaType: "relationship_space" as const,
+            mediaData: { label: m[1]?.trim() || "", spaceAction: "checkin" as const },
+        }),
+    },
 ];
 
 type RichPatternCandidate = {

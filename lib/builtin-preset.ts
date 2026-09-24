@@ -6,7 +6,7 @@ import type { PresetConfig } from "./settings-types";
 import { getCheckPhonePromptTags } from "./checkphone-config";
 
 export const BUILTIN_PRESET_ID = "builtin_default_v1";
-export const BUILTIN_PRESET_VERSION = 264; // 升版本会用出厂内容重写用户的内置预设副本（自定义会丢），非必要不升
+export const BUILTIN_PRESET_VERSION = 265; // 升版本会用出厂内容重写用户的内置预设副本（自定义会丢），非必要不升
 
 export function createBuiltinPreset(): PresetConfig {
     const now = Date.now();
@@ -571,6 +571,7 @@ export function createBuiltinPreset(): PresetConfig {
                     "- <{{offlineSummaryTag}}> 中只写本轮互动形成的一条事件总结，不要总结前文，不要罗列多条事件。",
                     "- 不要在 XML 外输出任何解释、标题、Markdown 或额外文本。",
                     "{{offlineBilingualInstruction}}",
+                    "{{offlineOutputInstruction}}",
                     "",
                     "## 线下模式规则",
                     "- 线下模式不是微信体，不要输出聊天气泡格式，不要拆成多条短消息。",
@@ -1197,6 +1198,7 @@ export function createBuiltinPreset(): PresetConfig {
                     "- <{{offlineSummaryTag}}> 中只写本轮群体互动形成的一条共享事件总结，不要按角色分别总结，不要总结前文。",
                     "- 不要在 XML 外输出任何解释、标题、Markdown 或额外文本。",
                     "{{offlineBilingualInstruction}}",
+                    "{{offlineOutputInstruction}}",
                     "",
                     "## 群聊线下规则",
                     "- 不要输出 [角色名]: 的群聊气泡格式，不要拆成多条短消息。",

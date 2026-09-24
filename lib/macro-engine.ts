@@ -56,6 +56,7 @@ export class MacroEngine {
     statusRegionComposition: string = "";
     statusRegionFullExample: string = "";
     offlineBilingualInstruction: string = "";
+    offlineOutputInstruction: string = "";
     offlineSummaryTag: string = "summary";
     checkPhoneBilingualInstruction: string = "";
     xiaohongshuBilingualInstruction: string = "";
@@ -189,6 +190,7 @@ export class MacroEngine {
         if (body === "statusRegionComposition") return this.statusRegionComposition;
         if (body === "statusRegionFullExample") return this.statusRegionFullExample;
         if (body === "offlineBilingualInstruction") return this.offlineBilingualInstruction || "\x00TRIM\x00";
+        if (body === "offlineOutputInstruction") return this.offlineOutputInstruction || "\x00TRIM\x00";
         if (body === "offlineSummaryTag") return this.offlineSummaryTag || "summary";
         if (body === "checkPhoneBilingualInstruction") return this.checkPhoneBilingualInstruction || "\x00TRIM\x00";
         if (body === "xiaohongshuBilingualInstruction") return this.xiaohongshuBilingualInstruction || "\x00TRIM\x00";

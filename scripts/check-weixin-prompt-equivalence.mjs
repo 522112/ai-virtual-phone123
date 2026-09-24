@@ -103,7 +103,7 @@ const mkContext = (history) => ({
   worldBookActivationContext: "", initialStateValues: [], longTermMemories: "", coreMemories: "",
   scheduleSummary: "", currentSchedule: "", customStickerNames: "", customStickerExample: "",
   musicLocal: "", musicCloud: "", musicOnlineHint: "", tools: "", chatBilingualInstruction: "",
-  offlineBilingualInstruction: "", offlineSummaryTag: "summary", enableVision: false, mediaReply: true,
+  offlineBilingualInstruction: "", offlineOutputInstruction: "", offlineSummaryTag: "summary", enableVision: false, mediaReply: true,
   timeAware: true, promptTimeZone: TZ, promptTimestampIncludeZone: false, nativeToolHistory: false,
 });
 const mkSnapshot = (history, preset, worldBooks) => ({
