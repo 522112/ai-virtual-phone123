@@ -4919,15 +4919,28 @@
 .chat-offline-output-fields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   padding-left: 48px;
 }
 
-.chat-offline-output-row {
-  display: flex;
-  align-items: center;
+.chat-offline-output-range {
+  display: grid;
+  grid-template-columns: 1fr 16px 1fr;
+  align-items: end;
   gap: 8px;
-  flex-wrap: wrap;
+}
+
+.chat-offline-output-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-offline-output-range-sep {
+  height: 1px;
+  margin-bottom: 16px;
+  background: color-mix(in srgb, var(--c-text) 16%, transparent);
 }
 
 .chat-offline-output-field-label {
@@ -4937,30 +4950,63 @@
 }
 
 .chat-offline-output-number {
-  width: 88px;
-  height: 32px;
+  width: 100%;
+  height: 36px;
   text-align: center;
 }
 
 .chat-offline-output-styles {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.chat-offline-output-chip {
-  border: 0;
-  border-radius: 999px;
-  padding: 5px 10px;
-  font-size: calc(11px*var(--app-text-scale,1));
-  font-weight: 600;
-  background: color-mix(in srgb, var(--c-card-border) 35%, var(--c-page-body-bg));
+.chat-offline-output-style-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--c-card-border) 70%, transparent);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--c-page-body-bg, #f6f6f7);
   color: var(--c-text);
+  text-align: left;
+  cursor: pointer;
 }
 
-.chat-offline-output-chip[data-active] {
-  background: rgba(132, 160, 255, 0.16);
-  color: var(--c-action-blue);
+.chat-offline-output-style-card[data-active] {
+  border-color: color-mix(in srgb, var(--c-action-blue) 45%, transparent);
+  background: rgba(132, 160, 255, 0.12);
+}
+
+.chat-offline-output-style-name {
+  font-size: calc(13px * var(--app-text-scale, 1));
+  font-weight: 720;
+  color: var(--c-text-title, inherit);
+}
+
+.chat-offline-output-style-rule,
+.chat-offline-output-preview-rule {
+  font-size: calc(12px * var(--app-text-scale, 1));
+  line-height: 1.55;
+  color: var(--c-text);
+  opacity: 0.72;
+}
+
+.chat-offline-output-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--c-text) 5%, transparent);
+}
+
+.chat-offline-output-preview-name {
+  font-size: calc(12px * var(--app-text-scale, 1));
+  font-weight: 720;
 }
 
 .chat-offline-output-custom {
@@ -7638,6 +7684,20 @@
 .chat-rel-card[data-status="declined"] .chat-rel-card-body {
   filter: grayscale(0.45);
   opacity: 0.78;
+}
+
+.chat-rel-card[data-status="declined"] .chat-rel-card-mark {
+  position: relative;
+}
+
+.chat-rel-card[data-status="declined"] .chat-rel-card-mark::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-top: 2px solid #fff;
+  transform: rotate(-38deg);
+  transform-origin: center;
+  opacity: 0.92;
 }
 
 .rel-invite-overlay,

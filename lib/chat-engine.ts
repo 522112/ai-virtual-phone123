@@ -1550,6 +1550,18 @@ export function normalizeOfflineWritingStyleId(value: unknown): string {
     return OFFLINE_WRITING_STYLE_NONE;
 }
 
+export function describeOfflineWritingStyle(styleId: string, custom?: string): { name: string; rules: string } {
+    const id = normalizeOfflineWritingStyleId(styleId);
+    if (id === OFFLINE_WRITING_STYLE_CUSTOM) {
+        return { name: "自定义", rules: custom?.trim() || "尚未填写输出规则" };
+    }
+    const option = OFFLINE_WRITING_STYLE_OPTIONS.find(item => item.id === id);
+    if (!option || id === OFFLINE_WRITING_STYLE_NONE) {
+        return { name: "不限制", rules: "不追加文风指令，沿用角色卡与线下 XML 格式" };
+    }
+    return { name: option.label, rules: option.instruction };
+}
+
 function resolveOfflineWritingStyleInstruction(session: OfflineOutputSettings): string {
     const styleId = normalizeOfflineWritingStyleId(session.offlineWritingStyleId);
     if (styleId === OFFLINE_WRITING_STYLE_NONE) return "";

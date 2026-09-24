@@ -172,6 +172,61 @@ export function findPendingInviteForCharacter(characterId: string, invitedBy?: "
   ) || null;
 }
 
+type InviteMessageLike = {
+  id: string;
+  role: string;
+  mediaType?: string;
+  mediaData?: {
+    relationshipId?: string;
+    relationshipKind?: string;
+    label?: string;
+    status?: string;
+  };
+};
+
+export function applyCharacterRelationshipDecision(input: {
+  characterId: string;
+  accept: boolean;
+  messages?: InviteMessageLike[];
+}): {
+  inviteMessageId?: string;
+  relationshipId: string;
+  kind: RelationshipKind;
+  label: string;
+  accept: boolean;
+  updatedInviteMedia: {
+    label: string;
+    relationshipKind: RelationshipKind;
+    relationshipId: string;
+    status: "received" | "declined";
+  };
+} | null {
+  const fromMsg = [...(input.messages || [])].reverse().find(
+    m => m.role === "user" && m.mediaType === "relationship_invite" && m.mediaData?.status === "pending",
+  );
+  const pending = (fromMsg?.mediaData?.relationshipId
+    ? getRelationshipById(fromMsg.mediaData.relationshipId)
+    : null) || findPendingInviteForCharacter(input.characterId, "user");
+  if (!pending || pending.status !== "pending") return null;
+  if (input.accept) acceptRelationship(pending.id);
+  else declineRelationship(pending.id);
+  const kind = isRelationshipKind(pending.kind) ? pending.kind : "couple";
+  const label = relationshipKindLabel(kind);
+  return {
+    inviteMessageId: fromMsg?.id || pending.inviteMessageId,
+    relationshipId: pending.id,
+    kind,
+    label,
+    accept: input.accept,
+    updatedInviteMedia: {
+      label,
+      relationshipKind: kind,
+      relationshipId: pending.id,
+      status: input.accept ? "received" : "declined",
+    },
+  };
+}
+
 export function daysTogether(binding: RelationshipBinding): number {
   const start = Date.parse(binding.acceptedAt || binding.invitedAt);
   if (!Number.isFinite(start)) return 0;
@@ -443,7 +498,13 @@ export function buildRelationshipSpaceInstruction(characterId: string | undefine
   const label = relationshipKindLabel(binding.kind);
   if (binding.status === "pending") {
     if (binding.invitedBy === "user") {
-      return `【关系空间】\n对方邀请你成为「${label}」。同意输出 [同意关系]，拒绝输出 [拒绝关系]。不要重复发送邀请。一个人同时只能绑定一段关系。`;
+      return [
+        `【关系空间】`,
+        `对方刚发来「${label}」关系邀请。请根据角色卡、记忆、当前聊天和你们的相处，自己决定接受还是拒绝。`,
+        `接受：必须单独输出 [同意关系]（可同时发聊天文字）。系统收到标记后，会由你发出一张「已成为${label}」卡片。`,
+        `拒绝：必须单独输出 [拒绝关系]（可同时发聊天文字）。系统收到标记后，会由你发出一张拒绝卡片。`,
+        `只口头答应或拒绝、却不输出标记，卡片会一直停在「等待对方接受」。不要重复发送邀请。一个人同时只能绑定一段关系。`,
+      ].join("\n");
     }
     return `【关系空间】\n你已向对方发出「${label}」邀请，等待对方在卡片上处理。不要重复发送邀请。`;
   }

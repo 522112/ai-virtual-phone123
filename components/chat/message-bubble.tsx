@@ -768,18 +768,23 @@ function RelationshipInviteBubble({
     const title = msg.mediaType === "accept_relationship"
         ? `已成为${relationshipKindLabel(kind)}`
         : msg.mediaType === "decline_relationship"
-            ? `已拒绝${relationshipKindLabel(kind)}邀请`
+            ? `已拒绝成为${relationshipKindLabel(kind)}`
             : meta.inviteTitle;
     const desc = msg.mediaType === "accept_relationship"
         ? "点卡片进入双方空间"
         : msg.mediaType === "decline_relationship"
-            ? "这次邀约没有达成"
+            ? `${sender}没有接受这次邀约`
             : `${sender}邀请绑定${meta.label}`;
     const statusText = status === "received"
         ? "已同意"
         : status === "declined"
             ? "已拒绝"
             : incoming ? "待接收" : "等待对方接受";
+    const kicker = msg.mediaType === "decline_relationship"
+        ? "关系拒绝"
+        : msg.mediaType === "accept_relationship"
+            ? "关系确认"
+            : "关系邀约";
 
     return (
         <div
@@ -800,7 +805,7 @@ function RelationshipInviteBubble({
                 </div>
             </div>
             <div className="chat-rel-card-foot">
-                <span className="chat-rel-card-kicker">关系邀约</span>
+                <span className="chat-rel-card-kicker">{kicker}</span>
                 <span className="chat-rel-card-status">{statusText}</span>
                 {incoming ? (
                     <div className="chat-rel-card-actions">

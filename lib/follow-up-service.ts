@@ -39,10 +39,9 @@ import { bgSetInterval, bgSetTimeout } from "./bg-timer";
 import { dispatchChatMessageNotice } from "./chat-notification-events";
 import { settleShoppingPaymentRequest } from "./shopping-payment-request";
 import {
-    acceptRelationship,
+    applyCharacterRelationshipDecision,
     attachInviteMessageId,
     createIncomingInvite,
-    declineRelationship,
     parseRelationshipKindLabel,
     relationshipKindLabel,
     materializeRelationshipSpacePart,
@@ -779,32 +778,27 @@ export function handleFollowUpMediaAction(
     contextMessages: ChatMessage[],
 ) {
     if (actionType === "accept_relationship" || actionType === "decline_relationship") {
-        const targetInvite = [...contextMessages].reverse().find(
-            m => m.role === "user" && m.mediaType === "relationship_invite" && m.mediaData?.status === "pending"
-        );
-        if (!targetInvite) return;
         const accept = actionType === "accept_relationship";
-        const relId = targetInvite.mediaData?.relationshipId;
-        const kind = targetInvite.mediaData?.relationshipKind || parseRelationshipKindLabel(targetInvite.mediaData?.label) || "couple";
-        if (relId) {
-            if (accept) acceptRelationship(relId);
-            else declineRelationship(relId);
-        }
-        updateMessageMediaData(targetInvite.id, {
-            ...targetInvite.mediaData,
-            status: accept ? "received" : "declined",
+        const sess = loadChatSessions().find(item => item.id === sessionId);
+        const decided = applyCharacterRelationshipDecision({
+            characterId: sess?.contactId || "",
+            accept,
+            messages: contextMessages,
         });
+        if (!decided) return;
+        if (decided.inviteMessageId) {
+            updateMessageMediaData(decided.inviteMessageId, decided.updatedInviteMedia);
+        }
         const charName = resolveFollowUpSenderName(sessionId);
-        const label = relationshipKindLabel(kind);
         pushChatMessage({
             sessionId,
             role: "assistant",
-            content: accept ? `${charName}同意成为你的${label}` : `${charName}拒绝了${label}邀请`,
+            content: accept ? `${charName}同意成为你的${decided.label}` : `${charName}拒绝了${decided.label}邀请`,
             mediaType: actionType,
             mediaData: {
-                relationshipKind: kind,
-                relationshipId: relId,
-                label,
+                relationshipKind: decided.kind,
+                relationshipId: decided.relationshipId,
+                label: decided.label,
                 status: accept ? "received" : "declined",
             },
             responseBatchId: createResponseBatchId(),

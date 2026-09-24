@@ -93,6 +93,7 @@ import { RelationshipInviteModal } from "@/components/chat/relationship-invite-m
 import { RelationshipSpace } from "@/components/chat/relationship-space";
 import {
     acceptRelationship,
+    applyCharacterRelationshipDecision,
     attachInviteMessageId,
     canStartRelationship,
     createIncomingInvite,
@@ -2159,6 +2160,36 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     });
 
     const handleAIMediaAction = (actionType: string, charN: string, userN: string) => {
+        if (actionType === "accept_relationship" || actionType === "decline_relationship") {
+            const accept = actionType === "accept_relationship";
+            const latest = loadChatMessages(session.id);
+            const decided = applyCharacterRelationshipDecision({
+                characterId: session.contactId,
+                accept,
+                messages: latest.length ? latest : messages,
+            });
+            if (!decided) return;
+            if (decided.inviteMessageId) {
+                updateMessageMediaData(decided.inviteMessageId, decided.updatedInviteMedia);
+                setMessages(prev => prev.map(m => m.id === decided.inviteMessageId ? { ...m, mediaData: decided.updatedInviteMedia } : m));
+            }
+            const relMsg = pushChatMessage({
+                sessionId: session.id,
+                role: "assistant",
+                content: accept ? `${charN}同意成为你的${decided.label}` : `${charN}拒绝了${decided.label}邀请`,
+                mediaType: actionType as ChatMessage["mediaType"],
+                mediaData: {
+                    relationshipKind: decided.kind,
+                    relationshipId: decided.relationshipId,
+                    label: decided.label,
+                    status: accept ? "received" : "declined",
+                },
+                ...buildAssistantActionEditMeta(accept ? "[同意关系]" : "[拒绝关系]"),
+            });
+            setMessages(prev => [...prev, relMsg]);
+            return;
+        }
+
         // Find the target message in current messages (most recent matching user message with pending status)
         const targetMediaType = actionType.includes("payment_request")
             ? "payment_request"
@@ -2207,40 +2238,6 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 payerCharacterId: session.contactId,
                 payerCharacterName: charN,
             });
-        } else if (actionType === "accept_relationship" || actionType === "decline_relationship") {
-            const targetInvite = [...messages].reverse().find(
-                m => m.role === "user" && m.mediaType === "relationship_invite" && m.mediaData?.status === "pending"
-            );
-            if (!targetInvite) return;
-            const accept = actionType === "accept_relationship";
-            const relId = targetInvite.mediaData?.relationshipId;
-            const kind = targetInvite.mediaData?.relationshipKind || parseRelationshipKindLabel(targetInvite.mediaData?.label) || "couple";
-            if (relId) {
-                if (accept) acceptRelationship(relId);
-                else declineRelationship(relId);
-            }
-            const updatedInvite = {
-                ...targetInvite.mediaData,
-                status: accept ? "received" as const : "declined" as const,
-            };
-            updateMessageMediaData(targetInvite.id, updatedInvite);
-            setMessages(prev => prev.map(m => m.id === targetInvite.id ? { ...m, mediaData: updatedInvite } : m));
-            const label = relationshipKindLabel(kind);
-            const relMsg = pushChatMessage({
-                sessionId: session.id,
-                role: "assistant",
-                content: accept ? `${charN}同意成为你的${label}` : `${charN}拒绝了${label}邀请`,
-                mediaType: actionType as ChatMessage["mediaType"],
-                mediaData: {
-                    relationshipKind: kind,
-                    relationshipId: relId,
-                    label,
-                    status: accept ? "received" : "declined",
-                },
-                ...buildAssistantActionEditMeta(accept ? "[同意关系]" : "[拒绝关系]"),
-            });
-            setMessages(prev => [...prev, relMsg]);
-            return;
         } else {
             newStatus = "declined";
             sysText = `${charN}拒收了${userN}的转账`;
@@ -3059,6 +3056,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             app_card: "分享了一张应用卡片",
             relationship_invite: "发来了一份关系邀请",
             accept_relationship: "同意了关系邀请",
+            decline_relationship: "拒绝了关系邀请",
             quote: "引用回复",
         };
         const getNoticeBody = (m: ChatMessage): string => {

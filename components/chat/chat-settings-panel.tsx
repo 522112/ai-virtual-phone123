@@ -54,6 +54,7 @@ import { PageShell } from "@/components/ui/page-shell";
 import {
     OFFLINE_WRITING_STYLE_CUSTOM,
     OFFLINE_WRITING_STYLE_OPTIONS,
+    describeOfflineWritingStyle,
     normalizeOfflineWritingStyleId,
     parseOfflineOutputCharInput,
 } from "@/lib/chat-engine";
@@ -418,6 +419,7 @@ export function ChatSettingsPanel({
         session.offlineWritingStyleCustom || "",
     );
     const [offlineOutputHint, setOfflineOutputHint] = useState("");
+    const selectedOfflineStyle = describeOfflineWritingStyle(offlineWritingStyleId, offlineWritingStyleCustom);
     const defaultBilingualPrompt = session.isGroup ? DEFAULT_GROUP_CHAT_BILINGUAL_PROMPT : DEFAULT_CHAT_BILINGUAL_PROMPT;
     const defaultOfflineBilingualPrompt = session.isGroup ? DEFAULT_GROUP_OFFLINE_CHAT_BILINGUAL_PROMPT : DEFAULT_OFFLINE_CHAT_BILINGUAL_PROMPT;
     const [bilingualTranslationPrompt, setBilingualTranslationPrompt] = useState(session.bilingualTranslationPrompt || defaultBilingualPrompt);
@@ -733,8 +735,8 @@ export function ChatSettingsPanel({
                 : maxChars != null
                     ? `不超过 ${maxChars} 字`
                     : "字数不限制";
-        const styleLabel = OFFLINE_WRITING_STYLE_OPTIONS.find(option => option.id === styleId)?.label || "不限制";
-        setOfflineOutputHint(`已保存：${rangeLabel}，文风「${styleLabel}」`);
+        const style = describeOfflineWritingStyle(styleId, custom);
+        setOfflineOutputHint(`已保存：${rangeLabel}。文风 ${style.name}：${style.rules}`);
     };
 
     const handleImageUpload = async (
@@ -1208,47 +1210,56 @@ export function ChatSettingsPanel({
                                 </div>
                             </div>
                             <div className="chat-offline-output-fields">
-                                <div className="chat-offline-output-row">
-                                    <span className="chat-offline-output-field-label">最小字数</span>
-                                    <Input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={offlineOutputMinChars}
-                                        onChange={e => {
-                                            setOfflineOutputMinChars(e.target.value);
-                                            setOfflineOutputHint("");
-                                        }}
-                                        placeholder="不限制"
-                                        className="chat-offline-output-number"
-                                    />
-                                    <span className="chat-offline-output-field-label">最大字数</span>
-                                    <Input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={offlineOutputMaxChars}
-                                        onChange={e => {
-                                            setOfflineOutputMaxChars(e.target.value);
-                                            setOfflineOutputHint("");
-                                        }}
-                                        placeholder="不限制"
-                                        className="chat-offline-output-number"
-                                    />
-                                </div>
-                                <div className="chat-offline-output-styles" role="group" aria-label="线下文风">
-                                    {OFFLINE_WRITING_STYLE_OPTIONS.map(option => (
-                                        <button
-                                            key={option.id}
-                                            type="button"
-                                            className="chat-offline-output-chip"
-                                            data-active={offlineWritingStyleId === option.id ? "" : undefined}
-                                            onClick={() => {
-                                                setOfflineWritingStyleId(option.id);
+                                <div className="chat-offline-output-range">
+                                    <label className="chat-offline-output-box">
+                                        <span className="chat-offline-output-field-label">最小字数</span>
+                                        <Input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={offlineOutputMinChars}
+                                            onChange={e => {
+                                                setOfflineOutputMinChars(e.target.value);
                                                 setOfflineOutputHint("");
                                             }}
-                                        >
-                                            {option.label}
-                                        </button>
-                                    ))}
+                                            placeholder="不限制"
+                                            className="chat-offline-output-number"
+                                        />
+                                    </label>
+                                    <span className="chat-offline-output-range-sep" aria-hidden="true" />
+                                    <label className="chat-offline-output-box">
+                                        <span className="chat-offline-output-field-label">最大字数</span>
+                                        <Input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={offlineOutputMaxChars}
+                                            onChange={e => {
+                                                setOfflineOutputMaxChars(e.target.value);
+                                                setOfflineOutputHint("");
+                                            }}
+                                            placeholder="不限制"
+                                            className="chat-offline-output-number"
+                                        />
+                                    </label>
+                                </div>
+                                <div className="chat-offline-output-styles" role="group" aria-label="线下文风">
+                                    {OFFLINE_WRITING_STYLE_OPTIONS.map(option => {
+                                        const style = describeOfflineWritingStyle(option.id, offlineWritingStyleCustom);
+                                        return (
+                                            <button
+                                                key={option.id}
+                                                type="button"
+                                                className="chat-offline-output-style-card"
+                                                data-active={offlineWritingStyleId === option.id ? "" : undefined}
+                                                onClick={() => {
+                                                    setOfflineWritingStyleId(option.id);
+                                                    setOfflineOutputHint("");
+                                                }}
+                                            >
+                                                <span className="chat-offline-output-style-name">{style.name}</span>
+                                                <span className="chat-offline-output-style-rule">{style.rules}</span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                                 {offlineWritingStyleId === OFFLINE_WRITING_STYLE_CUSTOM && (
                                     <textarea
@@ -1258,10 +1269,14 @@ export function ChatSettingsPanel({
                                             setOfflineWritingStyleCustom(e.target.value);
                                             setOfflineOutputHint("");
                                         }}
-                                        placeholder="填写文风说明，例如：冷淡、短句、少心理描写"
+                                        placeholder="填写具体输出规则，例如：冷淡、短句、少心理描写，对白不超过两句"
                                         rows={3}
                                     />
                                 )}
+                                <div className="chat-offline-output-preview">
+                                    <span className="chat-offline-output-preview-name">{selectedOfflineStyle.name}</span>
+                                    <span className="chat-offline-output-preview-rule">{selectedOfflineStyle.rules}</span>
+                                </div>
                                 <div className="chat-offline-output-actions">
                                     <button type="button" className="ui-btn ui-btn-success" onClick={saveOfflineOutputSettings}>
                                         保存

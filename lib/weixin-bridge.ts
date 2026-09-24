@@ -4,6 +4,7 @@
 
 import { type WeixinBotConfig } from "./weixin-storage";
 import { createOrGetSession, loadChatMessages, loadChatSessions, pushChatMessage, getLatestCharacterStateValues } from "./chat-storage";
+import { handleFollowUpMediaAction } from "./follow-up-service";
 import { generateChatCompletion, flattenCompletionResult } from "./chat-engine";
 import type { MediaAttachment } from "./tool-executor";
 import { loadMediaBlob, isMediaStoreRef } from "./media-cache-storage";
@@ -973,10 +974,13 @@ async function handleIncomingMessage(
         if (outgoing) weixinOutbox.push(outgoing);
 
         if (p.mediaType === "voice_call" || p.mediaType === "video_call") continue;
+        if (p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship") {
+            handleFollowUpMediaAction(p.mediaType, session.id, loadChatMessages(session.id));
+            continue;
+        }
         if (p.mediaType === "accept_red_packet" || p.mediaType === "decline_red_packet"
             || p.mediaType === "accept_transfer" || p.mediaType === "decline_transfer"
-            || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request"
-            || p.mediaType === "accept_relationship" || p.mediaType === "decline_relationship") continue;
+            || p.mediaType === "accept_payment_request" || p.mediaType === "decline_payment_request") continue;
         if (p.mediaType === "poke") {
             const pokeSender = (p.mediaData?.pokeSender === "我" ? charName : p.mediaData?.pokeSender) || charName;
             const pokeTarget = p.mediaData?.pokeTarget || "你";

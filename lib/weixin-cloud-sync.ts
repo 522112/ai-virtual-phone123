@@ -11,6 +11,7 @@ import {
   loadChatMessages,
   loadChatSessions,
   reindexSessionMessageOrdersByTime,
+  updateMessageMediaData,
   upsertImportedChatMessage,
 } from "./chat-storage";
 import { loadCharacters } from "./character-storage";
@@ -75,11 +76,9 @@ import { loadWeixinBots } from "./weixin-storage";
 import { parseAIResponse } from "./rich-message-parser";
 import { getStatusRegionConfig, isCustomStatusRegionActive } from "./chat-status-region";
 import {
-  acceptRelationship,
+  applyCharacterRelationshipDecision,
   buildRelationshipSpaceInstruction,
   createIncomingInvite,
-  declineRelationship,
-  findPendingInviteForCharacter,
   materializeRelationshipSpacePart,
   parseRelationshipKindLabel,
   relationshipKindLabel,
@@ -1997,20 +1996,23 @@ function importCloudAssistantMessage(
   visibleParts.forEach((part, index) => {
     if ((part.mediaType === "accept_relationship" || part.mediaType === "decline_relationship") && !session.isGroup) {
       const accept = part.mediaType === "accept_relationship";
-      const pending = findPendingInviteForCharacter(stored.characterId, "user");
-      if (pending) {
-        if (accept) acceptRelationship(pending.id);
-        else declineRelationship(pending.id);
+      const decided = applyCharacterRelationshipDecision({
+        characterId: stored.characterId,
+        accept,
+        messages: loadChatMessages(session.id),
+      });
+      if (decided?.inviteMessageId) {
+        updateMessageMediaData(decided.inviteMessageId, decided.updatedInviteMedia);
       }
-      const kind = pending?.kind || parseRelationshipKindLabel(part.mediaData?.label) || "couple";
-      const label = relationshipKindLabel(kind);
+      const kind = decided?.kind || parseRelationshipKindLabel(part.mediaData?.label) || "couple";
+      const label = decided?.label || relationshipKindLabel(kind);
       messages.push(makeCloudImportedMessage(stored, session.id, createdAt, index, {
         role: "assistant",
         content: accept ? `${characterName}同意成为你的${label}` : `${characterName}拒绝了${label}邀请`,
         mediaType: part.mediaType,
         mediaData: {
           relationshipKind: kind,
-          relationshipId: pending?.id,
+          relationshipId: decided?.relationshipId,
           label,
           status: accept ? "received" : "declined",
         },

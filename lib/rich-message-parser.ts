@@ -378,11 +378,11 @@ const RICH_PATTERNS: {
         }),
     },
     {
-        regex: /\[(?:同意|接受)关系\]/,
+        regex: /\[(?:同意|接受)关系(?:邀请)?\]/,
         build: () => ({ content: "", mediaType: "accept_relationship" as const }),
     },
     {
-        regex: /\[拒绝关系\]/,
+        regex: /\[拒绝关系(?:邀请)?\]/,
         build: () => ({ content: "", mediaType: "decline_relationship" as const }),
     },
     {
