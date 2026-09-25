@@ -18,6 +18,7 @@ import { prepareShortTermContext } from "./short-term-assembler";
 import type { Character } from "./character-types";
 import type { ListenTogetherSession, ListenTogetherTrack } from "./listen-together-types";
 import { parseChatBubbleDisplay, sanitizeListenTogetherText } from "./chat-message-display";
+import { getCharacterFavorites } from "./music-favorites-storage";
 
 type ResolvedListenGeneration = {
   character: Character;
@@ -204,6 +205,10 @@ export async function generateListenTogetherReply(input: {
     `${item.author === "user" ? "用户" : input.session.characterName}：${item.text}`
   )).join("\n");
   const lyricBit = excerptLyrics(input.lyrics, input.currentTime);
+  const selfFav = getCharacterFavorites(input.characterId, input.session.characterName);
+  const favLine = selfFav.songs.length > 0
+    ? `你有一个自己的歌单「${selfFav.name}」，里面有：${selfFav.songs.slice(0, 20).map(item => `《${item.title}》`).join("、")}。想放自己歌单里的歌时，用 [执行动作:播放音乐({"query":"歌名"})]；放不放、放哪首完全按你的人设和心情决定，不必每句都放。`
+    : "";
   const resolved = await resolveListenGeneration(
     input.characterId,
     [
@@ -223,6 +228,7 @@ export async function generateListenTogetherReply(input: {
       `正在听：${formatTrackLine(current)}`,
       lyricBit ? `此刻歌词大概是：${lyricBit}` : "",
       input.session.tracks.length > 1 ? `这轮听过：${input.session.tracks.map(item => item.title).join("、")}` : "",
+      favLine,
       recent ? `刚才的对话：\n${recent}` : "",
       input.userText ? `用户说：${input.userText}` : "",
       "",
