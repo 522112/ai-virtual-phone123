@@ -2594,7 +2594,7 @@ function ListenInviteBubble({ msg }: { msg: ChatMessage }) {
     const title = msg.mediaData?.musicTitle || "";
     const openMusic = () => {
         if (typeof window === "undefined") return;
-        window.dispatchEvent(new CustomEvent("open-app", { detail: { appId: "music" } }));
+        window.dispatchEvent(new CustomEvent("open-app", { detail: { appId: toCustomAppIconId("music") } }));
     };
     return (
         <div className="chat-music-share-card" style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); openMusic(); }}>
