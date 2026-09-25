@@ -2,8 +2,8 @@ import { addChatContact, createOrGetSession, pushChatMessage } from "./chat-stor
 import { sanitizeListenTogetherText } from "./chat-message-display";
 import { PENDING_REPLY_PREFIX } from "./friend-request-engine";
 import { kvSet } from "./kv-db";
-import { formatListenDuration } from "./listen-together-storage";
-import type { ListenTogetherSession } from "./listen-together-types";
+import { createListenTogetherInvite, formatListenDuration } from "./listen-together-storage";
+import type { ListenTogetherInvite, ListenTogetherSession, ListenTogetherTrack } from "./listen-together-types";
 
 function escapeHtml(text: string): string {
   return text
@@ -76,8 +76,7 @@ export function sendListenTogetherRefuse(input: {
 export function sendListenTogetherShare(input: {
   characterId: string;
   session: ListenTogetherSession;
-}): { sessionId: string; messageId: string } {
-  addChatContact(input.characterId);
+}): { sessionId: string; messageId: string } {  addChatContact(input.characterId);
   const chat = createOrGetSession(input.characterId);
   const title = `和${input.session.characterName}的一起听`;
   const history = formatHistory(input.session);
@@ -117,4 +116,41 @@ export function sendListenTogetherShare(input: {
     window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: chat.id } }));
   }
   return { sessionId: chat.id, messageId: message.id };
+}
+
+export function sendListenTogetherInviteCard(input: {
+  characterId: string;
+  characterName: string;
+  direction: "incoming" | "outgoing";
+  track?: ListenTogetherTrack;
+  text?: string;
+  inviteId?: string;
+}): { sessionId: string; messageId: string; inviteId: string } {
+  addChatContact(input.characterId);
+  const chat = createOrGetSession(input.characterId);
+  const invite: ListenTogetherInvite = input.inviteId
+    ? { id: input.inviteId, characterId: input.characterId, characterName: input.characterName, track: input.track, inviteText: input.text, direction: input.direction, status: "pending", createdAt: new Date().toISOString() }
+    : createListenTogetherInvite({ characterId: input.characterId, characterName: input.characterName, track: input.track, inviteText: input.text, direction: input.direction });
+  const trackLine = input.track ? "\u300a" + input.track.title + "\u300b" + (input.track.artist ? " - " + input.track.artist : "") : "";
+  const title = input.direction === "incoming" ? "\u9080\u4f60\u4e00\u8d77\u542c" : "\u4e00\u8d77\u542c\u9080\u8bf7";
+  const message = pushChatMessage({
+    sessionId: chat.id,
+    role: input.direction === "incoming" ? "assistant" : "user",
+    content: trackLine ? title + "\uff1a" + trackLine : title,
+    senderName: input.direction === "incoming" ? input.characterName : undefined,
+    senderCharacterId: input.direction === "incoming" ? input.characterId : undefined,
+    mediaType: "listen_invite",
+    mediaData: {
+      inviteId: invite.id,
+      musicTitle: input.track?.title || "",
+      musicArtist: input.track?.artist || "",
+      inviteText: input.text || "",
+      inviteDirection: input.direction,
+      status: "pending",
+    },
+  });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: chat.id } }));
+  }
+  return { sessionId: chat.id, messageId: message.id, inviteId: invite.id };
 }
