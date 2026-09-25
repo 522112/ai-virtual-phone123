@@ -14,6 +14,9 @@ export type DouyinAuthor = {
   characterId?: string;
   persona?: string;
   spriteAssetId?: string;
+  douyinId?: string;
+  backgroundTone?: string;
+  totalLikes?: number;
 };
 
 export type DouyinComment = {
@@ -43,6 +46,9 @@ export type DouyinVideo = {
   createdAt: string;
   source?: DouyinAuthorSource;
   characterId?: string;
+  imagePrompt?: string;
+  imageUrl?: string;
+  tags?: string[];
 };
 
 export type DouyinDmMessage = {
@@ -59,6 +65,7 @@ export type DouyinDmThread = {
   unread: number;
   messages: DouyinDmMessage[];
   updatedAt: string;
+  characterId?: string;
 };
 
 export type DouyinDanmakuKind = "audience" | "character" | "user" | "system" | "host";
@@ -116,11 +123,15 @@ export type DouyinSession = {
   followingIds: string[];
   followers: number;
   persona?: string;
+  backgroundTone: string;
+  collectedIds: string[];
 };
 
 export type DouyinSettings = {
   participantCharacterIds: string[];
   audienceDanmakuCount: number;
+  myTags: string[];
+  searchHistory: string[];
 };
 
 export type DouyinNpcPortrait = {
@@ -181,6 +192,26 @@ export type ParsedDouyinNpcLiveHost = {
 export const DEFAULT_DOUYIN_SETTINGS: DouyinSettings = {
   participantCharacterIds: [],
   audienceDanmakuCount: 15,
+  myTags: [],
+  searchHistory: [],
+};
+
+export type ParsedDouyinFeedComment = {
+  authorName: string;
+  text: string;
+  likeCount: number;
+};
+
+export type ParsedDouyinFeedVideo = {
+  authorName: string;
+  handle: string;
+  caption: string;
+  music: string;
+  imagePrompt: string;
+  tags: string[];
+  likeCount: number;
+  shareCount: number;
+  comments: ParsedDouyinFeedComment[];
 };
 
 export const DEFAULT_DOUYIN_NPC_LIVE_PROMPT = [
@@ -253,4 +284,50 @@ export const DEFAULT_DOUYIN_CHARACTER_LIVE_PROMPT = [
   "[礼物名]小心心/玫瑰/火箭等",
   "[PK]是或否",
   "[PK主题]主题，可空",
+].join("\n");
+
+// Feed prompt is English-only (ASCII) so no encoding risk; the model still
+// outputs Chinese content. Field labels use unicode escapes intentionally.
+export const DOUYIN_FEED_LABEL = {
+  author: "作者",
+  handle: "抖音号",
+  caption: "文案",
+  music: "音乐",
+  scene: "场景",
+  tags: "标签",
+  likes: "点赞",
+  shares: "分享",
+  comment: "评论",
+  content: "内容",
+  work: "作品",
+};
+
+export const DEFAULT_DOUYIN_FEED_PROMPT = [
+  "You are generating a Douyin (TikTok-style) recommendation feed. Output EXACTLY 10 video blocks.",
+  "Write everything (nicknames, captions, comments) in Simplified Chinese with authentic contemporary netizen tone:",
+  "short colloquial comments, playful memes but never vulgar, abbreviations like yyds, abbreviations and emoji are fine.",
+  "Per video: 7 short comments + 2 questions + 1 witty longer comment, all with different nicknames and like counts.",
+  "Vary verticals: food, daily life, romance, comedy, fashion, travel, pets, workplace, music, gaming.",
+  "Each video needs a [scene] field: a 120-200 word detailed image-generation description",
+  "(subject, action, expression, clothing, setting details, lighting, color grade, vertical 9:16 composition, art style),",
+  "written in Chinese followed by one line of English keywords for the image model.",
+  "If no image model is configured this text is shown to the user directly, so it must read like a real scene.",
+  "Each video needs 2-4 tags. Do NOT output Markdown.",
+  "",
+  "Format (exactly 10 blocks):",
+  "#作品1",
+  "[\u4f5c\u8005]nickname",
+  "[\u6296\u97f3\u53f7]handle",
+  "[\u6587\u6848]caption",
+  "[\u97f3\u4e50]bgm name",
+  "[\u573a\u666f]detailed scene description + English keywords",
+  "[\u6807\u7b7e]#tag1 #tag2",
+  "[\u70b9\u8d5e]number",
+  "[\u5206\u4eab]number",
+  "[\u8bc4\u8bba1\u4f5c\u8005]nickname",
+  "[\u8bc4\u8bba1\u5185\u5bb9]comment text",
+  "[\u8bc4\u8bba1\u70b9\u8d5e]number",
+  "... (10 comment groups per video)",
+  "#\u4f5c\u54c12",
+  "...",
 ].join("\n");
