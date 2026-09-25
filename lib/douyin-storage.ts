@@ -43,11 +43,11 @@ function dispatchUpdated(): void {
 const TONES = ["#ff6b9d", "#ff9f43", "#f5c542", "#54a0ff", "#5f27cd", "#10ac84", "#fe2c55", "#25f4ee"];
 
 const SEED_AUTHORS: DouyinAuthor[] = [
-  { id: "dy_a_aurora", name: "极光小七", handle: "aurora7", avatarTone: "#ff6b9d", bio: "夜景猎人", followers: 128000, following: 86, source: "seed" },
-  { id: "dy_a_chef", name: "深夜食堂", handle: "midnightsoup", avatarTone: "#ff9f43", bio: "一人食也可以很热闹", followers: 92000, following: 41, source: "seed" },
-  { id: "dy_a_cat", name: "橘座本座", handle: "orangecat", avatarTone: "#f5c542", bio: "喵了个咪", followers: 210000, following: 12, source: "seed" },
-  { id: "dy_a_city", name: "街角慢镜", handle: "slowcity", avatarTone: "#54a0ff", bio: "城市声景", followers: 64000, following: 203, source: "seed" },
-  { id: "dy_a_dance", name: "不绊脚", handle: "stepsoft", avatarTone: "#5f27cd", bio: "练舞日记", followers: 305000, following: 58, source: "seed" },
+  { id: "dy_a_aurora", name: "极光小七", handle: "aurora7", avatarTone: "#ff6b9d", bio: "夜景猎人", followers: 128000, following: 86, source: "seed", douyinId: "DY100001", backgroundTone: "#101828", totalLikes: 1200000 },
+  { id: "dy_a_chef", name: "深夜食堂", handle: "midnightsoup", avatarTone: "#ff9f43", bio: "一人食也可以很热闹", followers: 92000, following: 41, source: "seed", douyinId: "DY100002", backgroundTone: "#2d1b14", totalLikes: 860000 },
+  { id: "dy_a_cat", name: "橘座本座", handle: "orangecat", avatarTone: "#f5c542", bio: "喵了个咪", followers: 210000, following: 12, source: "seed", douyinId: "DY100003", backgroundTone: "#2a2118", totalLikes: 3100000 },
+  { id: "dy_a_city", name: "街角慢镜", handle: "slowcity", avatarTone: "#54a0ff", bio: "城市声景", followers: 64000, following: 203, source: "seed", douyinId: "DY100004", backgroundTone: "#121a22", totalLikes: 540000 },
+  { id: "dy_a_dance", name: "不绊脚", handle: "stepsoft", avatarTone: "#5f27cd", bio: "练舞日记", followers: 305000, following: 58, source: "seed", douyinId: "DY100005", backgroundTone: "#1b1430", totalLikes: 4200000 },
 ];
 
 function seedComments(videoId: string): DouyinComment[] {
@@ -188,6 +188,8 @@ function defaultSession(): DouyinSession {
     followingIds: [],
     followers: 12,
     persona: "普通抖音用户，喜欢随手拍日常",
+    backgroundTone: "#161823",
+    collectedIds: [],
   };
 }
 
@@ -265,6 +267,11 @@ function normalizeVideo(value: unknown): DouyinVideo | null {
     createdAt: cleanText(item.createdAt, 40) || nowIso(),
     source: normalizeSource(item.source),
     characterId: typeof item.characterId === "string" ? item.characterId : undefined,
+    imagePrompt: cleanText(item.imagePrompt, 600) || undefined,
+    imageUrl: typeof item.imageUrl === "string" && item.imageUrl ? item.imageUrl.slice(0, 2000000) : undefined,
+    tags: Array.isArray(item.tags)
+      ? item.tags.map(tag => cleanText(tag, 24).replace(/^#+/, "")).filter(Boolean).slice(0, 4)
+      : undefined,
   };
 }
 
@@ -288,6 +295,7 @@ function normalizeThread(value: unknown): DouyinDmThread | null {
     unread: Number(item.unread) || 0,
     messages,
     updatedAt: cleanText(item.updatedAt, 40) || nowIso(),
+    characterId: typeof item.characterId === "string" ? item.characterId : undefined,
   };
 }
 
@@ -350,6 +358,9 @@ function normalizeAuthor(value: unknown): DouyinAuthor | null {
     characterId: typeof item.characterId === "string" ? item.characterId : undefined,
     persona: cleanText(item.persona, 200) || undefined,
     spriteAssetId: typeof item.spriteAssetId === "string" ? item.spriteAssetId : undefined,
+    douyinId: cleanText(item.douyinId, 24) || `DY${100000 + Math.floor(Math.random() * 899999)}`,
+    backgroundTone: cleanText(item.backgroundTone, 20) || "#161823",
+    totalLikes: Math.max(0, Number(item.totalLikes) || 0),
   };
 }
 
@@ -362,6 +373,12 @@ function normalizeSettings(raw: unknown): DouyinSettings {
       ? item.participantCharacterIds.filter((id): id is string => typeof id === "string")
       : [],
     audienceDanmakuCount: Math.min(30, Math.max(5, Number(item.audienceDanmakuCount) || fallback.audienceDanmakuCount)),
+    myTags: Array.isArray(item.myTags)
+      ? item.myTags.map(tag => cleanText(tag, 16)).filter(Boolean).slice(0, 20)
+      : [],
+    searchHistory: Array.isArray(item.searchHistory)
+      ? item.searchHistory.map(tag => cleanText(tag, 30)).filter(Boolean).slice(0, 12)
+      : [],
   };
 }
 
@@ -383,6 +400,10 @@ function normalizeState(raw: unknown): DouyinState {
         : [],
       followers: Number(sessionRaw.followers) || fallback.session.followers,
       persona: cleanText(sessionRaw.persona, 200) || fallback.session.persona,
+      backgroundTone: cleanText(sessionRaw.backgroundTone, 20) || "#161823",
+      collectedIds: Array.isArray(sessionRaw.collectedIds)
+        ? sessionRaw.collectedIds.filter((id): id is string => typeof id === "string")
+        : [],
     },
     settings: normalizeSettings(item.settings),
     authors: Array.isArray(item.authors) && item.authors.length > 0
@@ -854,6 +875,64 @@ export function addDouyinLiveRoom(room: DouyinLiveRoom, author?: DouyinAuthor): 
 
 export function makeDouyinId(prefix: string): string {
   return makeId(prefix);
+}
+
+export function updateDouyinProfile(patch: Partial<Pick<DouyinSession, "nickname" | "handle" | "bio" | "backgroundTone" | "avatarTone" | "persona">>): DouyinState {
+  const state = loadDouyinState();
+  const session = { ...state.session };
+  if (patch.nickname !== undefined) session.nickname = cleanText(patch.nickname, 40) || session.nickname;
+  if (patch.handle !== undefined) session.handle = cleanText(patch.handle, 40) || session.handle;
+  if (patch.bio !== undefined) session.bio = cleanText(patch.bio, 120);
+  if (patch.backgroundTone !== undefined) session.backgroundTone = cleanText(patch.backgroundTone, 20) || session.backgroundTone;
+  if (patch.avatarTone !== undefined) session.avatarTone = cleanText(patch.avatarTone, 20) || session.avatarTone;
+  if (patch.persona !== undefined) session.persona = cleanText(patch.persona, 200) || session.persona;
+  return saveDouyinState({ ...state, session });
+}
+
+export function toggleDouyinCollect(videoId: string): DouyinState {
+  const state = loadDouyinState();
+  const collected = new Set(state.session.collectedIds);
+  if (collected.has(videoId)) collected.delete(videoId);
+  else collected.add(videoId);
+  return saveDouyinState({
+    ...state,
+    session: { ...state.session, collectedIds: [...collected] },
+  });
+}
+
+export function setDouyinVideoImage(videoId: string, imageUrl?: string, imagePrompt?: string): DouyinState {
+  const state = loadDouyinState();
+  return saveDouyinState({
+    ...state,
+    videos: state.videos.map(video => {
+      if (video.id !== videoId) return video;
+      return {
+        ...video,
+        imageUrl: imageUrl !== undefined ? imageUrl : video.imageUrl,
+        imagePrompt: imagePrompt !== undefined ? imagePrompt : video.imagePrompt,
+      };
+    }),
+  });
+}
+
+export function ensureDouyinThread(peerName: string, peerTone = "#999", characterId?: string): string {
+  const state = loadDouyinState();
+  const existing = state.threads.find(thread =>
+    (characterId && thread.characterId === characterId)
+    || (!characterId && thread.peerName === peerName),
+  );
+  if (existing) return existing.id;
+  const thread: DouyinDmThread = {
+    id: makeId("dm"),
+    peerName: cleanText(peerName, 40) || "好友",
+    peerTone: cleanText(peerTone, 20) || "#999",
+    unread: 0,
+    messages: [],
+    updatedAt: nowIso(),
+    characterId,
+  };
+  saveDouyinState({ ...state, threads: [thread, ...state.threads] });
+  return thread.id;
 }
 
 export function formatDouyinCount(count: number): string {
