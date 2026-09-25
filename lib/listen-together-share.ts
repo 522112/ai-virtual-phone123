@@ -122,7 +122,7 @@ export function sendListenTogetherInviteCard(input: {
   characterId: string;
   characterName: string;
   direction: "incoming" | "outgoing";
-  track?: ListenTogetherTrack;
+  track?: ListenTogetherTrack | null;
   text?: string;
   inviteId?: string;
 }): { sessionId: string; messageId: string; inviteId: string } {
