@@ -252,7 +252,7 @@ export function getPendingListenInvite(characterId: string): ListenTogetherInvit
 export function createListenTogetherInvite(input: {
   characterId: string;
   characterName: string;
-  track?: ListenTogetherTrack;
+  track?: ListenTogetherTrack | null;
   inviteText?: string;
   direction: ListenTogetherInvite["direction"];
 }): ListenTogetherInvite {
@@ -266,7 +266,7 @@ export function createListenTogetherInvite(input: {
     id: generateId("linvite"),
     characterId: input.characterId,
     characterName: input.characterName,
-    track: input.track,
+    track: input.track || undefined,
     inviteText: input.inviteText?.slice(0, 120) || undefined,
     direction: input.direction,
     status: "pending",
