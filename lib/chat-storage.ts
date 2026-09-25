@@ -153,7 +153,7 @@ export type ChatMessage = {
         amount?: number;          // 红包/转账金额
         count?: number;           // 红包个数
         label?: string;           // 红包留言/转账备注/照片描述/位置名/表情名
-        status?: "pending" | "opened" | "received" | "declined" | "dissolved" | "paid" | "canceled";  // 红包/转账/代付/关系状态
+        status?: "pending" | "opened" | "received" | "declined" | "dissolved" | "paid" | "canceled" | "accepted";  // 红包/转账/代付/关系状态
         quoteMessageId?: string;  // 引用消息 ID
         quotePreview?: string;    // 引用消息预览文本
         quoteRole?: ChatMessageRole; // 引用消息的 role
@@ -260,6 +260,9 @@ export type ChatMessage = {
         appHistoryRole?: ChatMessageRole;
         relationshipKind?: "couple" | "bestie" | "buddy" | "bros";
         relationshipId?: string;
+        inviteId?: string;
+        inviteText?: string;
+        inviteDirection?: "incoming" | "outgoing";
         spaceAction?: "post" | "post_from_chat" | "comment" | "reply" | "checkin" | "anniversary" | "relight" | "nudge_checkin" | "remind_checkin" | "anniversary_countdown";
         spaceReplyTo?: string;
         anniversaryDate?: string;
