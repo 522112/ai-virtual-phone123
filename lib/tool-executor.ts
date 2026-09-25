@@ -51,6 +51,7 @@ import type { NoteWallBoard, NoteWallComment, NoteWallNote, NoteWallSize } from 
 import { findNoteWallPlacement, normalizeNoteWallSize } from "./notewall-utils";
 import { recordNoteWallCommentEvent, recordNoteWallNoteEvent } from "./notewall-memory";
 import { getMusicControlBridge } from "./music-control-bridge";
+import { addFavoriteSong } from "./music-favorites-storage";
 import { loadAllTracks, type MusicTrack } from "./music-storage";
 import {
     checkLoginStatus,
@@ -1020,7 +1021,8 @@ function isMusicControlToolName(name: string): boolean {
         || name === "搜索音乐"
         || name === "播放音乐"
         || name === "加入播放列表"
-        || name === "切换音乐";
+        || name === "切换音乐"
+        || name === "添加到歌单";
 }
 
 function isCalendarToolName(name: string): boolean {
@@ -1871,6 +1873,8 @@ async function executeMusicControlTool(call: ToolCall, context?: ToolExecutionCo
                 return await executeMusicQueueTool(call.args);
             case "切换音乐":
                 return executeMusicSwitchTool(call.args);
+            case "添加到歌单":
+                return await executeMusicFavoriteTool(call.args, context);
         }
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -2498,6 +2502,50 @@ async function executeMusicQueueTool(args: Record<string, unknown>): Promise<Too
         continueConversation: false,
         persistToHistory: false,
         userNotice: queued.message,
+    });
+}
+
+async function executeMusicFavoriteTool(args: Record<string, unknown>, context?: ToolExecutionContext): Promise<ToolResult> {
+    const characterId = context?.characterId;
+    if (!characterId) {
+        return { name: "添加到歌单", success: false, error: "缺少角色信息", continueConversation: false, persistToHistory: false, userNotice: "当前场景无法添加到歌单" };
+    }
+    const characterName = loadCharacters().find(character => character.id === characterId)?.name || "角色";
+    const source = cleanToolString(args.source, 20);
+    const songId = args.songId ?? args.song_id ?? args.id;
+    const query = cleanToolString(args.query ?? args.keyword ?? args.title, 160);
+
+    let track: MusicTrack | null = null;
+    if (songId !== undefined && songId !== null && String(songId).trim()) {
+        track = await resolveMusicTrackById(source, songId);
+    } else if (query) {
+        const results = await unifiedSearch(query);
+        const first = results[0];
+        if (first) {
+            track = first.source === "local" && first.localTrack ? first.localTrack : first.neteaseResult ? neteaseResultToTrack(first.neteaseResult) : null;
+        }
+    }
+    if (!track) return { name: "添加到歌单", success: false, error: "没有找到这首歌" };
+
+    const isNetease = track.id.startsWith("netease_");
+    const neteaseId = isNetease ? Number(track.id.replace(/^netease_/, "")) : undefined;
+    const saved = addFavoriteSong(characterId, characterName, {
+        source: isNetease ? "netease" : "local",
+        trackId: isNetease ? undefined : track.id,
+        neteaseId: neteaseId !== undefined && Number.isFinite(neteaseId) ? neteaseId : undefined,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        coverUrl: track.coverUrl,
+        duration: Math.round(track.duration || 0),
+        addedBy: "character",
+    });
+    return musicToolSuccess("添加到歌单", {
+        added: saved.added,
+        playlist: saved.favorites.name,
+        song: formatMusicTrackForTool(track),
+    }, {
+        userNotice: saved.added ? `已把「${track.title}」加入${characterName}的歌单` : "这首歌已经在歌单里了",
     });
 }
 
