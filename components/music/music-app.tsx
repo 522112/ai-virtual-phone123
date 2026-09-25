@@ -27,6 +27,7 @@ import {
 import { clearMusicCloudSyncData } from "@/lib/chat-engine";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import MusicCommentsPage from "./music-comments";
+import MusicFavoritesView from "./music-favorites-view";
 import {
     loadMusicBg, saveMusicBg, clearMusicBg, fileToCompressedDataUrl, appBgStyle,
     MUSIC_BG_EVENT, type MusicBgConfig, type MusicPlayerBgMode,
@@ -315,7 +316,7 @@ export default function MusicApp({ onClose }: Props) {
                     </button>
                 </div>
                 <div className="music-header-title">
-                    {dailyView ? "每日推荐" : activePlaylist && tab === "recommend" ? "歌单详情" : tab === "recommend" ? "" : tab === "search" ? "搜索" : tab === "mine" ? "我的" : "本地音乐"}
+                    {dailyView ? "每日推荐" : activePlaylist && tab === "recommend" ? "歌单详情" : tab === "recommend" ? "" : tab === "search" ? "搜索" : tab === "mine" ? "我的" : "歌单"}
                 </div>
                 <div className="music-header-right">
                     <button className="music-header-action" onClick={() => setShowSettings(true)} title="设置">
@@ -376,17 +377,16 @@ export default function MusicApp({ onClose }: Props) {
 
             {tab === "local" && (
                 <>
-                    {/* Header Action: Upload Area inside the tab - Removed inline version */}
                     <input ref={fileInputRef} type="file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac" multiple hidden onChange={(e) => handleUpload(e.target.files)} />
-
-                    {/* Song list */}
-                    {loading ? (
-                        <div className="music-empty"><div className="music-empty-text">加载中...</div></div>
-                    ) : tracks.length === 0 ? (
-                        <div className="music-empty"><div className="music-empty-icon">♪</div><div className="music-empty-text">还没有音乐</div></div>
-                    ) : (
-                        <SongList tracks={tracks} player={player} formatTime={formatTime} onDelete={handleDelete} onPlay={handlePlay} />
-                    )}
+                    <MusicFavoritesView
+                        player={player}
+                        formatTime={formatTime}
+                        tracks={tracks}
+                        onPlayLocal={handlePlay}
+                        onPlayNetease={handlePlayNetease}
+                        onUploadFiles={handleUpload}
+                        onToast={showMusicToast}
+                    />
                 </>
             )}
 
@@ -411,7 +411,7 @@ export default function MusicApp({ onClose }: Props) {
                     <button
                         className="music-fab-add"
                         onClick={() => fileInputRef.current?.click()}
-                        title="添加本地音乐"
+                        title="上传本地音乐"
                         style={{ bottom: player.currentTrack ? "calc(146px + env(safe-area-inset-bottom, 0px))" : "calc(90px + env(safe-area-inset-bottom, 0px))" }}
                     >
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -487,7 +487,7 @@ export default function MusicApp({ onClose }: Props) {
                 )}
                 <button className="music-tabbar-item" {...(tab === "local" ? { "data-active": "" } : {})} onClick={() => { setTab("local"); setActivePlaylist(null); }}>
                     <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-                    <span>本地</span>
+                    <span>歌单</span>
                 </button>
             </div>
             </div>
