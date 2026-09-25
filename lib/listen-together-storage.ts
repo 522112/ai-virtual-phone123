@@ -1,14 +1,18 @@
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import type {
+  ListenTogetherInvite,
   ListenTogetherMessage,
   ListenTogetherSession,
   ListenTogetherTrack,
 } from "./listen-together-types";
 
 const SESSIONS_KEY = "ai_phone_listen_together_v1";
+const INVITES_KEY = "ai_phone_listen_together_invites_v1";
 export const LISTEN_TOGETHER_UPDATED_EVENT = "listen-together-updated";
+export const LISTEN_INVITE_UPDATED_EVENT = "listen-invite-updated";
 
 registerKvMigration(SESSIONS_KEY);
+registerKvMigration(INVITES_KEY);
 
 function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -196,4 +200,97 @@ export function setListenTogetherBg(characterId: string, dataUrl: string): void 
   if (!dataUrl) delete map[characterId];
   else map[characterId] = dataUrl;
   writeJson(LISTEN_BG_KEY, map);
+}
+
+// ── 一起听邀约（情侣空间式卡片：接受才进入，不接受不进入） ──
+
+function normalizeInvite(value: unknown): ListenTogetherInvite | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Partial<ListenTogetherInvite>;
+  if (typeof item.id !== "string" || typeof item.characterId !== "string") return null;
+  const direction = item.direction === "outgoing" ? "outgoing" : "incoming";
+  const rawStatus = item.status;
+  const status = rawStatus === "accepted" || rawStatus === "declined" || rawStatus === "expired"
+    ? rawStatus
+    : "pending";
+  return {
+    id: item.id,
+    characterId: item.characterId,
+    characterName: typeof item.characterName === "string" ? item.characterName : "对方",
+    track: item.track && typeof item.track === "object" ? normalizeTrack(item.track) || undefined : undefined,
+    inviteText: typeof item.inviteText === "string" ? item.inviteText.slice(0, 120) : undefined,
+    direction,
+    status,
+    createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
+    decidedAt: typeof item.decidedAt === "string" ? item.decidedAt : undefined,
+  };
+}
+
+function dispatchInviteUpdated(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(LISTEN_INVITE_UPDATED_EVENT));
+}
+
+function loadInvites(): ListenTogetherInvite[] {
+  const items = readJson<unknown[]>(INVITES_KEY, []);
+  return Array.isArray(items) ? items.map(normalizeInvite).filter(Boolean) as ListenTogetherInvite[] : [];
+}
+
+function saveInvites(items: ListenTogetherInvite[]): void {
+  kvSet(INVITES_KEY, JSON.stringify(items));
+  dispatchInviteUpdated();
+}
+
+export function getListenTogetherInvite(id: string): ListenTogetherInvite | null {
+  return loadInvites().find(item => item.id === id) || null;
+}
+
+export function getPendingListenInvite(characterId: string): ListenTogetherInvite | null {
+  return loadInvites().find(item => item.characterId === characterId && item.status === "pending") || null;
+}
+
+export function createListenTogetherInvite(input: {
+  characterId: string;
+  characterName: string;
+  track?: ListenTogetherTrack;
+  inviteText?: string;
+  direction: ListenTogetherInvite["direction"];
+}): ListenTogetherInvite {
+  const now = new Date().toISOString();
+  const expired = loadInvites().map(item => (
+    item.characterId === input.characterId && item.status === "pending"
+      ? { ...item, status: "expired" as const, decidedAt: now }
+      : item
+  ));
+  const invite: ListenTogetherInvite = {
+    id: generateId("linvite"),
+    characterId: input.characterId,
+    characterName: input.characterName,
+    track: input.track,
+    inviteText: input.inviteText?.slice(0, 120) || undefined,
+    direction: input.direction,
+    status: "pending",
+    createdAt: now,
+  };
+  saveInvites([invite, ...expired]);
+  return invite;
+}
+
+export function decideListenTogetherInvite(
+  id: string,
+  decision: "accepted" | "declined",
+): ListenTogetherInvite | null {
+  const items = loadInvites();
+  let updated: ListenTogetherInvite | null = null;
+  const next = items.map(item => {
+    if (item.id !== id) return item;
+    if (item.status !== "pending") {
+      updated = item;
+      return item;
+    }
+    updated = { ...item, status: decision, decidedAt: new Date().toISOString() };
+    return updated;
+  });
+  if (updated) saveInvites(next);
+  return updated;
 }
