@@ -45,6 +45,7 @@ import {
 } from "@/lib/checkphone-storage";
 import { splitBilingualText } from "@/lib/bilingual-text";
 import { resolveUserIdentity } from "@/lib/settings-storage";
+import { getCharacterRemark, recordCheckPhoneChatViewMemory } from "@/lib/contact-remarks";
 
 type CheckPhoneChatPageProps = {
   character: Character;
@@ -763,6 +764,7 @@ export function CheckPhoneChatPage({
       };
       await savePhoneSnapshot(nextSnapshot);
       setSnapshot(nextSnapshot);
+      void recordCheckPhoneChatViewMemory(character.id, character.name, nextSnapshot.payload);
       setSelectedConversationId(null);
       setSelectedGroupId(null);
     }
@@ -828,6 +830,12 @@ export function CheckPhoneChatPage({
     CHAT_TABS.find((tab) => tab.id === selectedTab)?.description ?? "";
   const homeSearchLabel =
     selectedTab === "groups" ? "Search group chats..." : "Search chats...";
+
+  const characterRemark = getCharacterRemark(character.id);
+  const isUserConversation =
+    !activeGroup &&
+    !!activeConversation &&
+    activeConversationDisplayName === checkPhoneUserDisplayName;
 
   const backAction = activeConversation
     ? () => setSelectedConversationId(null)
@@ -935,6 +943,17 @@ export function CheckPhoneChatPage({
                       ? `${activeGroup.name}（${formatGroupMemberCountLabel(activeGroup.memberCountLabel)}）`
                       : activeConversationDisplayName}
                   </strong>
+                  {!activeGroup && isUserConversation && characterRemark ? (
+                    <div
+                      style={{
+                        fontSize: "calc(11px*var(--app-text-scale,1))",
+                        color: "rgba(17,17,17,0.55)",
+                        marginTop: 2,
+                      }}
+                    >
+                      对方给你备注：{characterRemark}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <strong
