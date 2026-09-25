@@ -250,6 +250,18 @@ const RICH_PATTERNS: {
         },
     },
     {
+        // [一起听邀请] 或 [一起听邀请:歌名] — 角色主动邀请一起听
+        regex: new RegExp(`\\[一起听邀请(?:${C}([^\\]]+))?\\]`),
+        build: (m) => {
+            const title = (m[1] || "").trim();
+            return {
+                content: "",
+                mediaType: "listen_invite" as const,
+                mediaData: { musicTitle: title, label: title || "一起听" },
+            };
+        },
+    },
+    {
         // [语音条:文字内容] — voice message
         regex: new RegExp(`\\[语音条${C}([^\\]]+)\\]`),
         build: (m) => ({
