@@ -243,14 +243,32 @@ const MUSIC_CONTROL_USAGE_GUIDE = [
     "示例：",
     '[执行动作:切换音乐({"action":"next"})]',
     "",
+    "动作：查看我的歌单",
+    "描述：查看你自己的\"喜欢的歌单\"（名字、详情、已收藏的歌曲）。每个角色各自独立。",
+    "参数：无",
+    "示例：",
+    "[执行动作:查看我的歌单({})]",
+    "",
     "动作：添加到歌单",
-    "描述：把一首歌加入你自己的\"喜欢的歌单\"。每个角色各自独立的歌单，只有你和{{user}}能看到；{{user}}也可以往你的歌单里加歌、改名字、改详情、换封面。",
+    "描述：把一首歌加入你自己的\"喜欢的歌单\"。当{{user}}让你收藏/加歌，或你自己想记住一首喜欢的歌时，必须真的调用这个动作，不能只在回复里说\"加好了\"却不输出动作。不确定歌手时，只给歌名也可以。",
     "参数：",
-    "  - query (string): 歌曲关键词",
+    "  - query (string): 歌曲关键词（歌名，或歌名+歌手）",
+    "  - title (string): 歌名（没有 query 时可用）",
+    "  - artist (string): 歌手，可选",
     "  - source (string): local 或 netease；按 ID 添加时填写",
     "  - songId (string|number): 本地歌曲 ID 或网易云歌曲 ID",
     "示例：",
     '[执行动作:添加到歌单({"query":"晴天"})]',
+    "",
+    "动作：修改歌单",
+    "描述：修改你自己歌单的名字或详情内容。{{user}}让你改名/写简介，或你自己想改时调用。",
+    "参数：",
+    "  - name (string): 新歌单名，可选",
+    "  - description (string): 新详情内容，可选",
+    "示例：",
+    '[执行动作:修改歌单({"name":"深夜循环","description":"最近一直单曲循环的几首"})]',
+    "",
+    "【主动行为】想安利一首歌给{{user}}时，用 [音乐分享:歌名] 发分享卡片（不打断当前播放）。想约{{user}}一起听歌时，直接用普通聊天发出邀请即可。",
     "",
     "查看类动作会返回结果，你可以基于结果继续选择音乐。播放和切换会直接执行，执行时只输出执行动作指令，不要附加闲聊内容。",
 ].join("\n");
@@ -528,9 +546,24 @@ const NOTE_WALL_SUBTOOLS: InternalToolDefinition[] = [
 const MUSIC_FAVORITE_PARAMETER_SCHEMA = JSON.stringify({
     type: "object",
     properties: {
-        query: { type: "string", description: "歌曲关键词" },
+        query: { type: "string", description: "歌曲关键词（歌名，或歌名+歌手）" },
+        title: { type: "string", description: "歌名，没有 query 时可用" },
+        artist: { type: "string", description: "歌手，可选" },
         source: { type: "string", description: "local 或 netease；按 ID 添加时填写" },
         songId: { type: "string", description: "本地歌曲 ID 或网易云歌曲 ID" },
+    },
+});
+
+const MUSIC_VIEW_FAVORITE_PARAMETER_SCHEMA = JSON.stringify({
+    type: "object",
+    properties: {},
+});
+
+const MUSIC_EDIT_FAVORITE_PARAMETER_SCHEMA = JSON.stringify({
+    type: "object",
+    properties: {
+        name: { type: "string", description: "新歌单名，可选" },
+        description: { type: "string", description: "新详情内容，可选" },
     },
 });
 
@@ -571,9 +604,19 @@ const MUSIC_CONTROL_SUBTOOLS: InternalToolDefinition[] = [
         parameterSchema: MUSIC_SWITCH_PARAMETER_SCHEMA,
     },
     {
+        name: "查看我的歌单",
+        description: "查看当前角色自己歌单的名字、详情和收藏的歌曲。",
+        parameterSchema: MUSIC_VIEW_FAVORITE_PARAMETER_SCHEMA,
+    },
+    {
         name: "添加到歌单",
         description: "把一首歌加入当前角色自己的歌单。",
         parameterSchema: MUSIC_FAVORITE_PARAMETER_SCHEMA,
+    },
+    {
+        name: "修改歌单",
+        description: "修改当前角色自己歌单的名字或详情内容。",
+        parameterSchema: MUSIC_EDIT_FAVORITE_PARAMETER_SCHEMA,
     },
 ];
 
