@@ -243,6 +243,15 @@ const MUSIC_CONTROL_USAGE_GUIDE = [
     "示例：",
     '[执行动作:切换音乐({"action":"next"})]',
     "",
+    "动作：添加到歌单",
+    "描述：把一首歌加入你自己的\"喜欢的歌单\"。每个角色各自独立的歌单，只有你和{{user}}能看到；{{user}}也可以往你的歌单里加歌、改名字、改详情、换封面。",
+    "参数：",
+    "  - query (string): 歌曲关键词",
+    "  - source (string): local 或 netease；按 ID 添加时填写",
+    "  - songId (string|number): 本地歌曲 ID 或网易云歌曲 ID",
+    "示例：",
+    '[执行动作:添加到歌单({"query":"晴天"})]',
+    "",
     "查看类动作会返回结果，你可以基于结果继续选择音乐。播放和切换会直接执行，执行时只输出执行动作指令，不要附加闲聊内容。",
 ].join("\n");
 
@@ -516,6 +525,15 @@ const NOTE_WALL_SUBTOOLS: InternalToolDefinition[] = [
     },
 ];
 
+const MUSIC_FAVORITE_PARAMETER_SCHEMA = JSON.stringify({
+    type: "object",
+    properties: {
+        query: { type: "string", description: "歌曲关键词" },
+        source: { type: "string", description: "local 或 netease；按 ID 添加时填写" },
+        songId: { type: "string", description: "本地歌曲 ID 或网易云歌曲 ID" },
+    },
+});
+
 const MUSIC_CONTROL_SUBTOOLS: InternalToolDefinition[] = [
     {
         name: "播放音乐",
@@ -551,6 +569,11 @@ const MUSIC_CONTROL_SUBTOOLS: InternalToolDefinition[] = [
         name: "切换音乐",
         description: "控制当前播放器上一首、下一首、暂停、继续或停止。",
         parameterSchema: MUSIC_SWITCH_PARAMETER_SCHEMA,
+    },
+    {
+        name: "添加到歌单",
+        description: "把一首歌加入当前角色自己的歌单。",
+        parameterSchema: MUSIC_FAVORITE_PARAMETER_SCHEMA,
     },
 ];
 
