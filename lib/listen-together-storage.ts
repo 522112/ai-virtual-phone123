@@ -172,3 +172,28 @@ export function formatListenDuration(session: ListenTogetherSession): string {
   const rest = minutes % 60;
   return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`;
 }
+
+const LISTEN_BG_KEY = "ai_phone_listen_bg_v1";
+
+// 删除单条消息（长按删除用）。记忆相关自动清空：
+// 一起听回复 prompt 的最近对话取自 session.messages，删掉即不再进入大模型上下文。
+export function deleteListenTogetherMessage(sessionId: string, messageId: string): ListenTogetherSession | null {
+  const session = getListenTogetherSession(sessionId);
+  if (!session) return null;
+  const next = session.messages.filter(item => item.id !== messageId);
+  if (next.length === session.messages.length) return session;
+  return updateListenTogetherSession(sessionId, { messages: next });
+}
+
+// 一起听背景：按角色 id 长久保存（dataURL 进 kv，随备份走）
+export function getListenTogetherBg(characterId: string): string {
+  const map = readJson<Record<string, string>>(LISTEN_BG_KEY, {});
+  return typeof map[characterId] === "string" ? map[characterId] : "";
+}
+
+export function setListenTogetherBg(characterId: string, dataUrl: string): void {
+  const map = readJson<Record<string, string>>(LISTEN_BG_KEY, {});
+  if (!dataUrl) delete map[characterId];
+  else map[characterId] = dataUrl;
+  writeJson(LISTEN_BG_KEY, map);
+}
