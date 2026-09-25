@@ -2593,12 +2593,12 @@ function MediaFileBubble({
 }
 
 function ListenInviteBubble({ msg, onAction }: { msg: ChatMessage; onAction?: (msg: ChatMessage, action: "accept" | "decline" | "open") => void }) {
-    const data = msg.mediaData || {};
-    const title = data.musicTitle || "";
-    const artist = data.musicArtist || "";
-    const text = data.inviteText || "";
-    const direction = data.inviteDirection === "outgoing" ? "outgoing" : "incoming";
-    const status = data.status || "pending";
+    const data = msg.mediaData;
+    const title = data?.musicTitle || "";
+    const artist = data?.musicArtist || "";
+    const text = data?.inviteText || "";
+    const direction = data?.inviteDirection === "outgoing" ? "outgoing" : "incoming";
+    const status = data?.status || "pending";
     const incoming = msg.role === "assistant" && status === "pending" && direction === "incoming";
     const mine = msg.role === "user" && direction === "outgoing";
     const accepted = status === "accepted";
