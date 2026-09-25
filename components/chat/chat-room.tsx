@@ -225,6 +225,7 @@ const CHAT_VISUAL_MEDIA_TYPES = new Set([
     "decline_relationship",
     "dissolve_relationship",
     "relationship_space",
+    "listen_invite",
 ]);
 
 const WEIXIN_CLOUD_DELETE_TIMEOUT_MS = 15000;
