@@ -1784,3 +1784,21 @@
   text-align: center;
   background: rgba(0, 0, 0, 0.18);
 }
+
+/* ── Frameless mode（手机外壳开关关闭）：只显示内部内容，铺满全屏自适应 ── */
+.phone-shell-wrap[data-hide-case="1"] {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100dvh;
+}
+.phone-shell-wrap[data-hide-case="1"] .phone-case,
+.phone-shell-wrap[data-hide-case="1"] .phone-frame {
+  width: 100%;
+  max-width: 100%;
+}
+.phone-shell-wrap[data-hide-case="1"] .phone-shell {
+  width: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+}

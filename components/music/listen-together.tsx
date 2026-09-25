@@ -13,15 +13,18 @@ import { getMusicControlBridge } from "@/lib/music-control-bridge";
 import { buildListenTogetherCardHtml, sendListenTogetherRefuse, sendListenTogetherShare } from "@/lib/listen-together-share";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import {
-  LISTEN_TOGETHER_UPDATED_EVENT,
-  appendListenTogetherMessage,
-  appendListenTogetherTrack,
-  endListenTogetherSession,
-  formatListenDuration,
-  getActiveListenTogetherSession,
-  getListenTogetherSession,
-  loadListenTogetherSessions,
-  startListenTogetherSession,
+    LISTEN_TOGETHER_UPDATED_EVENT,
+    appendListenTogetherMessage,
+    appendListenTogetherTrack,
+    deleteListenTogetherMessage,
+    endListenTogetherSession,
+    formatListenDuration,
+    getActiveListenTogetherSession,
+    getListenTogetherBg,
+    getListenTogetherSession,
+    loadListenTogetherSessions,
+    setListenTogetherBg,
+    startListenTogetherSession,
 } from "@/lib/listen-together-storage";
 import type { ListenTogetherSession, ListenTogetherTrack } from "@/lib/listen-together-types";
 import { parseChatBubbleDisplay, sanitizeListenTogetherText } from "@/lib/chat-message-display";
@@ -167,6 +170,11 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
   const [result, setResult] = useState<ListenTogetherSession | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState("");
+  const [pendingCall, setPendingCall] = useState("");
+  const [delTarget, setDelTarget] = useState<string | null>(null);
+  const [bgTick, setBgTick] = useState(0);
+  const bgInputRef = useRef<HTMLInputElement>(null);
+  const pressTimer = useRef<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const announcedTrackRef = useRef<string>("");
   const [playerRoot, setPlayerRoot] = useState<Element | null>(null);
@@ -334,20 +342,17 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
     }
   };
 
-  const sendDraft = async () => {
-    if (!session || session.status !== "active") return;
-    const text = draft.trim();
-    if (!text) return;
-    setDraft("");
-    await appendBubbles(session.id, "user", text);
+  const invokeReply = async () => {
+    const latest = getActiveListenTogetherSession();
+    if (!latest || latest.status !== "active") return;
+    if (!pendingCall || latest.id !== pendingCall) return;
+    if (busy) return;
     setBusy("正在回复");
     try {
-      const latest = getActiveListenTogetherSession();
-      if (!latest) return;
       const reply = await generateListenTogetherReply({
         characterId: latest.characterId,
         session: latest,
-        userText: text,
+        userText: [...latest.messages].reverse().find(item => item.author === "user")?.text,
         currentTrack: track,
         lyrics: track.lyrics,
       });
@@ -361,12 +366,27 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
         await appendBubbles(latest.id, "character", reply.text);
       }
       await applyActions(reply.actions);
+      setPendingCall("");
       refresh();
     } catch (error) {
       notify(error instanceof Error ? error.message : "这句没有发出去");
     } finally {
       setBusy("");
     }
+  };
+
+  const sendDraft = async () => {
+    if (!session || session.status !== "active") return;
+    const text = draft.trim();
+    if (!text) {
+      await invokeReply();
+      return;
+    }
+    setDraft("");
+    await appendBubbles(session.id, "user", text);
+    setPendingCall(session.id);
+    setDelTarget(null);
+    refresh();
   };
 
   const endSession = () => {
@@ -403,12 +423,44 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
 
       {panel !== "closed" && playerRoot ? createPortal(
         <div className="lt-overlay" onClick={() => setPanel("closed")}>
-          <div className="lt-sheet" onClick={event => event.stopPropagation()}>
+          <div
+            className="lt-sheet"
+            onClick={event => event.stopPropagation()}
+            data-bg-tick={bgTick}
+            style={session && getListenTogetherBg(session.characterId)
+              ? { backgroundImage: `url("${getListenTogetherBg(session.characterId)}")`, backgroundSize: "cover", backgroundPosition: "center" }
+              : undefined}
+          >
             <div className="lt-head">
               <span>
                 {panel === "pick" ? "邀请谁一起听" : panel === "history" ? "一起听记录" : panel === "result" ? "这一次听完了" : `和${session?.characterName || "对方"}一起听`}
               </span>
               <div className="lt-head-actions">
+                {panel === "chat" && session ? (
+                  <>
+                    <button type="button" onClick={() => bgInputRef.current?.click()}>背景</button>
+                    <input
+                      ref={bgInputRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={event => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (!file || !session) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          if (typeof reader.result === "string") {
+                            setListenTogetherBg(session.characterId, reader.result);
+                            setBgTick(n => n + 1);
+                            notify("背景已保存");
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </>
+                ) : null}
                 {panel === "chat" ? (
                   <button type="button" onClick={() => setPanel("history")}>记录</button>
                 ) : null}
@@ -438,7 +490,7 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                   <strong>{track.title}</strong>
                   <span>{track.artist || "正在听"}</span>
                 </div>
-                <div className="lt-messages" ref={listRef} data-avatar-rev={avatarTick}>
+                <div className="lt-messages" ref={listRef} data-avatar-rev={avatarTick} onClick={() => { if (delTarget) setDelTarget(null); }}>
                   {session.messages.length === 0 ? <p className="lt-empty">先跟对方说一句</p> : session.messages.map(item => {
                     const raw = loadCharacters().find(entry => entry.id === session.characterId) || null;
                     const character = raw ? overlayCharacterForDisplay(raw) : null;
@@ -450,7 +502,22 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                     const parsed = parseChatBubbleDisplay(item.text, names);
                     const body = sanitizeListenTogetherText(parsed.body, names);
                     return (
-                      <div key={item.id} className={`lt-row${mine ? " is-me" : ""}`}>
+                      <div
+                        key={item.id}
+                        className={`lt-row${mine ? " is-me" : ""}`}
+                        style={{ position: "relative" }}
+                        onContextMenu={event => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setDelTarget(item.id);
+                        }}
+                        onTouchStart={() => {
+                          if (pressTimer.current) window.clearTimeout(pressTimer.current);
+                          pressTimer.current = window.setTimeout(() => setDelTarget(item.id), 550);
+                        }}
+                        onTouchEnd={() => { if (pressTimer.current) window.clearTimeout(pressTimer.current); }}
+                        onTouchMove={() => { if (pressTimer.current) window.clearTimeout(pressTimer.current); }}
+                      >
                         <span className="lt-row-avatar">
                           {avatar ? <img src={avatar} alt={alt} /> : <ChatFallbackAvatar alt={alt} />}
                         </span>
@@ -458,6 +525,28 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                           {parsed.whisper ? <span className="lt-whisper">【私聊】</span> : null}
                           {body ? <div className={`lt-bubble${mine ? " is-me" : ""}`}>{body}</div> : null}
                         </div>
+                        {delTarget === item.id ? (
+                          <button
+                            type="button"
+                            style={{
+                              position: "absolute", top: -8, right: 0,
+                              background: "#ff4d4f", color: "#fff", border: "none", borderRadius: 6,
+                              padding: "4px 12px", fontSize: 12, zIndex: 20,
+                            }}
+                            onClick={event => {
+                              event.stopPropagation();
+                              const updated = deleteListenTogetherMessage(session.id, item.id);
+                              setDelTarget(null);
+                              if (updated) {
+                                const last = updated.messages[updated.messages.length - 1];
+                                if (!last || last.author !== "user") setPendingCall("");
+                              }
+                              refresh();
+                            }}
+                          >
+                            删除
+                          </button>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -467,7 +556,7 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                   <input
                     value={draft}
                     onChange={event => setDraft(event.target.value)}
-                    placeholder="给对方发一句"
+                    placeholder={pendingCall === session.id ? "再按一次发送，让对方回复" : "给对方发一句"}
                     onKeyDown={event => {
                       if (event.key === "Enter") {
                         event.preventDefault();
@@ -475,7 +564,13 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                       }
                     }}
                   />
-                  <button type="button" disabled={Boolean(busy) || !draft.trim()} onClick={() => { void sendDraft(); }}>发送</button>
+                  <button
+                    type="button"
+                    disabled={Boolean(busy) || (!draft.trim() && pendingCall !== session.id)}
+                    onClick={() => { void sendDraft(); }}
+                  >
+                    {draft.trim() ? "发送" : (pendingCall === session.id ? "调用" : "发送")}
+                  </button>
                   <button type="button" className="lt-end" onClick={endSession}>结束</button>
                 </div>
               </>

@@ -6,6 +6,7 @@ import {
   AppWindow,
   Code2,
   Download,
+  Home,
   LayoutGrid,
   PaintBucket,
   Plus,
@@ -346,6 +347,58 @@ export function PhoneThemeApp({
                     </div>
                   );
                 })()}
+                {/* 全局Home键开关：打开才渲染 PhoneHomeBar */}
+                <div className="menu-item">
+                  <span className="card-icon card-icon-glass"><Home size={22} strokeWidth={1.75} /></span>
+                  <span className="menu-label appearance-menu-item-label">全局Home键</span>
+                  <label
+                    className="block w-10 h-[22px] cursor-pointer relative shrink-0 ml-auto"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={draft.showHomeBar ?? true}
+                      onChange={(e) => { const next = { ...draft, showHomeBar: e.target.checked }; onDraftChange(next); onApply(next); }}
+                      className="w-full h-full rounded-[11px] m-0 outline-none"
+                      style={{
+                        appearance: "none",
+                        backgroundColor: (draft.showHomeBar ?? true) ? "var(--c-success)" : "var(--c-page-body-bg)",
+                        transition: "0.2s",
+                      }}
+                    />
+                    <div className="absolute w-[18px] h-[18px] bg-white rounded-full top-[2px] pointer-events-none" style={{
+                      left: (draft.showHomeBar ?? true) ? 20 : 2,
+                      transition: "0.2s",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.15)",
+                    }} />
+                  </label>
+                </div>
+                {/* 手机外壳开关：关闭则隐藏外屏边框，只显示内部内容并铺满全屏 */}
+                <div className="menu-item">
+                  <span className="card-icon card-icon-glass"><Smartphone size={22} strokeWidth={1.75} /></span>
+                  <span className="menu-label appearance-menu-item-label">手机外壳</span>
+                  <label
+                    className="block w-10 h-[22px] cursor-pointer relative shrink-0 ml-auto"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={draft.showPhoneFrame ?? true}
+                      onChange={(e) => { const next = { ...draft, showPhoneFrame: e.target.checked }; onDraftChange(next); onApply(next); }}
+                      className="w-full h-full rounded-[11px] m-0 outline-none"
+                      style={{
+                        appearance: "none",
+                        backgroundColor: (draft.showPhoneFrame ?? true) ? "var(--c-success)" : "var(--c-page-body-bg)",
+                        transition: "0.2s",
+                      }}
+                    />
+                    <div className="absolute w-[18px] h-[18px] bg-white rounded-full top-[2px] pointer-events-none" style={{
+                      left: (draft.showPhoneFrame ?? true) ? 20 : 2,
+                      transition: "0.2s",
+                      boxShadow: "0 2px 4px rgba(0,0,0,0.15)",
+                    }} />
+                  </label>
+                </div>
                 {MENU_ITEMS.filter(item => ["text"].includes(item.section)).map((item) => (
                   <button
                     key={item.section}
