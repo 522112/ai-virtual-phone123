@@ -5382,3 +5382,25 @@
 .music-fav-add-tabs button[data-active] { background: var(--c-music-accent, #ff4d6d); color: #fff; border-color: transparent; }
 .music-fav-upload { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--c-border, #ddd); background: transparent; color: var(--c-text-title); font-size: 13px; cursor: pointer; margin-bottom: 10px; }
 .music-fav-pick { max-height: 46vh; overflow-y: auto; }
+
+/* ── 歌单页滚动容器：歌多了可上下滑动（覆盖先前 .music-fav 的 padding） ── */
+.music-fav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 14px 96px;
+}
+.music-app[data-nowbar] .music-fav {
+    padding-bottom: 175px;
+}
+.music-fav::-webkit-scrollbar {
+    width: 5px;
+}
+.music-fav::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.16);
+    border-radius: 999px;
+}
+.music-fav::-webkit-scrollbar-track {
+    background: transparent;
+}
