@@ -53,6 +53,10 @@ export type ThemeProfile = {
   // 移动端：手机画面整体上移的像素数，用于裁掉顶部状态栏占位、把底部栏顶回可视区。
   // 0 = 不上移（iOS 等能全屏的浏览器保持 0）；安卓按真实状态栏高度调到刚好铺满。
   statusBarDropPx: number;
+  // 全局 Home 键开关：打开才渲染 PhoneHomeBar
+  showHomeBar: boolean;
+  // 手机外壳开关：关闭则隐藏 phone-case/phone-frame，只显示内部内容并铺满全屏
+  showPhoneFrame: boolean;
   // CSS 变量覆盖
   cssOverrides: Record<string, string>;
   // 自定义 CSS
@@ -181,6 +185,8 @@ export const DEFAULT_THEME_PROFILE: ThemeProfile = {
   fontFamily: DEFAULT_FONT_FAMILY,
   hideTopBar: true,
   statusBarDropPx: 0,
+  showHomeBar: true,
+  showPhoneFrame: true,
   cssOverrides: {},
   globalCustomCSS: "",
   enableGlobalShadows: true,
@@ -326,6 +332,8 @@ export function normalizeThemeProfile(raw: unknown): ThemeProfile {
 
   // ── Display ──
   base.hideTopBar = typeof source.hideTopBar === "boolean" ? source.hideTopBar : base.hideTopBar;
+  base.showHomeBar = typeof source.showHomeBar === "boolean" ? source.showHomeBar : true;
+  base.showPhoneFrame = typeof source.showPhoneFrame === "boolean" ? source.showPhoneFrame : true;
   base.statusBarDropPx = typeof source.statusBarDropPx === "number" && isFinite(source.statusBarDropPx as number)
     ? Math.min(120, Math.max(0, Math.round(source.statusBarDropPx as number))) : 0;
 
