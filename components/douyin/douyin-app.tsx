@@ -7,14 +7,12 @@ import {
   MessageCircle,
   Radio,
   Share2,
-  Users,
   Wallet,
   X,
   ChevronLeft,
   ImagePlus,
   RefreshCw,
   Swords,
-  Mic,
 } from "lucide-react";
 
 import { loadCharacters } from "@/lib/character-storage";
@@ -55,8 +53,33 @@ import {
   toggleDouyinLike,
   updateDouyinLiveRoom,
   updateDouyinSettings,
+  ensureDouyinThread,
+  toggleDouyinCollect,
+  updateDouyinProfile,
   DOUYIN_UPDATED_EVENT,
 } from "@/lib/douyin-storage";
+import {
+  addDouyinCharacterFriend,
+  ensureDouyinVideoImage,
+  forwardDouyinLiveToCharacter,
+  generateCharacterHomepageFeed,
+  generateDouyinFeed,
+  generateDouyinSearchFeed,
+} from "@/lib/douyin-feed";
+import {
+  AddFriendModalX,
+  CharacterPageX,
+  CommentSheetX,
+  EditProfileModalX,
+  FeedViewX,
+  ForwardModalX,
+  LiveRoomX,
+  LiveTabX,
+  myVideoLikes,
+  MePageX,
+  SearchPageX,
+  SettingsModalX,
+} from "./douyin-tabs-extra";
 import type {
   DouyinLiveRoom,
   DouyinNpcPortrait,
@@ -78,11 +101,11 @@ type DouyinAppProps = {
   visible?: boolean;
 };
 
-type FeedScope = "recommend" | "follow" | "live";
+type FeedScope = "recommend" | "follow";
 
 const TABS: Array<{ id: DouyinTabId; label: string }> = [
   { id: "home", label: "首页" },
-  { id: "friends", label: "朋友" },
+  { id: "live", label: "\u76f4\u64ad" },
   { id: "create", label: "" },
   { id: "inbox", label: "消息" },
   { id: "profile", label: "我" },
@@ -127,6 +150,20 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
   const [portraitUrls, setPortraitUrls] = useState<Record<string, string>>({});
   const [liveSpriteUrl, setLiveSpriteUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [searchResults, setSearchResults] = useState<DouyinVideo[]>([]);
+  const [characterPageId, setCharacterPageId] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [addFriendOpen, setAddFriendOpen] = useState(false);
+  const [forwardRoomId, setForwardRoomId] = useState<string | null>(null);
+  const [profileSubTab, setProfileSubTab] = useState<"works" | "collected" | "liked">("works");
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [showGifts, setShowGifts] = useState(false);
+  const [profileDraft, setProfileDraft] = useState({ nickname: "", handle: "", bio: "", backgroundTone: "" });
+  const [tagDraft, setTagDraft] = useState("");
+  const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const toastTimer = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -200,6 +237,8 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
 
   const unreadTotal = state.threads.reduce((sum, item) => sum + item.unread, 0);
   const participantIds = state.settings.participantCharacterIds;
+  const forwardRoom = state.liveRooms.find(item => item.id === forwardRoomId) || null;
+  const characterAuthor = characterPageId ? authors.get(characterPageId) || null : null;
 
   const handleLogin = () => {
     setState(loginDouyinAccount({ nickname: loginName, handle: loginHandle, persona: loginPersona }));
@@ -253,11 +292,10 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
   const handleRefreshNpcLives = async () => {
     try {
       setBusy("刷新直播…");
-      const rooms = await generateDouyinNpcLiveRefresh(3);
+      const rooms = await generateDouyinNpcLiveRefresh(7);
       refresh();
       notice(`已刷新 ${rooms.length} 个 NPC 直播间`);
-      setFeedScope("live");
-      setTab("home");
+      setTab("live");
     } catch (error) {
       notice(error instanceof Error ? error.message : "刷新失败");
     } finally {
@@ -295,6 +333,101 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
     }
   };
 
+  const FEED_BUSY = "\u5237\u65b0\u63a8\u8350\u4e2d";
+  const LIVE_BUSY = "\u5237\u65b0\u76f4\u64ad\u4e2d";
+  const handleRefreshFeed = async () => {
+    try {
+      setBusy(FEED_BUSY);
+      await generateDouyinFeed({ count: 10, tags: state.settings.myTags });
+      refresh();
+      notice("\u5df2\u5237\u65b0 10 \u6761\u63a8\u8350");
+    } catch (error) {
+      notice(error instanceof Error ? error.message : "\u5931\u8d25");
+    } finally {
+      setBusy("");
+    }
+  };
+  const handleSearch = async (keyword: string) => {
+    const kw = keyword.trim();
+    if (!kw) return;
+    try {
+      setBusy("\u7ed3\u679c\u751f\u6210\u4e2d");
+      const videos = await generateDouyinSearchFeed(kw);
+      setSearchResults(videos);
+      refresh();
+      notice(kw + "\u4ee5\u4e0b\u5185\u5bb9\u5df2\u751f\u6210");
+    } catch (error) {
+      notice(error instanceof Error ? error.message : "\u5931\u8d25");
+    } finally {
+      setBusy("");
+    }
+  };
+  const handleSearchKeyword = (kw: string) => { setSearchKeyword(kw); void handleSearch(kw); };
+  const handleCharacterHomepageRefresh = async (characterId: string) => {
+    try {
+      setBusy("\u6309\u4eba\u8bbe\u751f\u6210\u4e2d");
+      const videos = await generateCharacterHomepageFeed(characterId, 3);
+      refresh();
+      notice("\u5df2\u6309\u4eba\u8bbe\u751f\u6210 " + videos.length + " \u6761\u4f5c\u54c1");
+    } catch (error) {
+      notice(error instanceof Error ? error.message : "\u5931\u8d25");
+    } finally {
+      setBusy("");
+    }
+  };
+  const handleAddFriend = async (characterId: string) => {
+    try {
+      setBusy("\u52a0\u5165\u4e2d");
+      const res = await addDouyinCharacterFriend(characterId);
+      refresh();
+      setAddFriendOpen(false);
+      setActiveThreadId(res.threadId);
+      setTab("inbox");
+      notice("\u5df2\u52a0\u6296\u97f3\u597d\u53cb");
+    } catch (error) {
+      notice(error instanceof Error ? error.message : "\u5931\u8d25");
+    } finally {
+      setBusy("");
+    }
+  };
+  const handleGenerateImage = async (videoId: string) => {
+    try {
+      setGeneratingImageId(videoId);
+      const result = await ensureDouyinVideoImage(videoId);
+      refresh();
+      notice(result.imageUrl ? "\u5df2\u751f\u6210\u5c01\u9762" : "\u6682\u65e0\u5c01\u9762\u770b\u6587\u5b57\u7248");
+    } catch {
+      notice("\u6682\u65e0\u5c01\u9762\u770b\u6587\u5b57\u7248");
+    } finally {
+      setGeneratingImageId(null);
+    }
+  };
+  const handleForward = (characterId: string) => {
+    if (!forwardRoom) return;
+    try {
+      const threadId = forwardDouyinLiveToCharacter(forwardRoom.id, characterId);
+      refresh();
+      setForwardRoomId(null);
+      setActiveLiveId(null);
+      setActiveThreadId(threadId);
+      setTab("inbox");
+      notice("\u5df2\u5206\u4eab");
+    } catch (error) {
+      notice(error instanceof Error ? error.message : "\u5931\u8d25");
+    }
+  };
+  const toggleMyTag = (tag: string) => {
+    const tags = state.settings.myTags.includes(tag)
+      ? state.settings.myTags.filter(x => x !== tag)
+      : [...state.settings.myTags, tag];
+    setState(updateDouyinSettings({ myTags: tags }));
+  };
+  const openThreadAuthorHomepage = () => {
+    if (!activeThread) return;
+    const author = state.authors.find(a => a.characterId === activeThread.characterId || a.name === activeThread.peerName);
+    if (author) { setActiveThreadId(null); setCharacterPageId(author.id); }
+    else notice("\u5148\u52a0\u4e3a\u597d\u53cb");
+  };
   const toggleParticipant = (characterId: string) => {
     const next = participantIds.includes(characterId)
       ? participantIds.filter(id => id !== characterId)
@@ -355,30 +488,34 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
     );
   }
 
+  if (searchOpen) {
+    return (
+      <div className="dy-app" data-ui="douyin">
+        <SearchPageX keyword={searchKeyword} onKeyword={setSearchKeyword} onSearchKeyword={handleSearchKeyword} history={state.settings.searchHistory} hotTags={state.settings.myTags} results={searchResults} authors={authors} busy={busy} onBack={() => setSearchOpen(false)} onLike={id => setState(toggleDouyinLike(id))} onFollow={id => setState(toggleDouyinFollow(id))} onComment={id => { setCommentVideoId(id); setCommentDraft(""); }} onCollect={id => setState(toggleDouyinCollect(id))} collectedIds={state.session.collectedIds} onGenImage={id => { void handleGenerateImage(id); }} generatingImageId={generatingImageId} />
+        {commentVideo ? (<CommentSheetX video={commentVideo} draft={commentDraft} onDraft={setCommentDraft} onClose={() => setCommentVideoId(null)} onSend={() => { if (!commentDraft.trim()) return; setState(addDouyinComment(commentVideo.id, commentDraft)); setCommentDraft(""); }} />) : null}
+        {toast ? <div className="dy-toast">{toast}</div> : null}
+      </div>
+    );
+  }
+  if (characterAuthor) {
+    return (
+      <div className="dy-app" data-ui="douyin">
+        <CharacterPageX author={characterAuthor} videos={state.videos} followingIds={state.session.followingIds} collectedIds={state.session.collectedIds} busy={busy} onBack={() => setCharacterPageId(null)} onFollow={id => setState(toggleDouyinFollow(id))} onLike={id => setState(toggleDouyinLike(id))} onComment={id => { setCommentVideoId(id); setCommentDraft(""); }} onCollect={id => setState(toggleDouyinCollect(id))} onGenImage={id => { void handleGenerateImage(id); }} generatingImageId={generatingImageId} onRefresh={() => { if (characterAuthor.characterId) void handleCharacterHomepageRefresh(characterAuthor.characterId); else notice("\u8def\u4eba\u8d26\u53f7\u770b\u63a8\u8350"); }} onDm={() => { const threadId = ensureDouyinThread(characterAuthor.name, characterAuthor.avatarTone, characterAuthor.characterId); refresh(); setCharacterPageId(null); setActiveThreadId(threadId); setTab("inbox"); }} />
+        {commentVideo ? (<CommentSheetX video={commentVideo} draft={commentDraft} onDraft={setCommentDraft} onClose={() => setCommentVideoId(null)} onSend={() => { if (!commentDraft.trim()) return; setState(addDouyinComment(commentVideo.id, commentDraft)); setCommentDraft(""); }} />) : null}
+        {toast ? <div className="dy-toast">{toast}</div> : null}
+      </div>
+    );
+  }
   return (
     <div className="dy-app" data-ui="douyin">
       <div className="dy-shell">
         <div className="dy-main">
-          {tab === "home" || tab === "friends" ? (
-            <FeedView
-              videos={tab === "friends" ? feedVideos.filter(v => state.session.followingIds.includes(v.authorId) || v.followed) : feedVideos}
-              scope={tab === "friends" ? "follow" : feedScope}
-              onScope={setFeedScope}
-              authors={authors}
-              followingIds={state.session.followingIds}
-              onClose={onClose}
-              onLike={id => setState(toggleDouyinLike(id))}
-              onFollow={id => setState(toggleDouyinFollow(id))}
-              onComment={id => { setCommentVideoId(id); setCommentDraft(""); }}
-              onShare={() => notice("已模拟分享到聊天")}
-              showLiveEntry={tab === "home"}
-              onOpenLive={() => setFeedScope("live")}
-              liveMode={feedScope === "live" && tab === "home"}
-              liveRooms={state.liveRooms.filter(item => item.status === "live")}
-              onEnterLive={id => setActiveLiveId(id)}
-              onRefreshLives={() => { void handleRefreshNpcLives(); }}
-              refreshing={busy === "刷新直播…"}
-            />
+          {tab === "home" ? (
+            <FeedViewX videos={feedVideos} scope={feedScope} onScope={setFeedScope} authors={authors} followingIds={state.session.followingIds} collectedIds={state.session.collectedIds} myTags={state.settings.myTags} onClose={onClose} onSearch={() => { setSearchResults([]); setSearchOpen(true); }} onRefresh={() => { void handleRefreshFeed(); }} refreshing={busy !== ""} onLike={id => setState(toggleDouyinLike(id))} onFollow={id => setState(toggleDouyinFollow(id))} onComment={id => { setCommentVideoId(id); setCommentDraft(""); }} onCollect={id => setState(toggleDouyinCollect(id))} onShare={() => notice("shared")} onGenImage={id => { void handleGenerateImage(id); }} generatingImageId={generatingImageId} onAuthor={id => setCharacterPageId(id)} />
+          ) : null}
+
+          {tab === "live" ? (
+            <LiveTabX rooms={state.liveRooms.filter(item => item.status === "live")} onClose={onClose} onRefresh={() => { void handleRefreshNpcLives(); }} refreshing={busy !== ""} busy={busy} onEnter={id => setActiveLiveId(id)} />
           ) : null}
 
           {tab === "create" ? (
@@ -469,7 +606,7 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
                   <button type="button" aria-label="返回" onClick={() => setActiveThreadId(null)}>
                     <ChevronLeft size={20} />
                   </button>
-                  <strong>{activeThread.peerName}</strong>
+                  <button type="button" className="dy-chat-peer" onClick={openThreadAuthorHomepage}><Avatar name={activeThread.peerName} tone={activeThread.peerTone} size={28} /><strong>{activeThread.peerName}</strong></button>
                 </div>
                 <div className="dy-chat-messages">
                   {activeThread.messages.map(msg => (
@@ -534,171 +671,14 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
           ) : null}
 
           {tab === "profile" ? (
-            <div className="dy-panel-page">
-              <button type="button" className="dy-icon-btn" aria-label="关闭" onClick={onClose}>
-                <ChevronLeft size={18} />
-              </button>
-              <div className="dy-profile-hero">
-                <Avatar name={state.session.nickname} tone={state.session.avatarTone} size={72} />
-                <strong style={{ fontSize: 18 }}>{state.session.nickname}</strong>
-                <span style={{ color: "var(--dy-muted)", fontSize: 12 }}>抖音号：{state.session.handle}</span>
-              </div>
-              <div className="dy-stats">
-                <div>
-                  <strong>{state.session.followingIds.length}</strong>
-                  <span>关注</span>
-                </div>
-                <div>
-                  <strong>{formatDouyinCount(state.session.followers)}</strong>
-                  <span>粉丝</span>
-                </div>
-                <div>
-                  <strong>{formatDouyinCount(state.videos.filter(v => v.authorId === "self" || v.source === "user").length || 1)}</strong>
-                  <span>作品</span>
-                </div>
-              </div>
-
-              <section className="dy-settings-block">
-                <h3>账号人设</h3>
-                <p className="dy-settings-desc">影响开播观众人数与观众身份</p>
-                <textarea
-                  className="dy-create-textarea"
-                  value={loginPersona}
-                  onChange={e => setLoginPersona(e.target.value)}
-                  placeholder="例如：爱看练舞和生活号的学生"
-                  rows={3}
-                />
-                <button
-                  type="button"
-                  className="dy-btn dy-btn-ghost"
-                  style={{ width: "100%", marginTop: 8 }}
-                  onClick={() => {
-                    setState(loginDouyinAccount({
-                      nickname: state.session.nickname,
-                      handle: state.session.handle,
-                      persona: loginPersona,
-                    }));
-                    notice("人设已保存");
-                  }}
-                >
-                  保存人设
-                </button>
-              </section>
-
-              <section className="dy-settings-block">
-                <div className="dy-settings-head">
-                  <h3>NPC 立绘库</h3>
-                  <span>{portraits.length}</span>
-                </div>
-                <p className="dy-settings-desc">刷新直播时随机抽立绘生成人设开播</p>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={e => { void handleUploadPortrait(e.target.files?.[0] || null); }}
-                />
-                <div className="dy-create-actions">
-                  <button type="button" className="dy-btn dy-btn-ghost" onClick={() => fileRef.current?.click()}>
-                    <ImagePlus size={14} style={{ display: "inline", marginRight: 4 }} />上传
-                  </button>
-                  <button type="button" className="dy-btn" disabled={!!busy} onClick={() => { void handleRefreshNpcLives(); }}>
-                    <RefreshCw size={14} style={{ display: "inline", marginRight: 4 }} />刷新直播
-                  </button>
-                </div>
-                {portraits.length > 0 ? (
-                  <div className="dy-npc-grid" style={{ marginTop: 10 }}>
-                    {portraits.map(portrait => (
-                      <div key={portrait.id} className="dy-npc-card">
-                        <div
-                          className="dy-npc-thumb"
-                          style={{ backgroundImage: portraitUrls[portrait.id] ? `url(${portraitUrls[portrait.id]})` : undefined }}
-                        >
-                          {!portraitUrls[portrait.id] ? portrait.name.slice(0, 1) : null}
-                        </div>
-                        <div className="dy-npc-meta">
-                          <strong>{portrait.name}</strong>
-                          <button
-                            type="button"
-                            className="dy-link-btn"
-                            onClick={() => { void deleteDouyinNpcPortrait(portrait.id).then(refreshPortraits); }}
-                          >
-                            删除
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="dy-empty" style={{ padding: 14 }}>还没有立绘</div>
-                )}
-              </section>
-
-              <section className="dy-settings-block">
-                <h3>参与角色</h3>
-                <p className="dy-settings-desc">勾选后按人设发作品 / 开播；进房另调角色互动，观众弹幕每次 15 条</p>
-                {busy ? <div className="dy-busy">{busy}</div> : null}
-                {characters.length === 0 ? <div className="dy-empty" style={{ padding: 12 }}>暂无角色，请先在角色页创建</div> : null}
-                <div className="dy-char-list">
-                  {characters.map(character => {
-                    const selected = participantIds.includes(character.id);
-                    return (
-                      <div key={character.id} className="dy-char-item">
-                        <button
-                          type="button"
-                          className="dy-chip"
-                          {...(selected ? { "data-on": "" } : {})}
-                          onClick={() => toggleParticipant(character.id)}
-                        >
-                          {selected ? "✓ " : ""}{character.name}
-                        </button>
-                        <div className="dy-char-item-actions">
-                          <button type="button" className="dy-link-btn" disabled={!!busy} onClick={() => { void handleCharacterPublish(character.id); }}>
-                            发作品
-                          </button>
-                          <button type="button" className="dy-link-btn" disabled={!!busy} onClick={() => { void handleCharacterLive(character.id); }}>
-                            开播
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <div className="dy-wallet-card">
-                <h3><Wallet size={14} style={{ display: "inline", marginRight: 6 }} />聊天钱包</h3>
-                <p>
-                  {state.session.walletLinked
-                    ? `已连接 · 余额 ¥${formatWalletAmount(walletBalance)}`
-                    : "连接后可用余额刷礼物，结束直播折合入账"}
-                </p>
-                <div className="dy-wallet-actions">
-                  {state.session.walletLinked ? (
-                    <button type="button" className="dy-btn dy-btn-ghost" onClick={() => { setState(linkDouyinWallet(false)); notice("已断开钱包"); }}>
-                      断开
-                    </button>
-                  ) : (
-                    <button type="button" className="dy-btn dy-btn-cyan" onClick={handleLinkWallet}>
-                      连接钱包
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="dy-btn dy-btn-ghost"
-                    onClick={() => {
-                      setState(logoutDouyinAccount());
-                      setTab("home");
-                      notice("已退出登录");
-                    }}
-                  >
-                    退出
-                  </button>
-                </div>
-              </div>
-            </div>
+            <MePageX state={state} myLikes={myVideoLikes(state)} subTab={profileSubTab} onSubTab={setProfileSubTab} onClose={onClose} onOpenSettings={() => setSettingsOpen(true)} onAddFriend={() => setAddFriendOpen(true)} onEdit={() => { setProfileDraft({ nickname: state.session.nickname, handle: state.session.handle, bio: state.session.bio, backgroundTone: state.session.backgroundTone }); setEditProfileOpen(true); }} onLike={id => setState(toggleDouyinLike(id))} onFollow={id => setState(toggleDouyinFollow(id))} onComment={id => { setCommentVideoId(id); setCommentDraft(""); }} onCollect={id => setState(toggleDouyinCollect(id))} onAuthor={id => setCharacterPageId(id)} />
           ) : null}
 
+          {settingsOpen ? (<SettingsModalX state={state} tagDraft={tagDraft} onTagDraft={setTagDraft} onToggleTag={toggleMyTag} onAddTag={() => { const x = tagDraft.trim().replace(/^#+/, ""); if (!x) return; if (!state.settings.myTags.includes(x)) setState(updateDouyinSettings({ myTags: [...state.settings.myTags, x].slice(0, 20) })); setTagDraft(""); }} portraits={portraits} portraitUrls={portraitUrls} onUpload={() => { const el = fileRef.current; if (el) el.click(); }} onDeletePortrait={id => { void deleteDouyinNpcPortrait(id).then(refreshPortraits); }} walletLinked={state.session.walletLinked} walletBalance={walletBalance} onLinkWallet={handleLinkWallet} onUnlinkWallet={() => { setState(linkDouyinWallet(false)); notice("\u5df2\u65ad\u5f00"); }} onLogout={() => { setState(logoutDouyinAccount()); setSettingsOpen(false); setTab("home"); notice("\u9000\u51fa\u767b\u5f55"); }} busy={busy} characters={characters} participantIds={participantIds} onToggleParticipant={toggleParticipant} onCharacterPublish={id => { void handleCharacterPublish(id); }} onCharacterLive={id => { void handleCharacterLive(id); }} onClose={() => setSettingsOpen(false)} />) : null}
+          {editProfileOpen ? (<EditProfileModalX draft={profileDraft} onDraft={setProfileDraft} onSave={() => { setState(updateDouyinProfile(profileDraft)); setEditProfileOpen(false); notice("\u5df2\u4fdd\u5b58"); }} onClose={() => setEditProfileOpen(false)} />) : null}
+          {addFriendOpen ? (<AddFriendModalX characters={characters} busy={busy} onAdd={id => { void handleAddFriend(id); }} onClose={() => setAddFriendOpen(false)} />) : null}
+          {forwardRoom ? (<ForwardModalX room={forwardRoom} characters={characters} onForward={handleForward} onClose={() => setForwardRoomId(null)} />) : null}
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { void handleUploadPortrait(e.target.files?.[0] || null); }} />
           {commentVideo ? (
             <div className="dy-sheet" onClick={() => setCommentVideoId(null)}>
               <div className="dy-sheet-panel" onClick={e => e.stopPropagation()}>
@@ -748,52 +728,11 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
           ) : null}
 
           {activeLive ? (
-            <LiveRoom
-              room={activeLive}
-              isHost={activeLive.id === state.myLiveRoomId || (activeLive.hostType === "character" && participantIds.includes(activeLive.characterId || ""))}
-              walletLinked={state.session.walletLinked}
-              spriteUrl={liveSpriteUrl}
-              busy={busy}
-              onClose={() => setActiveLiveId(null)}
-              onDanmaku={(text) => {
-                setState(appendDouyinDanmaku(activeLive.id, text, { fromMe: true, kind: "user" }));
-                setDanmakuDraft("");
-                void triggerInteraction(activeLive, `用户发弹幕：${text}`);
-              }}
-              draft={danmakuDraft}
-              onDraft={setDanmakuDraft}
-              onGift={(coins, label) => { void handleGift(activeLive, coins, label); }}
-              onSpeak={(text) => {
-                setState(updateDouyinLiveRoom(activeLive.id, { speakLines: [text] }));
-                setState(appendDouyinDanmaku(activeLive.id, text, { fromMe: true, kind: "host", authorName: activeLive.hostName }));
-                void triggerInteraction(activeLive, `主播讲话：${text}`);
-              }}
-              onPk={() => {
-                if (activeLive.pk?.active) {
-                  setState(endDouyinPk(activeLive.id));
-                  notice("PK 结束");
-                } else {
-                  setState(startDouyinPk(activeLive.id, "隔壁主播", "才艺比拼"));
-                  notice("PK 开始");
-                  void triggerInteraction(activeLive, "主播发起了 PK");
-                }
-              }}
-              onBurst={() => { void triggerInteraction(activeLive, "用户点了互动刷新"); }}
-              onEnd={() => {
-                if (activeLive.id === state.myLiveRoomId) {
-                  setState(endMyDouyinLive());
-                } else {
-                  setState(endDouyinLiveRoom(activeLive.id));
-                }
-                setWalletBalance(getWalletBalance(loadWalletState()));
-                setActiveLiveId(null);
-                notice("直播已结束，礼物已折合入账");
-              }}
-            />
+            <LiveRoomX room={activeLive} isHost={activeLive.id === state.myLiveRoomId || (activeLive.hostType === "character" && participantIds.includes(activeLive.characterId || ""))} walletLinked={state.session.walletLinked} spriteUrl={liveSpriteUrl} busy={busy} showEmoji={showEmoji} showGifts={showGifts} onToggleEmoji={() => { setShowEmoji(function(v) { return !v; }); setShowGifts(false); }} onToggleGifts={() => { setShowGifts(function(v) { return !v; }); setShowEmoji(false); }} onClose={() => { setActiveLiveId(null); setShowEmoji(false); setShowGifts(false); }} onFollowHost={() => setState(toggleDouyinFollow(activeLive.hostType === "character" ? "dy_char_" + activeLive.characterId : activeLive.id))} onDanmaku={text => { setState(appendDouyinDanmaku(activeLive.id, text, { fromMe: true, kind: "user" })); setDanmakuDraft(""); void triggerInteraction(activeLive, "user danmaku: " + text); }} draft={danmakuDraft} onDraft={setDanmakuDraft} onGift={(coins, label) => { void handleGift(activeLive, coins, label); }} onForward={() => setForwardRoomId(activeLive.id)} onSpeak={text => { setState(updateDouyinLiveRoom(activeLive.id, { speakLines: [text] })); setState(appendDouyinDanmaku(activeLive.id, text, { fromMe: true, kind: "host", authorName: activeLive.hostName })); void triggerInteraction(activeLive, "host speaks: " + text); }} onPk={() => { if (activeLive.pk && activeLive.pk.active) { setState(endDouyinPk(activeLive.id)); notice("pk ended"); } else { setState(startDouyinPk(activeLive.id, "\u9694\u58c1\u4e3b\u64ad", "\u624d\u827a\u62fc\u6bd4")); notice("pk started"); void triggerInteraction(activeLive, "host started pk"); } }} onBurst={() => { void triggerInteraction(activeLive, "user refreshed"); }} onEnd={() => { if (activeLive.id === state.myLiveRoomId) { setState(endMyDouyinLive()); } else { setState(endDouyinLiveRoom(activeLive.id)); } setWalletBalance(getWalletBalance(loadWalletState())); setActiveLiveId(null); notice("\u76f4\u64ad\u5df2\u7ed3\u675f\u793c\u7269\u5df2\u6298\u5408\u5165\u8d26"); }} />
           ) : null}
         </div>
 
-        {!activeLive && !activeThread ? (
+        {!activeLive && !activeThread && !searchOpen && !characterPageId ? (
           <nav className="dy-tabbar">
             {TABS.map(item => (
               <button
@@ -811,7 +750,7 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
                 ) : (
                   <>
                     {item.id === "home" ? <Home size={20} /> : null}
-                    {item.id === "friends" ? <Users size={20} /> : null}
+                    {item.id === "live" ? <Radio size={20} /> : null}
                     {item.id === "inbox" ? (
                       <span style={{ position: "relative" }}>
                         <MessageCircle size={20} />
@@ -832,7 +771,7 @@ export function DouyinApp({ onClose, visible = true }: DouyinAppProps) {
   );
 }
 
-function FeedView({
+export function FeedView({
   videos,
   scope,
   onScope,
@@ -958,7 +897,7 @@ function FeedView({
   );
 }
 
-function LiveRoom({
+export function LiveRoom({
   room,
   isHost,
   walletLinked,
