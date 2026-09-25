@@ -1790,14 +1790,16 @@
   width: 100%;
   max-width: 100%;
   min-height: 100dvh;
+  justify-items: center;
 }
 .phone-shell-wrap[data-hide-case="1"] .phone-case,
 .phone-shell-wrap[data-hide-case="1"] .phone-frame {
-  width: 100%;
-  max-width: 100%;
+  width: min(100%, 430px);
+  margin-inline: auto;
 }
 .phone-shell-wrap[data-hide-case="1"] .phone-shell {
   width: 100%;
+  max-width: 100vw;
   height: 100dvh;
   max-height: 100dvh;
   border-radius: 0;
