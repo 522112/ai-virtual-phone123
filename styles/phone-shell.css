@@ -1830,3 +1830,12 @@
     margin-inline: auto;
   }
 }
+
+/* ── Frameless 严格钉死：清掉移动端的状态栏上移与键盘位移，严丝合缝不乱动 ── */
+@media (hover: none) and (pointer: coarse) {
+  .phone-shell-wrap[data-hide-case="1"] {
+    margin-top: 0;
+    transform: none;
+    transition: none;
+  }
+}
