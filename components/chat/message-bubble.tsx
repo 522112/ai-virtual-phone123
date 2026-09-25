@@ -131,6 +131,8 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
             return <QuoteBubble msg={msg} displayContent={displayContent} defaultTranslationExpanded={defaultTranslationExpanded} />;
         case "music_share":
             return <MusicShareBubble msg={msg} onPlay={onMusicPlay} />;
+        case "listen_invite":
+            return <ListenInviteBubble msg={msg} />;
         case "media_file":
             return <MediaFileBubble msg={msg} onUpdate={onUpdate} characterId={characterId} />;
         case "xiaohongshu_note_share":
@@ -2584,6 +2586,33 @@ function MediaFileBubble({
                 <span className="chat-media-file-title">{title}</span>
             </div>
             {url && <MediaSaveButton url={url} filename={ensureExtension(title, "file")} />}
+        </div>
+    );
+}
+
+function ListenInviteBubble({ msg }: { msg: ChatMessage }) {
+    const title = msg.mediaData?.musicTitle || "";
+    const openMusic = () => {
+        if (typeof window === "undefined") return;
+        window.dispatchEvent(new CustomEvent("open-app", { detail: { appId: "music" } }));
+    };
+    return (
+        <div className="chat-music-share-card" style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); openMusic(); }}>
+            <div className="chat-music-share-body">
+                <div className="chat-music-share-cover">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-music-accent, #7c9a92)" strokeWidth="1.2">
+                        <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                    </svg>
+                </div>
+                <div className="chat-music-share-info">
+                    <div className="chat-music-share-title">一起听歌</div>
+                    <div className="chat-music-share-artist">{title ? `想和你一起听《${title}》` : "想和你一起听歌"}</div>
+                </div>
+            </div>
+            <div className="chat-music-share-footer">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+                <span>点我开启一起听</span>
+            </div>
         </div>
     );
 }
