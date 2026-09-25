@@ -4,9 +4,10 @@ import { kvGet, kvSet } from "./kv-db";
 
 export type FavoriteSong = {
     id: string;
-    source: "local" | "netease";
+    source: "local" | "netease" | "custom";
     trackId?: string;        // 本地歌曲 id（source=local）
     neteaseId?: number;      // 网易云歌曲 id（source=netease）
+    query?: string;          // source=custom 时用于播放时再搜索
     title: string;
     artist: string;
     album?: string;
@@ -43,12 +44,13 @@ function normalizeSong(value: unknown): FavoriteSong | null {
     if (!value || typeof value !== "object") return null;
     const item = value as Partial<FavoriteSong>;
     if (typeof item.title !== "string" || !item.title.trim()) return null;
-    const source: FavoriteSong["source"] = item.source === "netease" ? "netease" : "local";
+    const source: FavoriteSong["source"] = item.source === "netease" ? "netease" : item.source === "custom" ? "custom" : "local";
     return {
         id: typeof item.id === "string" && item.id ? item.id : generateFavoriteSongId(),
         source,
         trackId: typeof item.trackId === "string" ? item.trackId : undefined,
         neteaseId: typeof item.neteaseId === "number" ? item.neteaseId : undefined,
+        query: typeof item.query === "string" ? item.query : undefined,
         title: item.title,
         artist: typeof item.artist === "string" ? item.artist : "",
         album: typeof item.album === "string" ? item.album : undefined,
@@ -59,9 +61,13 @@ function normalizeSong(value: unknown): FavoriteSong | null {
     };
 }
 
+function isCharacterFavorites(value: unknown): value is Partial<CharacterFavorites> {
+    return Boolean(value) && typeof value === "object";
+}
+
 function normalizeFavorites(value: unknown, fallbackId: string): CharacterFavorites | null {
-    if (!value || typeof value !== "object") return null;
-    const item = value as Partial<CharacterFavorites>;
+    if (!isCharacterFavorites(value)) return null;
+    const item = value;
     const characterId = typeof item.characterId === "string" && item.characterId ? item.characterId : fallbackId;
     if (!characterId) return null;
     const now = new Date().toISOString();
@@ -151,21 +157,34 @@ export function updateCharacterFavorites(
     return saveCharacterFavorites(merged);
 }
 
-function songKey(song: Pick<FavoriteSong, "source" | "trackId" | "neteaseId">): string {
+type SongIdentity = {
+    source?: FavoriteSong["source"];
+    trackId?: string;
+    neteaseId?: number;
+    title?: string;
+    artist?: string;
+};
+
+function songKey(song: SongIdentity): string {
     if (song.source === "netease" && song.neteaseId) return `netease_${song.neteaseId}`;
     if (song.trackId) return `local_${song.trackId}`;
-    return "";
+    const title = (song.title || "").trim();
+    const artist = (song.artist || "").trim();
+    if (!title && !artist) return "";
+    return `text_${title}_${artist}`;
 }
+
+export type NewFavoriteSong = Omit<FavoriteSong, "id" | "addedAt"> & { id?: string; addedAt?: string };
 
 /** 往角色歌单加歌；重复则不重复添加 */
 export function addFavoriteSong(
     characterId: string,
     characterName: string,
-    song: Omit<FavoriteSong, "id" | "addedAt"> & { id?: string; addedAt?: string },
+    song: NewFavoriteSong,
 ): { favorites: CharacterFavorites; added: boolean } {
     const current = getCharacterFavorites(characterId, characterName);
     const key = songKey(song);
-    if (key && current.songs.some(item => songKey(item) === key)) {
+    if (current.songs.some(item => songKey(item) === key)) {
         return { favorites: current, added: false };
     }
     const entry: FavoriteSong = {
@@ -187,7 +206,7 @@ export function removeFavoriteSong(characterId: string, characterName: string, s
     return saveCharacterFavorites({ ...current, songs: current.songs.filter(item => item.id !== songId) });
 }
 
-export function isFavoriteSong(characterId: string, characterName: string, song: Pick<FavoriteSong, "source" | "trackId" | "neteaseId">): boolean {
+export function isFavoriteSong(characterId: string, characterName: string, song: SongIdentity): boolean {
     const key = songKey(song);
     if (!key) return false;
     return getCharacterFavorites(characterId, characterName).songs.some(item => songKey(item) === key);
