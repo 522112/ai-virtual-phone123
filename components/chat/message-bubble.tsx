@@ -49,6 +49,7 @@ interface MessageBubbleProps {
     onMusicPlay?: (title: string, artist?: string) => void;
     onActionSelect?: (text: string) => void;
     onRelationshipAction?: (msg: ChatMessage, action: "accept" | "decline" | "open") => void;
+    onListenInviteAction?: (msg: ChatMessage, action: "accept" | "decline" | "open") => void;
     displayContent?: string;
     defaultTranslationExpanded?: boolean;
 }
@@ -94,7 +95,7 @@ function PluginKindBubble({ msg, kind }: { msg: ChatMessage; kind: string }) {
  * Renders a message bubble based on its mediaType.
  * Falls back to ReactMarkdown for plain text messages.
  */
-export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charName, userName, onSystemMessage, groupSize, onShowDetail, characterId, onMusicPlay, onActionSelect, onRelationshipAction, displayContent, defaultTranslationExpanded = false }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charName, userName, onSystemMessage, groupSize, onShowDetail, characterId, onMusicPlay, onActionSelect, onRelationshipAction, onListenInviteAction, displayContent, defaultTranslationExpanded = false }: MessageBubbleProps) {
     if (isForwardedChatRecord(msg)) {
         return <ForwardCardBubble msg={msg} displayContent={displayContent} onOpen={() => onShowDetail?.(msg)} />;
     }
@@ -132,7 +133,7 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
         case "music_share":
             return <MusicShareBubble msg={msg} onPlay={onMusicPlay} />;
         case "listen_invite":
-            return <ListenInviteBubble msg={msg} />;
+            return <ListenInviteBubble msg={msg} onAction={onListenInviteAction} />;
         case "media_file":
             return <MediaFileBubble msg={msg} onUpdate={onUpdate} characterId={characterId} />;
         case "xiaohongshu_note_share":
@@ -185,6 +186,7 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
     if (prev.displayContent !== next.displayContent) return false;
     if (prev.defaultTranslationExpanded !== next.defaultTranslationExpanded) return false;
     if (prev.onRelationshipAction !== next.onRelationshipAction) return false;
+    if (prev.onListenInviteAction !== next.onListenInviteAction) return false;
     return true;
 });
 
@@ -2590,32 +2592,50 @@ function MediaFileBubble({
     );
 }
 
-function ListenInviteBubble({ msg }: { msg: ChatMessage }) {
-    const title = msg.mediaData?.musicTitle || "";
-    const openMusic = () => {
-        if (typeof window === "undefined") return;
-        window.dispatchEvent(new CustomEvent("open-app", { detail: { appId: toCustomAppIconId("music") } }));
-    };
+function ListenInviteBubble({ msg, onAction }: { msg: ChatMessage; onAction?: (msg: ChatMessage, action: "accept" | "decline" | "open") => void }) {
+    const data = msg.mediaData || {};
+    const title = data.musicTitle || "";
+    const artist = data.musicArtist || "";
+    const text = data.inviteText || "";
+    const direction = data.inviteDirection === "outgoing" ? "outgoing" : "incoming";
+    const status = data.status || "pending";
+    const incoming = msg.role === "assistant" && status === "pending" && direction === "incoming";
+    const mine = msg.role === "user" && direction === "outgoing";
+    const accepted = status === "accepted";
+    const declined = status === "declined";
+    const statusText = accepted ? "\u5df2\u8fdb\u5165\u4e00\u8d77\u542c" : declined ? "\u5df2\u62d2\u7edd" : incoming ? "\u7b49\u4f60\u8fdb\u5165" : mine && status === "pending" ? "\u7b49\u5bf9\u65b9\u8fdb\u5165" : "\u4e00\u8d77\u542c";
+    const desc = text || (title ? "\u60f3\u548c\u4f60\u4e00\u8d77\u542c\u300a" + title + "\u300b" : "\u4e00\u8d77\u542c\u9080\u8bf7");
+    const showEnter = incoming || (mine && status === "pending") || accepted;
     return (
-        <div className="chat-music-share-card" style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); openMusic(); }}>
-            <div className="chat-music-share-body">
-                <div className="chat-music-share-cover">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-music-accent, #7c9a92)" strokeWidth="1.2">
-                        <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
-                    </svg>
-                </div>
-                <div className="chat-music-share-info">
-                    <div className="chat-music-share-title">一起听歌</div>
-                    <div className="chat-music-share-artist">{title ? `想和你一起听《${title}》` : "想和你一起听歌"}</div>
+        <div className="chat-rel-card" data-status={status} style={{ "--rel-accent": "#7c9a92" } as React.CSSProperties}>
+            <div className="chat-rel-card-body">
+                <span className="chat-rel-card-mark">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--rel-accent, #7c9a92)" strokeWidth="1.4"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+                </span>
+                <div className="chat-rel-card-copy">
+                    <div className="chat-rel-card-title">\u4e00\u8d77\u542c</div>
+                    <div className="chat-rel-card-desc">{desc}{artist ? " - " + artist : ""}</div>
                 </div>
             </div>
-            <div className="chat-music-share-footer">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-                <span>点我开启一起听</span>
+            <div className="chat-rel-card-foot">
+                <span className="chat-rel-card-kicker">\u4e00\u8d77\u542c\u9080\u7ea6</span>
+                <span className="chat-rel-card-status">{statusText}</span>
+                {incoming ? (
+                    <div className="chat-rel-card-actions">
+                        <button type="button" className="chat-rel-card-btn chat-rel-card-btn-decline" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "decline"); }}>\u62d2\u7edd</button>
+                        <button type="button" className="chat-rel-card-btn chat-rel-card-btn-accept" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "accept"); }}>\u8fdb\u5165\u4e00\u8d77\u542c</button>
+                    </div>
+                ) : showEnter ? (
+                    <div className="chat-rel-card-actions">
+                        {mine && status === "pending" ? (<button type="button" className="chat-rel-card-btn chat-rel-card-btn-decline" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "decline"); }}>\u4e0d\u8fdb</button>) : null}
+                        <button type="button" className="chat-rel-card-btn chat-rel-card-btn-accept" onClick={(e) => { e.stopPropagation(); onAction?.(msg, accepted ? "open" : "accept"); }}>\u8fdb\u5165\u4e00\u8d77\u542c</button>
+                    </div>
+                ) : null}
             </div>
         </div>
     );
 }
+
 
 function MusicShareBubble({ msg, onPlay }: { msg: ChatMessage; onPlay?: (title: string, artist?: string) => void }) {
     const title = msg.mediaData?.musicTitle || "未知歌曲";
