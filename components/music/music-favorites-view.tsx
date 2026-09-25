@@ -9,6 +9,7 @@ import type { MusicTrack } from "@/lib/music-storage";
 import type { MusicControlsValue } from "@/lib/music-context";
 import { searchNetease, type NeteaseSearchResult } from "@/lib/music-service";
 import { fileToCompressedDataUrl } from "@/lib/music-bg";
+import { getMusicControlBridge } from "@/lib/music-control-bridge";
 import { ChatFallbackAvatar } from "@/components/chat/chat-fallback-avatar";
 import {
     MUSIC_FAVORITES_UPDATED_EVENT,
@@ -186,7 +187,7 @@ export default function MusicFavoritesView({ player, formatTime, tracks, onPlayL
         }
         const keyword = [song.title, song.artist].filter(Boolean).join(" ").trim();
         if (keyword) {
-            void player.playByQuery(song.title, song.artist || undefined);
+            void getMusicControlBridge()?.playByQuery(song.title, song.artist || undefined);
         } else {
             onToast("这首歌暂时无法播放");
         }
