@@ -1,6 +1,7 @@
 // lib/music-favorites-storage.ts — 每个角色单独一份"喜欢的歌单"（名字/详情/封面/歌曲）
 
 import { kvGet, kvSet } from "./kv-db";
+import { pushMusicSystemNotice } from "./music-action-queue";
 
 export type FavoriteSong = {
     id: string;
@@ -27,6 +28,8 @@ export type CharacterFavorites = {
     createdAt: string;
     updatedAt: string;
 };
+
+export type FavoritesActor = "user" | "character";
 
 const STORAGE_KEY = "ai_phone_music_favorites_v1";
 export const MUSIC_FAVORITES_UPDATED_EVENT = "music-favorites-updated";
@@ -61,25 +64,25 @@ function normalizeSong(value: unknown): FavoriteSong | null {
     };
 }
 
-function isCharacterFavorites(value: unknown): value is Partial<CharacterFavorites> {
+function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === "object";
 }
 
 function normalizeFavorites(value: unknown, fallbackId: string): CharacterFavorites | null {
-    if (!isCharacterFavorites(value)) return null;
-    const item = value;
-    const characterId = typeof item.characterId === "string" && item.characterId ? item.characterId : fallbackId;
+    if (!isRecord(value)) return null;
+    const characterId = typeof value.characterId === "string" && value.characterId ? value.characterId : fallbackId;
     if (!characterId) return null;
     const now = new Date().toISOString();
+    const songs = Array.isArray(value.songs) ? value.songs : [];
     return {
         characterId,
-        characterName: typeof item.characterName === "string" ? item.characterName : "角色",
-        name: typeof item.name === "string" && item.name.trim() ? item.name : "喜欢的音乐",
-        description: typeof item.description === "string" ? item.description : "",
-        coverUrl: typeof item.coverUrl === "string" ? item.coverUrl : "",
-        songs: Array.isArray(item.songs) ? item.songs.map(normalizeSong).filter(Boolean) as FavoriteSong[] : [],
-        createdAt: typeof item.createdAt === "string" ? item.createdAt : now,
-        updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : now,
+        characterName: typeof value.characterName === "string" ? value.characterName : "角色",
+        name: typeof value.name === "string" && value.name.trim() ? value.name : "喜欢的音乐",
+        description: typeof value.description === "string" ? value.description : "",
+        coverUrl: typeof value.coverUrl === "string" ? value.coverUrl : "",
+        songs: songs.map(normalizeSong).filter(Boolean) as FavoriteSong[],
+        createdAt: typeof value.createdAt === "string" ? value.createdAt : now,
+        updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : now,
     };
 }
 
@@ -142,11 +145,12 @@ export function saveCharacterFavorites(next: CharacterFavorites): CharacterFavor
     return updated;
 }
 
-/** 修改歌单名字 / 详情 / 封面 */
+/** 修改歌单名字 / 详情 / 封面（actor=user 时通知角色感知） */
 export function updateCharacterFavorites(
     characterId: string,
     characterName: string,
     patch: Partial<Pick<CharacterFavorites, "name" | "description" | "coverUrl">>,
+    actor: FavoritesActor = "user",
 ): CharacterFavorites {
     const current = getCharacterFavorites(characterId, characterName);
     const merged: CharacterFavorites = {
@@ -154,7 +158,23 @@ export function updateCharacterFavorites(
         characterName: characterName || current.characterName,
         ...patch,
     };
-    return saveCharacterFavorites(merged);
+    const saved = saveCharacterFavorites(merged);
+
+    if (actor === "user") {
+        const changes: string[] = [];
+        if (patch.name !== undefined) changes.push(`名字改成了「${patch.name}」`);
+        if (patch.description !== undefined) changes.push(`简介改成了：${patch.description || "（清空）"}`);
+        if (patch.coverUrl !== undefined) changes.push("换了新封面");
+        if (changes.length > 0) {
+            pushMusicSystemNotice(
+                characterId,
+                `[用户修改了你的歌单：${changes.join("；")}]`,
+                { triggerReply: patch.name !== undefined || patch.description !== undefined },
+            );
+        }
+    }
+
+    return saved;
 }
 
 type SongIdentity = {
@@ -176,11 +196,12 @@ function songKey(song: SongIdentity): string {
 
 export type NewFavoriteSong = Omit<FavoriteSong, "id" | "addedAt"> & { id?: string; addedAt?: string };
 
-/** 往角色歌单加歌；重复则不重复添加 */
+/** 往角色歌单加歌；重复则不重复添加（actor=user 时通知角色感知） */
 export function addFavoriteSong(
     characterId: string,
     characterName: string,
     song: NewFavoriteSong,
+    actor: FavoritesActor = "user",
 ): { favorites: CharacterFavorites; added: boolean } {
     const current = getCharacterFavorites(characterId, characterName);
     const key = songKey(song);
@@ -198,12 +219,38 @@ export function addFavoriteSong(
         songs: [...current.songs, entry],
     };
     const saved = saveCharacterFavorites(next);
+
+    if (actor === "user") {
+        const artist = entry.artist ? ` - ${entry.artist}` : "";
+        pushMusicSystemNotice(
+            characterId,
+            `[用户往你的歌单里加了一首歌：《${entry.title}》${artist}]`,
+            { triggerReply: true },
+        );
+    }
+
     return { favorites: saved, added: true };
 }
 
-export function removeFavoriteSong(characterId: string, characterName: string, songId: string): CharacterFavorites {
+export function removeFavoriteSong(
+    characterId: string,
+    characterName: string,
+    songId: string,
+    actor: FavoritesActor = "user",
+): CharacterFavorites {
     const current = getCharacterFavorites(characterId, characterName);
-    return saveCharacterFavorites({ ...current, songs: current.songs.filter(item => item.id !== songId) });
+    const removed = current.songs.find(item => item.id === songId);
+    const saved = saveCharacterFavorites({ ...current, songs: current.songs.filter(item => item.id !== songId) });
+
+    if (actor === "user" && removed) {
+        pushMusicSystemNotice(
+            characterId,
+            `[用户从你的歌单里删掉了《${removed.title}》]`,
+            { triggerReply: true },
+        );
+    }
+
+    return saved;
 }
 
 export function isFavoriteSong(characterId: string, characterName: string, song: SongIdentity): boolean {
