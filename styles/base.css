@@ -14,6 +14,10 @@ body {
   min-height: 100%;
   overscroll-behavior-y: none;
   touch-action: pan-x pan-y;
+  /* 禁止安卓 WebView / 移动浏览器自动放大文字（font boosting）：
+     打包 App 里字被系统字体大小撑大、布局被挤坏就是它导致的 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
