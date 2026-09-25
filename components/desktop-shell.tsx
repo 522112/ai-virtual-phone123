@@ -4214,6 +4214,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
           "--status-bar-drop": `${draftTheme.statusBarDropPx ?? 0}px`
         } as React.CSSProperties}
         data-hide-top-bar={draftTheme.hideTopBar ? "1" : "0"}
+        data-hide-case={draftTheme.showPhoneFrame === false ? "1" : "0"}
       >
         {/* User's global custom CSS is injected via useEffect into document.head */}
         <div className="phone-case">
@@ -5002,6 +5003,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                 );
               })()}
 
+              {draftTheme.showHomeBar === false ? null : (
               <PhoneHomeBar
                 recents={recentAppIds.map(id => {
                   const meta = getDesktopIconMeta(id);
@@ -5035,6 +5037,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
                   }
                 }}
               />
+              )}
 
               {/* Drag ghost — absolutely positioned INSIDE .phone-shell so the
                   clone keeps theme variables + glass effect selectors
