@@ -2578,7 +2578,7 @@ async function executeMusicFavoriteTool(args: Record<string, unknown>, context?:
         };
     }
 
-    const saved = addFavoriteSong(characterId, characterName, entry);
+    const saved = addFavoriteSong(characterId, characterName, entry, "character");
     return musicToolSuccess("添加到歌单", {
         added: saved.added,
         playlist: saved.favorites.name,
@@ -2615,7 +2615,7 @@ async function executeMusicEditFavoritesTool(args: Record<string, unknown>, cont
     const patch: { name?: string; description?: string } = {};
     if (name) patch.name = name;
     if (description) patch.description = description;
-    const updated = updateCharacterFavorites(characterId, characterName, patch);
+    const updated = updateCharacterFavorites(characterId, characterName, patch, "character");
     return musicToolSuccess("修改歌单", {
         name: updated.name,
         description: updated.description,
