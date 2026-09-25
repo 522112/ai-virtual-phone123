@@ -184,7 +184,12 @@ export default function MusicFavoritesView({ player, formatTime, tracks, onPlayL
             });
             return;
         }
-        onToast("这首歌暂时无法播放");
+        const keyword = [song.title, song.artist].filter(Boolean).join(" ").trim();
+        if (keyword) {
+            void player.playByQuery(song.title, song.artist || undefined);
+        } else {
+            onToast("这首歌暂时无法播放");
+        }
     };
 
     if (characters.length === 0) {
