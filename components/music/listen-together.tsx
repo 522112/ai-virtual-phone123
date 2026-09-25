@@ -10,12 +10,13 @@ import { COUPLE_AVATARS_UPDATED_EVENT, overlayCharacterForDisplay, overlayUserId
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import { generateListenTogetherReply, splitListenTogetherBubbles, type ListenTogetherAction } from "@/lib/listen-together-engine";
 import { getMusicControlBridge } from "@/lib/music-control-bridge";
-import { buildListenTogetherCardHtml, sendListenTogetherRefuse, sendListenTogetherShare } from "@/lib/listen-together-share";
+import { buildListenTogetherCardHtml, sendListenTogetherInviteCard, sendListenTogetherRefuse, sendListenTogetherShare } from "@/lib/listen-together-share";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import {
     LISTEN_TOGETHER_UPDATED_EVENT,
     appendListenTogetherMessage,
     appendListenTogetherTrack,
+    createListenTogetherInvite,
     deleteListenTogetherMessage,
     endListenTogetherSession,
     formatListenDuration,
@@ -24,7 +25,6 @@ import {
     getListenTogetherSession,
     loadListenTogetherSessions,
     setListenTogetherBg,
-    startListenTogetherSession,
 } from "@/lib/listen-together-storage";
 import type { ListenTogetherSession, ListenTogetherTrack } from "@/lib/listen-together-types";
 import { parseChatBubbleDisplay, sanitizeListenTogetherText } from "@/lib/chat-message-display";
@@ -324,16 +324,23 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
         setPanel("closed");
         return;
       }
-      const next = startListenTogetherSession({
+      const invite = createListenTogetherInvite({
         characterId: character.id,
         characterName: character.name,
         track,
+        inviteText: reply.text,
+        direction: "outgoing",
       });
-      setSession(next);
-      setPanel("chat");
-      announcedTrackRef.current = track.id;
-      if (reply.text) await appendBubbles(next.id, "character", reply.text);
-      await applyActions(reply.actions.filter(item => item.kind !== "refuse"));
+      sendListenTogetherInviteCard({
+        characterId: character.id,
+        characterName: character.name,
+        direction: "outgoing",
+        track,
+        text: reply.text,
+        inviteId: invite.id,
+      });
+      notify("对方答应了，去聊天点卡片进入一起听");
+      setPanel("closed");
       refresh();
     } catch (error) {
       notify(error instanceof Error ? error.message : "对方还没开口");
