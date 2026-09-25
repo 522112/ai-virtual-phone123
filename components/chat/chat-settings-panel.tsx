@@ -33,6 +33,7 @@ import {
     type GroupAdminAction,
 } from "@/lib/group-admin";
 import { clearChatOfflineTurns } from "@/lib/chat-offline-storage";
+import { notifyCharacterOfUserRemarkChange } from "@/lib/contact-remarks";
 import { removeChatSessionCompletely } from "@/lib/chat-session-remove";
 import { triggerDeleteFriendReaction } from "@/lib/friend-request-engine";
 import { loadCharacters } from "@/lib/character-storage";
@@ -1583,7 +1584,11 @@ export function ChatSettingsPanel({
                                 if (session.isGroup) {
                                     updateSession({ groupName });
                                 } else {
+                                    const prevAlias = session.alias || "";
                                     updateSession({ alias });
+                                    if (alias !== prevAlias) {
+                                        notifyCharacterOfUserRemarkChange(session.contactId, prevAlias, alias);
+                                    }
                                 }
                                 setEditingAlias(false);
                             }} className="ui-btn ui-btn-success flex-1">保存</button>
