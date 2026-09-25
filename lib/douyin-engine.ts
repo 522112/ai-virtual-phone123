@@ -325,7 +325,7 @@ function fallbackAudienceDanmaku(room: DouyinLiveRoom, count: number, hint = "")
   };
 }
 
-export async function generateDouyinNpcLiveRefresh(count = 3): Promise<DouyinLiveRoom[]> {
+export async function generateDouyinNpcLiveRefresh(count = 7): Promise<DouyinLiveRoom[]> {
   const portraits = pickRandomDouyinNpcPortraits(Math.max(1, count));
   if (portraits.length === 0) {
     throw new DouyinGenerationError("NPC 立绘库为空，请先在创作中心上传立绘。");
