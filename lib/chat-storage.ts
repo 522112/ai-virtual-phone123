@@ -137,6 +137,7 @@ export type ChatMessage = {
         | "change_space_cover"
         | "relationship_space"
         | "contact_card"
+        | "listen_invite"
         | "app_card"
         | "tool_notice"
         | "tool_call"
