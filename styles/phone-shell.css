@@ -1839,3 +1839,15 @@
     transition: none;
   }
 }
+
+/* ── Frameless 底部贴边 + 整页锁定：dock 降到底部小横条上方，页面禁止滚动 ── */
+.phone-shell-wrap[data-hide-case="1"] .phone-workspace {
+  padding-bottom: 0;
+}
+.phone-shell-wrap[data-hide-case="1"] .dock {
+  margin-bottom: 10px;
+}
+body:has(.phone-shell-wrap[data-hide-case="1"]) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
