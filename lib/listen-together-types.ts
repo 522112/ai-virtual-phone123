@@ -25,3 +25,19 @@ export type ListenTogetherSession = {
   messages: ListenTogetherMessage[];
   status: "active" | "ended";
 };
+
+export type ListenTogetherInviteDirection = "incoming" | "outgoing";
+
+export type ListenTogetherInviteStatus = "pending" | "accepted" | "declined" | "expired";
+
+export type ListenTogetherInvite = {
+  id: string;
+  characterId: string;
+  characterName: string;
+  track?: ListenTogetherTrack;
+  inviteText?: string;
+  direction: ListenTogetherInviteDirection;
+  status: ListenTogetherInviteStatus;
+  createdAt: string;
+  decidedAt?: string;
+};
