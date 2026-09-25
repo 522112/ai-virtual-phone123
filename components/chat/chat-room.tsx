@@ -1495,11 +1495,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 
     // --- Music action queue: send music operations as system messages ---
     useEffect(() => {
-        const flushCallback = (text: string) => {
+        const flushCallback = (text: string, options?: { triggerReply?: boolean }) => {
             const sysMsg = pushChatMessage({ sessionId: session.id, role: "system", content: text });
             setMessages(prev => [...prev, sysMsg]);
+            if (options?.triggerReply && !session.isGroup) void triggerAIResponse();
         };
-        setChatActive(true, flushCallback);
+        setChatActive(true, flushCallback, session.contactId);
         return () => { setChatActive(false); };
     }, [session.id]);
 
