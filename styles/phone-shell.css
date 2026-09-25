@@ -1790,12 +1790,17 @@
   width: 100%;
   max-width: 100%;
   min-height: 100dvh;
-  justify-items: center;
+  gap: 0;
 }
 .phone-shell-wrap[data-hide-case="1"] .phone-case,
 .phone-shell-wrap[data-hide-case="1"] .phone-frame {
-  width: min(100%, 430px);
-  margin-inline: auto;
+  width: 100%;
+  max-width: 100%;
+  margin-inline: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .phone-shell-wrap[data-hide-case="1"] .phone-shell {
   width: 100%;
@@ -1803,4 +1808,25 @@
   height: 100dvh;
   max-height: 100dvh;
   border-radius: 0;
+  padding: 0;
+  overflow: hidden;
+}
+/* 触屏设备：整块钉死在视口，锁定不跟页面滚动，进应用也不再有白边 */
+@media (hover: none) and (pointer: coarse) {
+  .phone-shell-wrap[data-hide-case="1"] {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+  }
+}
+/* 宽屏（电脑/平板横屏）：内容列居中限宽，避免撑成一条 */
+@media (min-width: 600px) {
+  .phone-shell-wrap[data-hide-case="1"] {
+    justify-items: center;
+  }
+  .phone-shell-wrap[data-hide-case="1"] .phone-case,
+  .phone-shell-wrap[data-hide-case="1"] .phone-frame {
+    width: min(100%, 430px);
+    margin-inline: auto;
+  }
 }
