@@ -51,7 +51,7 @@ import type { NoteWallBoard, NoteWallComment, NoteWallNote, NoteWallSize } from 
 import { findNoteWallPlacement, normalizeNoteWallSize } from "./notewall-utils";
 import { recordNoteWallCommentEvent, recordNoteWallNoteEvent } from "./notewall-memory";
 import { getMusicControlBridge } from "./music-control-bridge";
-import { addFavoriteSong } from "./music-favorites-storage";
+import { addFavoriteSong, getCharacterFavorites, updateCharacterFavorites } from "./music-favorites-storage";
 import { loadAllTracks, type MusicTrack } from "./music-storage";
 import {
     checkLoginStatus,
@@ -1022,7 +1022,9 @@ function isMusicControlToolName(name: string): boolean {
         || name === "播放音乐"
         || name === "加入播放列表"
         || name === "切换音乐"
-        || name === "添加到歌单";
+        || name === "添加到歌单"
+        || name === "查看我的歌单"
+        || name === "修改歌单";
 }
 
 function isCalendarToolName(name: string): boolean {
@@ -1875,6 +1877,10 @@ async function executeMusicControlTool(call: ToolCall, context?: ToolExecutionCo
                 return executeMusicSwitchTool(call.args);
             case "添加到歌单":
                 return await executeMusicFavoriteTool(call.args, context);
+            case "查看我的歌单":
+                return await executeMusicViewFavoritesTool(context);
+            case "修改歌单":
+                return await executeMusicEditFavoritesTool(call.args, context);
         }
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -2505,31 +2511,23 @@ async function executeMusicQueueTool(args: Record<string, unknown>): Promise<Too
     });
 }
 
-async function executeMusicFavoriteTool(args: Record<string, unknown>, context?: ToolExecutionContext): Promise<ToolResult> {
-    const characterId = context?.characterId;
-    if (!characterId) {
-        return { name: "添加到歌单", success: false, error: "缺少角色信息", continueConversation: false, persistToHistory: false, userNotice: "当前场景无法添加到歌单" };
-    }
-    const characterName = loadCharacters().find(character => character.id === characterId)?.name || "角色";
-    const source = cleanToolString(args.source, 20);
-    const songId = args.songId ?? args.song_id ?? args.id;
-    const query = cleanToolString(args.query ?? args.keyword ?? args.title, 160);
+type FavoriteEntry = {
+    source: "local" | "netease" | "custom";
+    trackId?: string;
+    neteaseId?: number;
+    query?: string;
+    title: string;
+    artist: string;
+    album?: string;
+    coverUrl?: string;
+    duration?: number;
+    addedBy: "character";
+};
 
-    let track: MusicTrack | null = null;
-    if (songId !== undefined && songId !== null && String(songId).trim()) {
-        track = await resolveMusicTrackById(source, songId);
-    } else if (query) {
-        const results = await unifiedSearch(query);
-        const first = results[0];
-        if (first) {
-            track = first.source === "local" && first.localTrack ? first.localTrack : first.neteaseResult ? neteaseResultToTrack(first.neteaseResult) : null;
-        }
-    }
-    if (!track) return { name: "添加到歌单", success: false, error: "没有找到这首歌" };
-
+function favoriteEntryFromTrack(track: MusicTrack): FavoriteEntry {
     const isNetease = track.id.startsWith("netease_");
     const neteaseId = isNetease ? Number(track.id.replace(/^netease_/, "")) : undefined;
-    const saved = addFavoriteSong(characterId, characterName, {
+    return {
         source: isNetease ? "netease" : "local",
         trackId: isNetease ? undefined : track.id,
         neteaseId: neteaseId !== undefined && Number.isFinite(neteaseId) ? neteaseId : undefined,
@@ -2539,13 +2537,90 @@ async function executeMusicFavoriteTool(args: Record<string, unknown>, context?:
         coverUrl: track.coverUrl,
         duration: Math.round(track.duration || 0),
         addedBy: "character",
-    });
+    };
+}
+
+async function executeMusicFavoriteTool(args: Record<string, unknown>, context?: ToolExecutionContext): Promise<ToolResult> {
+    const characterId = context?.characterId;
+    if (!characterId) {
+        return { name: "添加到歌单", success: false, error: "缺少角色信息", continueConversation: false, persistToHistory: false, userNotice: "当前场景无法添加到歌单" };
+    }
+    const characterName = loadCharacters().find(character => character.id === characterId)?.name || "角色";
+    const source = cleanToolString(args.source, 20).toLowerCase();
+    const songId = args.songId ?? args.song_id ?? args.id;
+    const query = cleanToolString(args.query ?? args.keyword, 160);
+    const titleArg = cleanToolString(args.title ?? args.songName ?? args.name, 120);
+    const artistArg = cleanToolString(args.artist ?? args.singer, 80);
+
+    let entry: FavoriteEntry | null = null;
+
+    if (songId !== undefined && songId !== null && String(songId).trim()) {
+        const track = await resolveMusicTrackById(source, songId);
+        if (track) entry = favoriteEntryFromTrack(track);
+    }
+    if (!entry && query) {
+        const results = await unifiedSearch(query).catch(() => []);
+        const first = results[0];
+        if (first && first.source === "local" && first.localTrack) entry = favoriteEntryFromTrack(first.localTrack);
+        else if (first && first.neteaseResult) entry = favoriteEntryFromTrack(neteaseResultToTrack(first.neteaseResult));
+    }
+    if (!entry) {
+        const fallbackTitle = titleArg || query;
+        if (!fallbackTitle && !artistArg) {
+            return { name: "添加到歌单", success: false, error: "缺少歌曲信息", continueConversation: false, persistToHistory: false, userNotice: "要加哪首歌呢？告诉我歌名就行。" };
+        }
+        entry = {
+            source: "custom",
+            query: [fallbackTitle, artistArg].filter(Boolean).join(" "),
+            title: fallbackTitle || artistArg,
+            artist: artistArg,
+            addedBy: "character",
+        };
+    }
+
+    const saved = addFavoriteSong(characterId, characterName, entry);
     return musicToolSuccess("添加到歌单", {
         added: saved.added,
         playlist: saved.favorites.name,
-        song: formatMusicTrackForTool(track),
+        songCount: saved.favorites.songs.length,
+        song: { title: entry.title, artist: entry.artist },
     }, {
-        userNotice: saved.added ? `已把「${track.title}」加入${characterName}的歌单` : "这首歌已经在歌单里了",
+        userNotice: saved.added ? `已把「${entry.title}」加入${characterName}的歌单` : "这首歌已经在歌单里了",
+    });
+}
+
+async function executeMusicViewFavoritesTool(context?: ToolExecutionContext): Promise<ToolResult> {
+    const characterId = context?.characterId;
+    if (!characterId) return { name: "查看我的歌单", success: false, error: "缺少角色信息" };
+    const characterName = loadCharacters().find(character => character.id === characterId)?.name || "角色";
+    const playlist = getCharacterFavorites(characterId, characterName);
+    return musicToolSuccess("查看我的歌单", {
+        character: characterName,
+        name: playlist.name,
+        description: playlist.description,
+        songCount: playlist.songs.length,
+        songs: playlist.songs.slice(0, 50).map(song => ({ title: song.title, artist: song.artist, neteaseId: song.neteaseId })),
+    });
+}
+
+async function executeMusicEditFavoritesTool(args: Record<string, unknown>, context?: ToolExecutionContext): Promise<ToolResult> {
+    const characterId = context?.characterId;
+    if (!characterId) return { name: "修改歌单", success: false, error: "缺少角色信息" };
+    const characterName = loadCharacters().find(character => character.id === characterId)?.name || "角色";
+    const name = cleanToolString(args.name ?? args.playlistName ?? args.title, 60);
+    const description = cleanToolString(args.description ?? args.desc ?? args.detail, 300);
+    if (!name && !description) {
+        return { name: "修改歌单", success: false, error: "没有要修改的内容", userNotice: "要改成什么名字或详情呢？" };
+    }
+    const patch: { name?: string; description?: string } = {};
+    if (name) patch.name = name;
+    if (description) patch.description = description;
+    const updated = updateCharacterFavorites(characterId, characterName, patch);
+    return musicToolSuccess("修改歌单", {
+        name: updated.name,
+        description: updated.description,
+    }, {
+        userNotice: `歌单已更新为「${updated.name}」`,
     });
 }
 
