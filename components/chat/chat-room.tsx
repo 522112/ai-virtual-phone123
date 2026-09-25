@@ -99,6 +99,7 @@ import { emitChatPluginEvent, getChatPluginHookBus, runChatPluginTransform } fro
 import { CHAT_PLUGIN_TOAST_EVENT, getChatPluginRuntime } from "@/lib/chat-plugin-runtime";
 import { ChatPluginSlot } from "@/components/chat/chat-plugin-slot";
 import { RelationshipInviteModal } from "@/components/chat/relationship-invite-modal";
+import { CharacterBusinessCard } from "@/components/chat/character-business-card";
 import { RelationshipSpace } from "@/components/chat/relationship-space";
 import {
     acceptRelationship,
@@ -115,7 +116,9 @@ import {
     materializeRelationshipSpacePart,
     applyCharacterSpaceCover,
 } from "@/lib/relationship-storage";
+import { decideListenTogetherInvite, getActiveListenTogetherSession, getListenTogetherInvite, getPendingListenInvite, startListenTogetherSession } from "@/lib/listen-together-storage";
 import type { RelationshipSpaceCard } from "@/lib/relationship-storage";
+import { decideListenTogetherInvite, getActiveListenTogetherSession, getListenTogetherInvite, getPendingListenInvite, startListenTogetherSession } from "@/lib/listen-together-storage";
 import type { RelationshipBinding, RelationshipKind } from "@/lib/relationship-types";
 
 // ── Call system message detection ──────────────────────────
@@ -1165,6 +1168,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [customPlusActions, setCustomPlusActions] = useState<RegisteredCustomAppChatPlusAction[]>(() => loadCustomAppChatPlusActions());
     const [activeCustomChatPlus, setActiveCustomChatPlus] = useState<ActiveCustomChatPlus | null>(null);
     const [showSettings, setShowSettings] = useState(false);
+    const [showBusinessCard, setShowBusinessCard] = useState(false);
     const [showVoiceCall, setShowVoiceCall] = useState(false);
     const [showVideoCall, setShowVideoCall] = useState(false);
     const [callMinimized, setCallMinimized] = useState(false);
@@ -3715,6 +3719,52 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         setPendingGenerate(true);
     };
 
+    const handleListenInviteAction = (msg: ChatMessage, action: "accept" | "decline" | "open") => {
+        const inviteId = (msg.mediaData?.inviteId as string | undefined) || "";
+        const invite = inviteId ? getListenTogetherInvite(inviteId) : getPendingListenInvite(session.contactId);
+        const charName = character?.name || "\u5bf9\u65b9";
+        const openMusicApp = () => {
+            window.dispatchEvent(new CustomEvent("open-app", { detail: { appId: toCustomAppIconId("music") } }));
+        };
+        const markCard = (status: "accepted" | "declined") => {
+            const updated = { ...msg.mediaData, status };
+            updateMessageMediaData(msg.id, updated);
+            setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, mediaData: updated } : m));
+        };
+        const pushChoice = (text: string) => {
+            const card = pushChatMessage({ sessionId: session.id, role: "user", content: text });
+            setMessages(prev => [...prev, card]);
+            setPendingGenerate(true);
+        };
+        if (action === "open") {
+            const active = getActiveListenTogetherSession();
+            if (active && active.status === "active" && active.characterId === session.contactId) { openMusicApp(); return; }
+            if (invite && invite.status === "accepted") {
+                const running = getActiveListenTogetherSession();
+                if (!running || running.status !== "active" || running.characterId !== session.contactId) {
+                    startListenTogetherSession({ characterId: session.contactId, characterName: charName, track: invite.track });
+                }
+                openMusicApp(); return;
+            }
+            showChatToast("\u8fd8\u6ca1\u6709\u53ef\u8fdb\u5165\u7684\u4e00\u8d77\u542c");
+            return;
+        }
+        if (action === "accept") {
+            if (invite) decideListenTogetherInvite(invite.id, "accepted");
+            markCard("accepted");
+            const running = getActiveListenTogetherSession();
+            if (!running || running.status !== "active" || running.characterId !== session.contactId) {
+                startListenTogetherSession({ characterId: session.contactId, characterName: charName, track: invite?.track });
+            }
+            pushChoice("\u6211\u8fdb\u5165\u4e86\u4e00\u8d77\u542c");
+            openMusicApp();
+            return;
+        }
+        if (invite) decideListenTogetherInvite(invite.id, "declined");
+        markCard("declined");
+        pushChoice("\u6211\u62d2\u7edd\u4e86\u4e00\u8d77\u542c");
+    };
+
     const handleRelationshipAction = (msg: ChatMessage, action: "accept" | "decline" | "open") => {
         if (action === "open") {
             const id = msg.mediaData?.relationshipId
@@ -5881,6 +5931,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     <button className="page-back-btn" type="button" onClick={onBack} aria-label="返回">
                         <ChevronLeft size={24} strokeWidth={1.5} />
                     </button>
+                    <button type="button" className="page-back-btn" onClick={() => setShowBusinessCard(true)} aria-label="card" style={{ marginRight: 2 }}>{character?.avatar ? <img src={character.avatar} alt="" style={{ width: 26, height: 26, borderRadius: 13, objectFit: "cover" }} /> : <ChatFallbackAvatar />}</button>
                     <span className="page-title" style={{ position: 'relative' }}>
                         {offlineMode ? "线下 · " : ""}
                         {session.isGroup
@@ -5905,6 +5956,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 className="chat-plugin-header chat-room-main-pane"
             />
 
+            {showBusinessCard && !session.isGroup && (
+                <CharacterBusinessCard characterId={session.contactId} sessionId={session.id} onClose={() => setShowBusinessCard(false)} />
+            )}
             {/* Message List */}
             <div
                 ref={scrollRef}
@@ -6492,6 +6546,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                 onMusicPlay={handleMusicCardPlay}
                                                 onActionSelect={(text) => chatTextInputRef.current?.appendText(text)}
                                                 onRelationshipAction={handleRelationshipAction}
+                                                onListenInviteAction={handleListenInviteAction}
                                                 defaultTranslationExpanded={session.collapseBilingualTranslation !== false ? false : true}
                                             />
                                         </div>
