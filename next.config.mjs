@@ -22,6 +22,7 @@ function resolveDistDir() {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typedRoutes: true,
+  output: "standalone",
   outputFileTracingRoot: projectRoot,
   distDir: resolveDistDir(),
   eslint: {

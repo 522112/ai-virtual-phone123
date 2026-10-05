@@ -1,0 +1,7 @@
+{
+  "envId": "yifengge-d9g4v36551d220fc8",
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "cloudrun": {
+    "name": "ai-virtual-phone"
+  }
+}
