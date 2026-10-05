@@ -14,4 +14,4 @@ ENV HOST=0.0.0.0
 COPY --from=builder /app ./
 # 云托管会注入 PORT 环境变量，启动脚本优先读取 PORT
 EXPOSE 3000
-CMD ["npm", "start"]
+CMD ["bash", "-lc", "echo '[diag] NODE_ENV=$NODE_ENV HOST=$HOST PORT=$PORT'; echo '[diag] cwd=$(pwd)'; ls -la .next/BUILD_ID >/dev/null 2>&1 && echo '[diag] .next present' || echo '[diag] .next MISSING'; node scripts/local-next-server.mjs --prod --port ${PORT:-3000} --host 0.0.0.0"]
