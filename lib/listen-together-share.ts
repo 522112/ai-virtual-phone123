@@ -2,7 +2,7 @@ import { addChatContact, createOrGetSession, loadChatMessages, pushChatMessage, 
 import { sanitizeListenTogetherText } from "./chat-message-display";
 import { PENDING_REPLY_PREFIX } from "./friend-request-engine";
 import { kvSet } from "./kv-db";
-import { createListenTogetherInvite, decideListenTogetherInvite, formatListenDuration, getListenTogetherInvite } from "./listen-together-storage";
+import { createListenTogetherInvite, decideListenTogetherInvite, formatListenDuration, getListenTogetherInvite, loadListenTogetherSessions } from "./listen-together-storage";
 import type { ListenTogetherInvite, ListenTogetherSession, ListenTogetherTrack } from "./listen-together-types";
 import { loadCharacters } from "./character-storage";
 import { resolveUserIdentity } from "./settings-storage";
@@ -58,7 +58,93 @@ export function buildListenTogetherCardHtml(session: ListenTogetherSession, opts
   <div style="margin-top:10px;">${trackHtml}</div>${avatars}${idsRow}
 </section>`;
 }
+export function buildListenTogetherReportHtml(session: ListenTogetherSession, opts?: { characterAvatar?: string; userAvatar?: string }): string {
+  const duration = formatListenDuration(session);
+  const peerChar = loadCharacters().find(c => c.id === session.characterId) || null;
+  const peerAvatar = opts?.characterAvatar || peerChar?.avatar || "";
+  const identity = resolveUserIdentity(session.characterId, "chat");
+  const userAvatar = opts?.userAvatar || identity?.avatarUrl || "";
+  const peerId = peerChar?.screenName?.trim() || session.characterName;
+  const myId = identity?.name || "我";
+  const date = (session.startedAt || "").slice(0, 10).replace(/-/g, ".");
+  let cumulativeTracks = session.tracks.length;
+  try {
+    const mine = loadListenTogetherSessions().filter(item => item.characterId === session.characterId);
+    if (mine.length > 0) {
+      cumulativeTracks = mine.reduce((sum, item) => sum + item.tracks.length, 0);
+    }
+  } catch {
+    // 取不到累计就只显示本次
+  }
+  const messageCount = session.messages.length;
+  return `
+<section style="width:100%;max-width:230px;box-sizing:border-box;margin:0;padding:0;background:linear-gradient(170deg,#ff6a5e,#f43f4e 45%,#e8344a);color:#fff;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,0.45);overflow:hidden;">
+  <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:10px 12px 0;opacity:0.9;">
+    <span>网易云音乐 | 一起听</span>
+    <span>${escapeHtml(date)}</span>
+  </div>
+  <div style="display:flex;justify-content:center;margin-top:6px;">
+    ${userAvatar ? `<img src="${userAvatar}" alt="" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.85);" />` : ""}
+    ${peerAvatar ? `<img src="${peerAvatar}" alt="" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.85);margin-left:-12px;" />` : ""}
+  </div>
+  <div style="margin:10px 12px 0;background:#fff;color:#e8354b;border-radius:12px;padding:14px 10px;text-align:center;">
+    <div style="display:flex;">
+      <div style="flex:1;">
+        <div style="font-size:11px;opacity:0.75;">本次一起听了</div>
+        <div style="font-size:17px;font-weight:800;margin-top:4px;">${session.tracks.length}首歌曲</div>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:11px;opacity:0.75;">本次陪伴彼此</div>
+        <div style="font-size:17px;font-weight:800;margin-top:4px;">${escapeHtml(duration)}</div>
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:11px;opacity:0.65;">累计${cumulativeTracks}首歌曲 · ${escapeHtml(peerId)} · ${escapeHtml(myId)}</div>
+  </div>
+  <div style="margin:10px 12px 0;background:rgba(255,255,255,0.18);border-radius:12px;padding:10px;text-align:center;font-size:12px;">
+    互发消息 ${messageCount}条
+  </div>
+  <div style="padding:12px;text-align:center;font-size:10px;opacity:0.75;">扫码或用云音乐搜索「一起听」</div>
+</section>`;
+}
 
+export function sendListenTogetherReportCard(input: {
+  characterId: string;
+  characterName: string;
+  session: ListenTogetherSession;
+}): { sessionId: string; messageId: string } {
+  addChatContact(input.characterId);
+  const chat = createOrGetSession(input.characterId);
+  const html = buildListenTogetherReportHtml(input.session);
+  const title = `和${input.session.characterName}的一起听`;
+  const message = pushChatMessage({
+    sessionId: chat.id,
+    role: "user",
+    content: `${title}：${input.session.tracks.length}首，${formatListenDuration(input.session)}`,
+    mediaType: "app_card",
+    mediaData: {
+      appId: "music",
+      appName: "音乐",
+      appCardTitle: title,
+      appCardBody: `本次${input.session.tracks.length}首 · ${formatListenDuration(input.session)}`,
+      appCardSummary: `一起听报告 · 互发消息${input.session.messages.length}条`,
+      appCardLayout: {
+        appLabel: "一起听",
+        title,
+        subtitle: formatListenDuration(input.session),
+        body: input.session.tracks.map(item => item.title).join("、"),
+        html,
+        height: 330,
+        background: "#e8344a",
+        accentColor: "#ffffff",
+      },
+    },
+  });
+  if (typeof window !== "undefined") {
+    kvSet(PENDING_REPLY_PREFIX + chat.id, "1");
+    window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: chat.id } }));
+  }
+  return { sessionId: chat.id, messageId: message.id };
+}
 export function sendListenTogetherRefuse(input: {
   characterId: string;
   characterName: string;

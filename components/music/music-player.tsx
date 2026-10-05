@@ -16,7 +16,8 @@ import {
 } from "@/lib/music-service";
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
-import { ListenTogetherControls, ListenTogetherDuoStage, useActiveListenTogetherSession } from "./listen-together";
+import { ListenTogetherControls, useActiveListenTogetherSession } from "./listen-together";
+import { ListenTogetherPlayerBody, ListenTogetherQueueSheet } from "./listen-together-player";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
 
@@ -68,6 +69,8 @@ export default function MusicPlayer() {
     const [playerStyle, setPlayerStyle] = useState<PlayerStyle>(() =>
         (typeof window !== "undefined" && kvGet("music-player-style") === "vinyl") ? "vinyl" : "modern");
     const [showQueue, setShowQueue] = useState(false);
+    const [ltBodyTab, setLtBodyTab] = useState<"player" | "chat">("player");
+    const [showLtQueue, setShowLtQueue] = useState(false);
     const [showComments, setShowComments] = useState(false);
     const [artistView, setArtistView] = useState<{ id: number; name: string } | null>(null);
     const [palette, setPalette] = useState<CoverPalette>(DEFAULT_COVER_PALETTE);
@@ -77,10 +80,15 @@ export default function MusicPlayer() {
     usePhoneBack(() => {
         if (artistView) { setArtistView(null); return true; }
         if (showComments) { setShowComments(false); return true; }
+        if (showLtQueue) { setShowLtQueue(false); return true; }
         if (showQueue) { setShowQueue(false); return true; }
         player.closeFullPlayer();
         return true;
     }, 15);
+
+    useEffect(() => {
+        if (!listenTogether) setLtBodyTab("player");
+    }, [listenTogether]);
 
     useEffect(() => {
         const handleBgChange = () => setBgCfg(loadMusicBg());
@@ -496,7 +504,8 @@ export default function MusicPlayer() {
             {/* Body — cover / vinyl / glow lyrics */}
             <div className="mp-body">
                 {listenTogether ? (
-                    <ListenTogetherDuoStage
+                    <ListenTogetherPlayerBody
+                        session={listenTogether}
                         track={{
                             id: track.id,
                             title: track.title,
@@ -504,9 +513,11 @@ export default function MusicPlayer() {
                             coverUrl: track.coverUrl,
                             lyrics: track.lyrics,
                         }}
-                        lyrics={track.lyrics}
-                        currentTime={player.currentTime}
-                        playing={player.isPlaying}
+                        isPlaying={player.isPlaying}
+                        tab={ltBodyTab}
+                        onTabChange={setLtBodyTab}
+                        onOpenQueue={() => setShowLtQueue(true)}
+                        onNotice={showMusicToast}
                     />
                 ) : view === "lyrics" ? (
                     <div className="mp-lyrics-wrap" onClick={() => setView("cover")}>
@@ -669,6 +680,18 @@ export default function MusicPlayer() {
                     </svg>
                     <span>{commentTotal > 0 ? formatCount(commentTotal) : "评论"}</span>
                 </button>
+                {listenTogether && (
+                    <button
+                        className="mp-social-btn"
+                        onClick={() => setLtBodyTab("chat")}
+                        title="一起听聊天"
+                    >
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
+                        <span>聊天</span>
+                    </button>
+                )}
                 <ListenTogetherControls
                     track={{
                         id: track.id,
@@ -680,6 +703,13 @@ export default function MusicPlayer() {
                     onNotice={showMusicToast}
                 />
             </div>
+            {listenTogether && showLtQueue && (
+                <ListenTogetherQueueSheet
+                    sessionId={listenTogether.id}
+                    onClose={() => setShowLtQueue(false)}
+                    onNotice={showMusicToast}
+                />
+            )}
 
             {/* Queue drawer */}
             {showQueue && (

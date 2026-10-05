@@ -11,6 +11,7 @@ import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settin
 import { generateListenTogetherReply, splitListenTogetherBubbles, type ListenTogetherAction } from "@/lib/listen-together-engine";
 import { getMusicControlBridge } from "@/lib/music-control-bridge";
 import { buildListenTogetherCardHtml, revealListenTogetherOutcome, sendListenTogetherInviteCard, sendListenTogetherRefuse, sendListenTogetherShare } from "@/lib/listen-together-share";
+import { useMusicPlayer } from "@/lib/music-context";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import {
     LISTEN_TOGETHER_UPDATED_EVENT,
@@ -140,7 +141,10 @@ export function ListenTogetherDuoStage({
   return (
     <div className="lt-duo" data-avatar-rev={tick} data-playing={playing ? "" : undefined}>
       <div className="lt-duo-faces" data-playing={playing ? "" : undefined}>
-        <DuoAvatar src={identity?.avatarUrl} alt={userName} playing={playing} />
+        <span className="lt-duo-person">
+          <DuoAvatar src={identity?.avatarUrl} alt={userName} playing={playing} />
+          <em className="lt-duo-name">{userName}</em>
+        </span>
         <span className="lt-duo-link" aria-hidden="true">
           <svg width="28" height="22" viewBox="0 0 28 22" fill="none">
             <path d="M5 16V7.5L16 6v8.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -149,9 +153,11 @@ export function ListenTogetherDuoStage({
             <path d="M20.5 8.2c1.6-1.7 4.2-1.5 5.4.4 1 1.6.4 3.6-1.1 4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
         </span>
-        <DuoAvatar src={character?.avatar || undefined} alt={session.characterName} playing={playing} />
+        <span className="lt-duo-person">
+          <DuoAvatar src={character?.avatar || undefined} alt={session.characterName} playing={playing} />
+          <em className="lt-duo-name">{character?.screenName?.trim() || session.characterName}</em>
+        </span>
       </div>
-      <div className="lt-duo-caption">和{session.characterName}一起听</div>
       {/* 网易云式飘浮气泡：最近消息+表情弹幕 */}
       <div className="lt-float-layer" aria-hidden="true">
         {floatBubbles.map((m, i) => (
@@ -312,6 +318,7 @@ function ListenTogetherPlaylistPanel({ session, track, onBack, onNotice, refresh
 }
 
 export function ListenTogetherControls({ track, onNotice }: ListenTogetherControlsProps) {
+  const player = useMusicPlayer();
   const [panel, setPanel] = useState<Panel>("closed");
   const [session, setSession] = useState<ListenTogetherSession | null>(() => getActiveListenTogetherSession());
   const [history, setHistory] = useState<ListenTogetherSession[]>(() => loadListenTogetherSessions());
@@ -483,8 +490,37 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
       messages: [],
       status: "active",
     };
-    setBusy("正在邀请");
+    // 防重复邀请：还有没回复的邀请就别再发了（先检查再调 API，不浪费调用）
+    const existingPending = getPendingListenInvite(character.id);
+    if (existingPending) {
+      notify("已经邀请过了，等对方回复，别重复邀请");
+      setPanel("closed");
+      refresh();
+      return;
+    }
+    // 先把邀请卡发出去：状态 pending，聊天里转起进度条等对方
+    const invite = createListenTogetherInvite({
+      characterId: character.id,
+      characterName: character.name,
+      track,
+      inviteText: track ? `想和你一起听《${track.title}》` : "想和你一起听",
+      direction: "outgoing",
+    });
+    const sent = sendListenTogetherInviteCard({
+      characterId: character.id,
+      characterName: character.name,
+      direction: "outgoing",
+      track,
+      text: track ? `想和你一起听《${track.title}》` : "想和你一起听",
+      inviteId: invite.id,
+    });
+    notify("邀请已发出，等对方回应，去聊天看卡片进度");
+    setPanel("closed");
+    player.openFullPlayer();
+    refresh();
+    setBusy("对方正在决定");
     try {
+      // 发出邀请后直接调用一次 API：按人设+当下日程当场同意或拒绝，只调这一次
       const reply = await generateListenTogetherReply({
         characterId: character.id,
         session: draftSession,
@@ -493,34 +529,8 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
         opening: true,
       });
       const refused = reply.actions.some(item => item.kind === "refuse");
-      // 防重复邀请：还有没回复的邀请就别再发了
-      const existingPending = getPendingListenInvite(character.id);
-      if (existingPending) {
-        notify("已经邀请过了，等对方回复，别重复邀请");
-        setPanel("closed");
-        refresh();
-        return;
-      }
-      const invite = createListenTogetherInvite({
-        characterId: character.id,
-        characterName: character.name,
-        track,
-        inviteText: reply.text,
-        direction: "outgoing",
-      });
-      const sent = sendListenTogetherInviteCard({
-        characterId: character.id,
-        characterName: character.name,
-        direction: "outgoing",
-        track,
-        text: reply.text,
-        inviteId: invite.id,
-      });
-      notify("邀请已发出，等对方回应，去聊天看卡片进度");
-      setPanel("closed");
-      refresh();
-      // 对方不会秒回：12~20 秒后揭晓 TA 的决定，接受或拒绝都由 TA 定
       const peerTexts = splitListenTogetherBubbles(reply.text, [character.name, "我", "用户"]);
+      // 对方不会秒回：等几秒再揭晓，像真人看完消息才回
       const timer = window.setTimeout(() => {
         const done = revealListenTogetherOutcome({
           sessionId: sent.sessionId,
@@ -533,10 +543,9 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
           notify(refused ? `${character.name}暂时来不了` : `${character.name}接受了邀请，去聊天进入一起听`);
           refresh();
         }
-      }, 12000 + Math.random() * 8000);
+      }, 6000 + Math.random() * 4000);
       inviteTimers.current.push(timer);
       return;
-      refresh();
     } catch (error) {
       notify(error instanceof Error ? error.message : "对方还没开口");
     } finally {

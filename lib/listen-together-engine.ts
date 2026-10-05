@@ -18,6 +18,7 @@ import { prepareShortTermContext } from "./short-term-assembler";
 import type { Character } from "./character-types";
 import type { ListenTogetherSession, ListenTogetherTrack } from "./listen-together-types";
 import { parseChatBubbleDisplay, sanitizeListenTogetherText } from "./chat-message-display";
+import { getCurrentCalendarScheduleForPrompt } from "./calendar-storage";
 
 type ResolvedListenGeneration = {
   character: Character;
@@ -237,6 +238,7 @@ export async function generateListenTogetherReply(input: {
     `${item.author === "user" ? "用户" : input.session.characterName}：${item.text}`
   )).join("\n");
   const lyricBit = excerptLyrics(input.lyrics, input.currentTime);
+  const scheduleNow = input.opening ? getCurrentCalendarScheduleForPrompt("character", input.characterId) : "";
   const playlist = input.session.tracks;
   const playlistLine = playlist.length > 0
     ? `你们的一起听歌单（独立歌单，和主页「歌单」tab 的角色歌单完全分开，持久保存在这里，共${playlist.length}首）：${playlist.map((t, i) => `${i + 1}.《${t.title}》${t.artist ? `-${t.artist}` : ""}`).join("、")}。用户加了什么歌你都看得见，可以接话。你的权限只有：加歌、删歌、看歌单、知道当前在播哪首。你不能改歌单名/详情/封面，也不要提角色歌单。`
@@ -252,10 +254,16 @@ export async function generateListenTogetherReply(input: {
       "若要私聊，【私聊】单独占一行，下一行再写正文。",
       "你听得见正在放的歌词，但要像这个人正在听歌：可以走神、接话、吐槽、哼一句，也可以聊别的。不必句句围着歌转。",
       input.opening
-        ? "用户刚邀请你一起听。按人设决定接不接。想听就应一声，可以提一句正在放的歌。不想听就拒绝，并写一句符合人设的理由（可自拟当下的原因，比如在忙、困了、不喜欢这首、要出门），同时输出 [执行动作:拒绝一起听]。"
+        ? "用户刚邀请你一起听。这是一次性决定：只调用一次，当场同意或拒绝，不要说考虑考虑、不要含糊。"
         : input.trackChanged
           ? "歌切了。若人设会接一句就接，不想说可以只回很短的一声，或输出动作不闲聊。"
           : "用户刚发了一句，按人设接着聊。",
+      input.opening && scheduleNow && scheduleNow !== "无"
+        ? `你现在正在忙别的（真实日程）：${scheduleNow}。这会占用你当下的注意力——如果不方便，完全可以直接拒绝，并说明你在忙这件事。`
+        : "",
+      input.opening
+        ? "决定同意就正常回一句（可以顺带提一下正在放的歌），不要输出任何动作；决定拒绝就写一句符合人设的理由，并单独输出 [执行动作:拒绝一起听]。"
+        : "",
       "",
       `正在听：${formatTrackLine(current)}`,
       lyricBit ? `此刻歌词大概是：${lyricBit}` : "",
