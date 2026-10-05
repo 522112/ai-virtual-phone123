@@ -514,6 +514,7 @@ export default function MusicPlayer() {
                             lyrics: track.lyrics,
                         }}
                         isPlaying={player.isPlaying}
+                        currentTime={player.currentTime}
                         tab={ltBodyTab}
                         onTabChange={setLtBodyTab}
                         onOpenQueue={() => setShowLtQueue(true)}

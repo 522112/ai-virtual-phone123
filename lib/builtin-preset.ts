@@ -6,7 +6,7 @@ import type { PresetConfig } from "./settings-types";
 import { getCheckPhonePromptTags } from "./checkphone-config";
 
 export const BUILTIN_PRESET_ID = "builtin_default_v1";
-export const BUILTIN_PRESET_VERSION = 265; // 升版本会用出厂内容重写用户的内置预设副本（自定义会丢），非必要不升
+export const BUILTIN_PRESET_VERSION = 266; // 升版本会用出厂内容重写用户的内置预设副本（自定义会丢），非必要不升
 
 export function createBuiltinPreset(): PresetConfig {
     const now = Date.now();
@@ -1010,6 +1010,24 @@ export function createBuiltinPreset(): PresetConfig {
                 injection_depth: 0,
                 enabled: true,
                 tags: ["moments"],
+            },
+            // ── Group chat feature entries ──
+            {
+                identifier: "listen_together_format",
+                name: "▸ 一起听输出格式",
+                role: "system",
+                content: [
+                    "<listen_together_format>",
+                    "你正在和用户进行【一起听】（边听同一首歌边聊天）。",
+                    "## 输出硬性格式",
+                    "- 只输出聊天文字内容本身，可以分多条（空一行一条），不要输出任何解释、前言、动作描写、旁白、括号备注、标题、Markdown、代码块。",
+                    "- 不要输出系统动作标记原文（如[执行动作:xxx]），也不要向用户解释这些标记；需要执行动作时只按动作格式单独输出一行。",
+                    "- 不要说自己是 AI，不要提这是测试或模拟，像真人一样边听边聊。",
+                    "- 可以接歌词、哼一句、吐槽、走神，也可以聊别的，不必句句围着歌转。",
+                ],
+                injection_depth: 0,
+                enabled: true,
+                tags: ["music"],
             },
             // ── Group chat feature entries ──
             {

@@ -60,7 +60,7 @@ function DuoAvatar({ src, alt, playing }: { src?: string; alt: string; playing: 
   );
 }
 
-function parseLyricLines(lyrics: string | undefined): { time: number; text: string }[] {
+export function parseLyricLines(lyrics: string | undefined): { time: number; text: string }[] {
   const raw = (lyrics || "").trim();
   if (!raw) return [];
   const lines: { time: number; text: string }[] = [];
@@ -621,7 +621,7 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
         type="button"
         className="mp-social-btn"
         data-listen={session ? "" : undefined}
-        onClick={() => setPanel(session ? "chat" : "pick")}
+        onClick={() => { if (!session) setPanel("pick"); }}
       >
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
           <path d="M9 18V6l12-2v12" />

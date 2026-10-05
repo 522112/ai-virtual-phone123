@@ -174,11 +174,10 @@ export function sendListenTogetherShare(input: {
   session: ListenTogetherSession;
 }): { sessionId: string; messageId: string } {  addChatContact(input.characterId);
   const chat = createOrGetSession(input.characterId);
-  const title = `?${input.session.characterName}????`;
+  const title = `和${input.session.characterName}的一起听`;
   const history = formatHistory(input.session);
-  const html = buildListenTogetherCardHtml(input.session);
-  const first = input.session.tracks[0];
-  const height = 132 + Math.min(4, input.session.tracks.length) * 18;
+  const html = buildListenTogetherReportHtml(input.session);
+  const height = 330;
   const message = pushChatMessage({
     sessionId: chat.id,
     role: "user",
@@ -186,24 +185,20 @@ export function sendListenTogetherShare(input: {
     mediaType: "app_card",
     mediaData: {
       appId: "music",
-      appName: "??",
+      appName: "音乐",
       appCardTitle: title,
-      appCardBody: first ? `?${first.title}?` : title,
-      appCardSummary: `??? ? ${formatListenDuration(input.session)}`,
+      appCardBody: `本次${input.session.tracks.length}首 · ${formatListenDuration(input.session)}`,
+      appCardSummary: `一起听记录 · 互发消息${input.session.messages.length}条`,
       appHistoryText: history,
       appCardLayout: {
-        appLabel: "???",
+        appLabel: "一起听",
         title,
         subtitle: formatListenDuration(input.session),
-        body: input.session.tracks.map(item => item.title).join(" ? "),
+        body: input.session.tracks.map(item => item.title).join("、"),
         html,
         height,
-        background: "#17151c",
-        accentColor: "#d9c4a6",
-        sections: input.session.tracks.slice(0, 3).map(item => ({
-          title: item.title,
-          text: item.artist || "????",
-        })),
+        background: "#e8344a",
+        accentColor: "#ffffff",
       },
     },
   });

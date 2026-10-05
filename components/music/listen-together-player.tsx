@@ -15,7 +15,7 @@ import {
     LISTEN_TOGETHER_UPDATED_EVENT,
 } from "@/lib/listen-together-storage";
 import type { ListenTogetherSession, ListenTogetherTrack } from "@/lib/listen-together-types";
-import { generateListenTogetherReply, splitListenTogetherBubbles } from "@/lib/listen-together-engine";
+import { generateListenTogetherReply, parseLyricLines, splitListenTogetherBubbles } from "@/lib/listen-together-engine";
 import { sendListenTogetherReportCard } from "@/lib/listen-together-share";
 import { getMusicControlBridge } from "@/lib/music-control-bridge";
 import { STICKER_PACKS } from "@/lib/sticker-data";
@@ -26,6 +26,7 @@ type Props = {
     session: ListenTogetherSession;
     track: { id: string; title: string; artist: string; coverUrl?: string; lyrics?: string };
     isPlaying: boolean;
+    currentTime: number;
     tab: ListenTogetherBodyTab;
     onTabChange: (tab: ListenTogetherBodyTab) => void;
     onOpenQueue: () => void;
@@ -41,15 +42,21 @@ function formatTogetherElapsed(startedAt: string, now: number): string {
     return `一起听了${hours}小时${mins}分钟`;
 }
 
-function DuoFaces({ sessionId, characterName }: { sessionId: string; characterName: string }) {
+/** 双人头 + 各自名下气泡：每人最多2条，12秒后消失，完整记录去记录页 */
+function DuoBar({ sessionId, characterName, playing }: { sessionId: string; characterName: string; playing: boolean }) {
     const [tick, setTick] = useState(0);
+    const [now, setNow] = useState(() => Date.now());
     useEffect(() => {
         const refresh = () => setTick(n => n + 1);
         window.addEventListener("characters-updated", refresh);
         window.addEventListener("user-identities-updated", refresh);
+        window.addEventListener(LISTEN_TOGETHER_UPDATED_EVENT, refresh);
+        const timer = window.setInterval(() => setNow(Date.now()), 2000);
         return () => {
             window.removeEventListener("characters-updated", refresh);
             window.removeEventListener("user-identities-updated", refresh);
+            window.removeEventListener(LISTEN_TOGETHER_UPDATED_EVENT, refresh);
+            window.clearInterval(timer);
         };
     }, []);
     const session = getListenTogetherSession(sessionId) || getActiveListenTogetherSession();
@@ -60,13 +67,22 @@ function DuoFaces({ sessionId, characterName }: { sessionId: string; characterNa
     const identity = overlayUserIdentityForDisplay(session.characterId, resolveUserIdentity(session.characterId, "chat"));
     const userName = identity?.name || "我";
     const peerName = character?.screenName?.trim() || characterName;
+    const fresh = (author: "user" | "character") =>
+        (session.messages || [])
+            .filter(m => m.author === author && now - Date.parse(m.createdAt) < 12000)
+            .slice(-2);
+    const mine = fresh("user");
+    const theirs = fresh("character");
     return (
-        <div className="ltp-duo">
+        <div className="ltp-duo" {...(playing ? { "data-playing": "" } : {})}>
             <span className="ltp-person">
                 <span className="ltp-avatar" data-me="">
                     {identity?.avatarUrl ? <img src={identity.avatarUrl} alt="" /> : <ChatFallbackAvatar />}
                 </span>
                 <em className="ltp-name">{userName}</em>
+                {mine.map(m => (
+                    <span key={m.id} className="ltp-under-bubble is-me">{m.text}</span>
+                ))}
             </span>
             <span className="ltp-together" aria-hidden="true" />
             <span className="ltp-person">
@@ -74,6 +90,9 @@ function DuoFaces({ sessionId, characterName }: { sessionId: string; characterNa
                     {character?.avatar ? <img src={character.avatar} alt="" /> : <ChatFallbackAvatar />}
                 </span>
                 <em className="ltp-name">{peerName}</em>
+                {theirs.map(m => (
+                    <span key={m.id} className="ltp-under-bubble">{m.text}</span>
+                ))}
             </span>
         </div>
     );
@@ -98,6 +117,9 @@ function ChatBubbles({ sessionId, limit }: { sessionId: string; limit?: number }
     }, [session?.messages, limit]);
     const raw = session ? loadCharacters().find(item => item.id === session.characterId) || null : null;
     const character = raw ? overlayCharacterForDisplay(raw) : null;
+    const identity = session
+        ? overlayUserIdentityForDisplay(session.characterId, resolveUserIdentity(session.characterId, "chat"))
+        : null;
     return (
         <div className="ltp-bubbles">
             {messages.map(m => (
@@ -108,6 +130,11 @@ function ChatBubbles({ sessionId, limit }: { sessionId: string; limit?: number }
                         </span>
                     )}
                     <span className="ltp-msg-text">{m.text}</span>
+                    {m.author === "user" && (
+                        <span className="ltp-msg-avatar" data-me="">
+                            {identity?.avatarUrl ? <img src={identity.avatarUrl} alt="" /> : <ChatFallbackAvatar />}
+                        </span>
+                    )}
                 </div>
             ))}
         </div>
@@ -300,9 +327,9 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
     );
 }
 
-export function ListenTogetherPlayerBody({ session, track, isPlaying, tab, onTabChange, onOpenQueue, onNotice }: Props) {
+export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTime, tab, onTabChange, onOpenQueue, onNotice }: Props) {
     const [now, setNow] = useState(() => Date.now());
-    const [coverMode, setCoverMode] = useState<"vinyl" | "cover">("vinyl");
+    const [coverMode, setCoverMode] = useState<"vinyl" | "cover" | "lyrics">("vinyl");
     const [draft, setDraft] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
@@ -312,9 +339,18 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, tab, onTab
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        const timer = window.setInterval(() => setNow(Date.now()), 30000);
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
         return () => window.clearInterval(timer);
     }, []);
+
+    const lyricLines = useMemo(() => parseLyricLines(track.lyrics), [track.lyrics]);
+    const lyricActive = useMemo(() => {
+        let idx = -1;
+        lyricLines.forEach((line, i) => {
+            if (currentTime >= line.time) idx = i;
+        });
+        return idx;
+    }, [lyricLines, currentTime]);
 
     const sendText = async (text: string) => {
         const content = text.trim();
@@ -397,36 +433,56 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, tab, onTab
 
     return (
         <div className="ltp-wrap">
-            <DuoFaces sessionId={session.id} characterName={session.characterName} />
+            <DuoBar sessionId={session.id} characterName={session.characterName} playing={isPlaying} />
             <div className="ltp-elapsed">{formatTogetherElapsed(session.startedAt, now)}</div>
             {tab === "player" ? (
-                <>
+                coverMode === "lyrics" ? (
                     <button
                         type="button"
-                        className="ltp-art"
-                        data-mode={coverMode}
-                        data-playing={isPlaying ? "" : undefined}
-                        onClick={() => setCoverMode(prev => (prev === "vinyl" ? "cover" : "vinyl"))}
-                        aria-label="切换黑胶/封面"
+                        className="ltp-lyrics"
+                        onClick={() => setCoverMode("cover")}
+                        aria-label="返回封面"
                     >
-                        {coverMode === "vinyl" ? (
-                            <span className="ltp-vinyl">
-                                <span className="ltp-vinyl-disc">
-                                    {track.coverUrl ? <img src={track.coverUrl} alt="" /> : null}
-                                </span>
-                            </span>
+                        {lyricLines.length === 0 ? (
+                            <span className="ltp-lyric" data-active="">暂无歌词</span>
                         ) : (
-                            <span className="ltp-cover">
-                                {track.coverUrl ? <img src={track.coverUrl} alt="" /> : <ChatFallbackAvatar />}
-                            </span>
+                            lyricLines.map((line, i) => (
+                                <span
+                                    key={`${line.time}-${i}`}
+                                    className="ltp-lyric"
+                                    {...(i === lyricActive ? { "data-active": "" } : {})}
+                                >
+                                    {line.text || " "}
+                                </span>
+                            ))
                         )}
                     </button>
-                    <div className="ltp-song">{track.title}</div>
-                    <div className="ltp-artist">{track.artist || "未知歌手"}</div>
-                    <div className="ltp-mini-chat">
-                        <ChatBubbles sessionId={session.id} limit={4} />
-                    </div>
-                </>
+                ) : (
+                    <>
+                        <button
+                            type="button"
+                            className="ltp-art"
+                            data-mode={coverMode}
+                            data-playing={isPlaying ? "" : undefined}
+                            onClick={() => setCoverMode(prev => (prev === "vinyl" ? "cover" : "lyrics"))}
+                            aria-label="切换黑胶/封面/歌词"
+                        >
+                            {coverMode === "vinyl" ? (
+                                <span className="ltp-vinyl">
+                                    <span className="ltp-vinyl-disc">
+                                        {track.coverUrl ? <img src={track.coverUrl} alt="" /> : null}
+                                    </span>
+                                </span>
+                            ) : (
+                                <span className="ltp-cover">
+                                    {track.coverUrl ? <img src={track.coverUrl} alt="" /> : <ChatFallbackAvatar />}
+                                </span>
+                            )}
+                        </button>
+                        <div className="ltp-song">{track.title}</div>
+                        <div className="ltp-artist">{track.artist || "未知歌手"}</div>
+                    </>
+                )
             ) : (
                 <div className="ltp-chat">
                     <div className="ltp-chat-head">
@@ -445,7 +501,9 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, tab, onTab
                     </div>
                     <div className="ltp-chat-list">
                         <ChatBubbles sessionId={session.id} />
-                        <div className="ltp-ai-badge">内容由AI生成</div>
+                        {sending && (
+                            <div className="ltp-calling"><span /><span /><span /></div>
+                        )}
                     </div>
                     <div className="ltp-input-row">
                         <input

@@ -119,7 +119,7 @@ import {
     materializeRelationshipSpacePart,
     applyCharacterSpaceCover,
 } from "@/lib/relationship-storage";
-import { createListenTogetherInvite, decideListenTogetherInvite, getActiveListenTogetherSession, getListenTogetherInvite, getPendingListenInvite, startListenTogetherSession } from "@/lib/listen-together-storage";
+import { createListenTogetherInvite, decideListenTogetherInvite, getActiveListenTogetherSession, getListenTogetherInvite, getPendingListenInvite, loadListenTogetherSessions, startListenTogetherSession } from "@/lib/listen-together-storage";
 import { generateListenTogetherReply, splitListenTogetherBubbles } from "@/lib/listen-together-engine";
 import { sendListenTogetherInviteCard, sendListenTogetherRefuse } from "@/lib/listen-together-share";
 import type { RelationshipSpaceCard } from "@/lib/relationship-storage";
@@ -3761,6 +3761,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             if (invite && invite.status === "accepted") {
                 const running = getActiveListenTogetherSession();
                 if (!running || running.status !== "active" || running.characterId !== session.contactId) {
+                    const hadEnded = loadListenTogetherSessions().some(item => item.characterId === session.contactId && item.status === "ended");
+                    if (hadEnded) {
+                        showChatToast("这次一起听已经结束了");
+                        return;
+                    }
                     startListenTogetherSession({ characterId: session.contactId, characterName: charName, track: invite.track });
                 }
                 openMusicApp(); return;
