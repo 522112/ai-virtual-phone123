@@ -10,6 +10,7 @@ RUN npm prune --omit=dev
 FROM node:20-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV HOST=0.0.0.0
 COPY --from=builder /app ./
 # 云托管会注入 PORT 环境变量，启动脚本优先读取 PORT
 EXPOSE 3000
