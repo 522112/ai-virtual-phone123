@@ -108,8 +108,8 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose }: Props
             {character.avatar ? <img src={character.avatar} alt="" /> : <ChatFallbackAvatar />}
           </div>
           <div className="char-card-idblock">
-            <strong>{alias || character.name}</strong>
-            <span>{L.nickname}：{character.name}</span>
+            <strong>{alias || character.screenName || character.name}</strong>
+            <span>{L.nickname}：{character.screenName || character.name}</span>
             <span>ID：{wechatId}</span>
           </div>
         </div>

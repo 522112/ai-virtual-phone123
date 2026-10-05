@@ -10,6 +10,7 @@ import { usePhoneBack } from "@/lib/phone-navigation";
 import { resolveCloudSttConfig, transcribeAudioBlob } from "@/lib/stt-cloud";
 import { resolveContactCard } from "@/lib/contact-card";
 import { loadCharacters } from "@/lib/character-storage";
+import { resolveUserIdentity } from "@/lib/settings-storage";
 import { CHAT_OPEN_SESSION_EVENT, dispatchOpenAddContact } from "@/lib/chat-notification-events";
 import { ContactCardGenerateFlow } from "@/components/chat/contact-card-generate-flow";
 import { MediaPreviewOverlay } from "@/components/chat/media-preview-overlay";
@@ -49,7 +50,7 @@ interface MessageBubbleProps {
     onMusicPlay?: (title: string, artist?: string) => void;
     onActionSelect?: (text: string) => void;
     onRelationshipAction?: (msg: ChatMessage, action: "accept" | "decline" | "open") => void;
-    onListenInviteAction?: (msg: ChatMessage, action: "accept" | "decline" | "open") => void;
+    onListenInviteAction?: (msg: ChatMessage, action: "accept" | "decline" | "open" | "cancel") => void;
     displayContent?: string;
     defaultTranslationExpanded?: boolean;
 }
@@ -133,7 +134,7 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
         case "music_share":
             return <MusicShareBubble msg={msg} onPlay={onMusicPlay} />;
         case "listen_invite":
-            return <ListenInviteBubble msg={msg} onAction={onListenInviteAction} />;
+            return <ListenInviteBubble msg={msg} characterId={characterId} onAction={onListenInviteAction} />;
         case "media_file":
             return <MediaFileBubble msg={msg} onUpdate={onUpdate} characterId={characterId} />;
         case "xiaohongshu_note_share":
@@ -2592,7 +2593,7 @@ function MediaFileBubble({
     );
 }
 
-function ListenInviteBubble({ msg, onAction }: { msg: ChatMessage; onAction?: (msg: ChatMessage, action: "accept" | "decline" | "open") => void }) {
+function ListenInviteBubble({ msg, onAction, characterId }: { msg: ChatMessage; onAction?: (msg: ChatMessage, action: "accept" | "decline" | "open" | "cancel") => void; characterId?: string }) {
     const data = msg.mediaData;
     const title = data?.musicTitle || "";
     const artist = data?.musicArtist || "";
@@ -2603,32 +2604,58 @@ function ListenInviteBubble({ msg, onAction }: { msg: ChatMessage; onAction?: (m
     const mine = msg.role === "user" && direction === "outgoing";
     const accepted = status === "accepted";
     const declined = status === "declined";
-    const statusText = accepted ? "\u5df2\u8fdb\u5165\u4e00\u8d77\u542c" : declined ? "\u5df2\u62d2\u7edd" : incoming ? "\u7b49\u4f60\u8fdb\u5165" : mine && status === "pending" ? "\u7b49\u5bf9\u65b9\u8fdb\u5165" : "\u4e00\u8d77\u542c";
-    const desc = text || (title ? "\u60f3\u548c\u4f60\u4e00\u8d77\u542c\u300a" + title + "\u300b" : "\u4e00\u8d77\u542c\u9080\u8bf7");
-    const showEnter = incoming || (mine && status === "pending") || accepted;
+    const cancelled = status === "canceled";
+    const waiting = mine && status === "pending";
+    const peer = characterId ? loadCharacters().find(c => c.id === characterId) || null : null;
+    const peerDisplay = peer?.screenName?.trim() || peer?.name || msg.senderName || "对方";
+    const peerAvatar = peer?.avatar || null;
+    const identity = resolveUserIdentity(characterId || "", "chat");
+    const myDisplay = identity?.name || "我";
+    const myAvatar = identity?.avatarUrl || null;
+    const cover = (data?.musicCover as string) || "";
+    const inviteLine = direction === "incoming" ? peerDisplay + "邀请你一起听" : "你邀请" + peerDisplay + "一起听";
+    const stateText = accepted ? "已进入一起听" : declined ? "已拒绝" : cancelled ? "已取消" : incoming ? "等你进入" : waiting ? "等待对方回应" : "一起听";
+    const desc = text || (title ? "想和你一起听《" + title + "》" : "一起听邀请");
+    const showEnter = accepted;
     return (
-        <div className="chat-rel-card" data-status={status} style={{ "--rel-accent": "#7c9a92" } as React.CSSProperties}>
-            <div className="chat-rel-card-body">
-                <span className="chat-rel-card-mark">
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--rel-accent, #7c9a92)" strokeWidth="1.4"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-                </span>
-                <div className="chat-rel-card-copy">
-                    <div className="chat-rel-card-title">\u4e00\u8d77\u542c</div>
-                    <div className="chat-rel-card-desc">{desc}{artist ? " - " + artist : ""}</div>
+        <div className="chat-lt-card" data-status={status}>
+            <div className="chat-lt-main">
+                {cover ? (
+                    <img src={cover} alt="" className="chat-lt-cover" />
+                ) : (
+                    <div className="chat-lt-cover-fallback" aria-hidden="true">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+                    </div>
+                )}
+                <div className="chat-lt-info">
+                    <div className="chat-lt-title">{title || "一起听"}</div>
+                    {artist ? <div className="chat-lt-artist">{artist}</div> : null}
+                    <div className="chat-lt-invite">{inviteLine}</div>
+                    {text ? <div className="chat-lt-text">{text}</div> : null}
                 </div>
             </div>
-            <div className="chat-rel-card-foot">
-                <span className="chat-rel-card-kicker">\u4e00\u8d77\u542c\u9080\u7ea6</span>
-                <span className="chat-rel-card-status">{statusText}</span>
+            <div className="chat-lt-people">
+                <span className="chat-lt-avatars">
+                    {peerAvatar ? <img src={peerAvatar} alt="" /> : <ChatFallbackAvatar />}
+                    {myAvatar ? <img src={myAvatar} alt="" /> : <ChatFallbackAvatar />}
+                </span>
+                <span className="chat-lt-ids">{peerDisplay} · {myDisplay}</span>
+            </div>
+            {waiting ? <div className="chat-lt-progress" aria-hidden="true"><span /></div> : null}
+            <div className="chat-lt-foot">
+                <span className="chat-lt-status">{stateText}</span>
                 {incoming ? (
-                    <div className="chat-rel-card-actions">
-                        <button type="button" className="chat-rel-card-btn chat-rel-card-btn-decline" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "decline"); }}>\u62d2\u7edd</button>
-                        <button type="button" className="chat-rel-card-btn chat-rel-card-btn-accept" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "accept"); }}>\u8fdb\u5165\u4e00\u8d77\u542c</button>
+                    <div className="chat-lt-actions">
+                        <button type="button" className="chat-lt-btn chat-lt-decline" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "decline"); }}>拒绝</button>
+                        <button type="button" className="chat-lt-btn chat-lt-accept" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "accept"); }}>同意一起听</button>
+                    </div>
+                ) : waiting ? (
+                    <div className="chat-lt-actions">
+                        <button type="button" className="chat-lt-btn chat-lt-decline" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "cancel"); }}>取消邀请</button>
                     </div>
                 ) : showEnter ? (
-                    <div className="chat-rel-card-actions">
-                        {mine && status === "pending" ? (<button type="button" className="chat-rel-card-btn chat-rel-card-btn-decline" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "decline"); }}>\u4e0d\u8fdb</button>) : null}
-                        <button type="button" className="chat-rel-card-btn chat-rel-card-btn-accept" onClick={(e) => { e.stopPropagation(); onAction?.(msg, accepted ? "open" : "accept"); }}>\u8fdb\u5165\u4e00\u8d77\u542c</button>
+                    <div className="chat-lt-actions">
+                        <button type="button" className="chat-lt-btn chat-lt-accept" onClick={(e) => { e.stopPropagation(); onAction?.(msg, "open"); }}>进入一起听</button>
                     </div>
                 ) : null}
             </div>

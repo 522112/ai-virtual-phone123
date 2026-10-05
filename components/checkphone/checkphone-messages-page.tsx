@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ChevronLeft, ChevronRight, RefreshCw, Search, Trash2 } from "lucide-react";
@@ -45,6 +47,7 @@ function getMessagesListPlainText(text: string): string {
 export function CheckPhoneMessagesPage({ character, onBack }: CheckPhoneMessagesPageProps) {
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneMessagesPayload> | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  useSnoopFlip(character, "短信", selectedThreadId || "", selectedThreadId ? "点开的这条短信" : "短信列表");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "messages", setSnapshot);
   const [error, setError] = useState<string | null>(null);

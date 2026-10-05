@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { pinyin } from "pinyin-pro";
@@ -227,6 +229,7 @@ export function CheckPhoneYoutubePage({ character, onBack }: CheckPhoneYoutubePa
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneYoutubePayload> | null>(null);
   const [view, setView] = useState<YoutubeView>("home");
   const [expandedEntryKeys, setExpandedEntryKeys] = useState<string[]>([]);
+  useSnoopFlip(character, "油管", `${view}|${expandedEntryKeys.join(",")}`, expandedEntryKeys.length > 0 ? "展开的这个视频" : "视频首页");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "youtube", setSnapshot);
   const [error, setError] = useState<string | null>(null);

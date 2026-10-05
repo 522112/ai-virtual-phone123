@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import {
@@ -74,6 +76,7 @@ export function CheckPhoneInstagramPage({ character, onBack }: CheckPhoneInstagr
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [commentSheetPostId, setCommentSheetPostId] = useState<string | null>(null);
   const [selectedHighlightId, setSelectedHighlightId] = useState<string | null>(null);
+  useSnoopFlip(character, "Ins", `${selectedPostId || ""}|${commentSheetPostId || ""}|${selectedHighlightId || ""}`, selectedPostId ? "点开的这条动态" : "Ins主页");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "instagram", setSnapshot);
   const [error, setError] = useState<string | null>(null);

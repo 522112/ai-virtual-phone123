@@ -10,7 +10,7 @@ import { COUPLE_AVATARS_UPDATED_EVENT, overlayCharacterForDisplay, overlayUserId
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import { generateListenTogetherReply, splitListenTogetherBubbles, type ListenTogetherAction } from "@/lib/listen-together-engine";
 import { getMusicControlBridge } from "@/lib/music-control-bridge";
-import { buildListenTogetherCardHtml, sendListenTogetherInviteCard, sendListenTogetherRefuse, sendListenTogetherShare } from "@/lib/listen-together-share";
+import { buildListenTogetherCardHtml, revealListenTogetherOutcome, sendListenTogetherInviteCard, sendListenTogetherRefuse, sendListenTogetherShare } from "@/lib/listen-together-share";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import {
     LISTEN_TOGETHER_UPDATED_EVENT,
@@ -23,6 +23,7 @@ import {
     getActiveListenTogetherSession,
     getListenTogetherBg,
     getListenTogetherSession,
+    getPendingListenInvite,
     loadListenTogetherSessions,
     setListenTogetherBg,
 } from "@/lib/listen-together-storage";
@@ -322,6 +323,15 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
   const [bgTick, setBgTick] = useState(0);
   const bgInputRef = useRef<HTMLInputElement>(null);
   const pressTimer = useRef<number | null>(null);
+  // 对方延迟回应定时器：退出音乐页时清理，避免野指针
+  const inviteTimers = useRef<number[]>([]);
+  useEffect(() => {
+    const timers = inviteTimers.current;
+    return () => {
+      timers.forEach(timer => window.clearTimeout(timer));
+      timers.length = 0;
+    };
+  }, []);
   const listRef = useRef<HTMLDivElement>(null);
   const announcedTrackRef = useRef<string>("");
   const [playerRoot, setPlayerRoot] = useState<Element | null>(null);
@@ -483,14 +493,12 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
         opening: true,
       });
       const refused = reply.actions.some(item => item.kind === "refuse");
-      if (refused) {
-        sendListenTogetherRefuse({
-          characterId: character.id,
-          characterName: character.name,
-          texts: splitListenTogetherBubbles(reply.text),
-        });
-        notify("对方没有一起来，理由已经发到聊天");
+      // 防重复邀请：还有没回复的邀请就别再发了
+      const existingPending = getPendingListenInvite(character.id);
+      if (existingPending) {
+        notify("已经邀请过了，等对方回复，别重复邀请");
         setPanel("closed");
+        refresh();
         return;
       }
       const invite = createListenTogetherInvite({
@@ -500,7 +508,7 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
         inviteText: reply.text,
         direction: "outgoing",
       });
-      sendListenTogetherInviteCard({
+      const sent = sendListenTogetherInviteCard({
         characterId: character.id,
         characterName: character.name,
         direction: "outgoing",
@@ -508,8 +516,26 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
         text: reply.text,
         inviteId: invite.id,
       });
-      notify("对方答应了，去聊天点卡片进入一起听");
+      notify("邀请已发出，等对方回应，去聊天看卡片进度");
       setPanel("closed");
+      refresh();
+      // 对方不会秒回：12~20 秒后揭晓 TA 的决定，接受或拒绝都由 TA 定
+      const peerTexts = splitListenTogetherBubbles(reply.text, [character.name, "我", "用户"]);
+      const timer = window.setTimeout(() => {
+        const done = revealListenTogetherOutcome({
+          sessionId: sent.sessionId,
+          messageId: sent.messageId,
+          inviteId: invite.id,
+          accept: !refused,
+          peerTexts,
+        });
+        if (done) {
+          notify(refused ? `${character.name}暂时来不了` : `${character.name}接受了邀请，去聊天进入一起听`);
+          refresh();
+        }
+      }, 12000 + Math.random() * 8000);
+      inviteTimers.current.push(timer);
+      return;
       refresh();
     } catch (error) {
       notify(error instanceof Error ? error.message : "对方还没开口");

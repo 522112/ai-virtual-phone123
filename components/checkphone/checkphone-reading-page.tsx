@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { BookOpenText, ChevronLeft, Highlighter, LibraryBig, NotebookText, RefreshCw, Trash2 } from "lucide-react";
@@ -88,6 +90,7 @@ export function CheckPhoneReadingPage({ character, onBack }: CheckPhoneReadingPa
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneReadingPayload> | null>(null);
   const [selectedTab, setSelectedTab] = useState<ReadingTabId>("current");
   const [selectedBookId, setSelectedBookId] = useState<string | null>(null);
+  useSnoopFlip(character, "阅读", `${selectedTab}|${selectedBookId || ""}`, selectedBookId ? "点开的这本书" : "书架");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "reading", setSnapshot);
   const [error, setError] = useState<string | null>(null);

@@ -17,6 +17,7 @@ import {
   CHAR_BLOCKED_FIELDS,
 } from "@/lib/character-storage";
 import { generateBriefPersonaText, isBriefPersonaStale } from "@/lib/brief-persona";
+import { generateScreenNameText } from "@/lib/screen-name";
 import { generateSupportingCharacters, materializeSupportingCharacter, type GeneratedSupportingCharacter } from "@/lib/npc-generator";
 import {
   addCharacterWorldRelation,
@@ -1879,6 +1880,9 @@ function CharArchiveView({
   const [briefPersona, setBriefPersona] = useState(char.briefPersona || "");
   const [briefBusy, setBriefBusy] = useState(false);
   const [briefError, setBriefError] = useState("");
+  const [screenName, setScreenName] = useState(char.screenName || "");
+  const [screenNameBusy, setScreenNameBusy] = useState(false);
+  const [screenNameError, setScreenNameError] = useState("");
   const [timeZone, setTimeZone] = useState(char.timeZone || "");
   const [tags, setTags] = useState<string[]>(char.tags || []);
   const [tagInput, setTagInput] = useState("");
@@ -1971,6 +1975,7 @@ function CharArchiveView({
     if (persona !== (char.persona || "")) return true;
     if (personality !== (char.personality || "")) return true;
     if (briefPersona !== (char.briefPersona || "")) return true;
+    if (screenName !== (char.screenName || "")) return true;
     if (timeZone !== (char.timeZone || "")) return true;
     if (avatar !== (char.avatar || null)) return true;
     if (polaroidStyle !== (char.polaroidStyle ?? 0)) return true;
@@ -1998,6 +2003,8 @@ function CharArchiveView({
       setPersonality(char.personality || "");
       setBriefPersona(char.briefPersona || "");
       setBriefError("");
+      setScreenName(char.screenName || "");
+      setScreenNameError("");
       setTimeZone(char.timeZone || "");
       setTimeZoneSearch(char.timeZone || "");
       setShowTimeZonePicker(false);
@@ -2058,6 +2065,7 @@ function CharArchiveView({
       const trimmedBrief = briefPersona.trim();
       onSave({
         name: name.trim() || char.name || "UNNAMED",
+        screenName: screenName.trim() || undefined,
         persona,
         personality: personality.trim() || undefined,
         briefPersona: trimmedBrief || undefined,
@@ -2112,6 +2120,26 @@ function CharArchiveView({
       setBriefError(error instanceof Error ? error.message : String(error));
     } finally {
       setBriefBusy(false);
+    }
+  }
+
+  async function handleGenerateScreenName() {
+    if (screenNameBusy) return;
+    setScreenNameBusy(true);
+    setScreenNameError("");
+    try {
+      const text = await generateScreenNameText({
+        ...char,
+        name: name.trim() || char.name || "未命名角色",
+        screenName: screenName.trim() || undefined,
+        persona,
+        personality: personality.trim() || undefined,
+      });
+      setScreenName(text);
+    } catch (error) {
+      setScreenNameError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setScreenNameBusy(false);
     }
   }
 
@@ -2305,6 +2333,38 @@ function CharArchiveView({
                 <h2 className="whitespace-pre-wrap break-words ts-20 font-black m-0 tracking-[1px]">
                   {name || "UNNAMED"}
                 </h2>
+              )}
+            </div>
+
+            {/* 网名 SCREEN NAME：个人主页与名片优先显示，空则回退本名 */}
+            <div className="char-archive-name-box flex-1 flex flex-col justify-center text-left border-b border-[var(--c-panel-border)]" style={{ padding: "4px 6px 8px 6px" }}>
+              <span className="ts-8 text-[var(--c-text)] font-mono block mb-0.5">SCREEN NAME / 网名</span>
+              {isEditing ? (
+                <>
+                  <div className="flex gap-1 w-full">
+                    <input
+                      className="char-archive-input ts-14 flex-1 min-w-0 text-left bg-[var(--c-input)]/50 border border-dashed border-[#666] font-inherit tracking-[1px]"
+                      placeholder="不会起？点右边 AI 生成"
+                      value={screenName}
+                      onChange={(e) => setScreenName(e.target.value)}
+                      maxLength={12}
+                      style={{ padding: "2px 4px" }}
+                    />
+                    <button
+                      type="button"
+                      className="ts-10 px-3 py-1 bg-[#111111] text-white border-none rounded-full cursor-pointer disabled:opacity-50 hover:bg-[#222222] transition-colors"
+                      disabled={screenNameBusy}
+                      onClick={handleGenerateScreenName}
+                    >
+                      {screenNameBusy ? "生成中…" : screenName.trim() ? "重新生成" : "AI 生成"}
+                    </button>
+                  </div>
+                  {screenNameError && <p className="ts-10 mt-1" style={{ color: "#b4233b" }}>{screenNameError}</p>}
+                </>
+              ) : (
+                <div className="whitespace-pre-wrap break-words ts-14 font-bold m-0 tracking-[1px]">
+                  {screenName || name || "UNNAMED"}
+                </div>
               )}
             </div>
 

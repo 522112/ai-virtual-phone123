@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ChevronLeft, Paperclip, RefreshCw, Star, Trash2, Menu, Edit2, Mail, Video, Archive, MoreVertical, ChevronDown, CornerUpLeft, CornerUpRight, Smile } from "lucide-react";
@@ -62,6 +64,7 @@ function getEmailListPlainText(text: string): string {
 export function CheckPhoneEmailPage({ character, onBack }: CheckPhoneEmailPageProps) {
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneEmailPayload> | null>(null);
   const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+  useSnoopFlip(character, "邮件", selectedEmailId || "", selectedEmailId ? "点开的这封邮件" : "收件箱");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "email", setSnapshot);
   const [error, setError] = useState<string | null>(null);

@@ -2,6 +2,7 @@ import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import type {
   ListenTogetherInvite,
   ListenTogetherMessage,
+  ListenTogetherPlaylist,
   ListenTogetherSession,
   ListenTogetherTrack,
 } from "./listen-together-types";

@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ChevronLeft, RefreshCw, Trash2 } from "lucide-react";
@@ -38,6 +40,7 @@ export function CheckPhonePhotosPage({ character, onBack }: CheckPhonePhotosPage
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const [homeSection, setHomeSection] = useState<"featured" | "albums" | "recent">("featured");
+  useSnoopFlip(character, "照片", `${homeSection}|${selectedAlbumId || ""}|${selectedPhotoId || ""}`, selectedPhotoId ? "点开的这张照片" : selectedAlbumId ? "点开的这个相册" : "照片墙");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "photos", setSnapshot);
   const [error, setError] = useState<string | null>(null);

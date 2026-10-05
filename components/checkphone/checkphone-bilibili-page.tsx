@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ChevronLeft, PlaySquare, User, RotateCcw, Eraser } from "lucide-react";
@@ -93,6 +95,7 @@ export function CheckPhoneBilibiliPage({ character, onBack }: CheckPhoneBilibili
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneBilibiliPayload> | null>(null);
   const [selectedTab, setSelectedTab] = useState<BilibiliTabId>("history");
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  useSnoopFlip(character, "哔哩哔哩", `${selectedTab}|${selectedEntryId || ""}`, selectedEntryId ? "点开的这个视频" : "视频推荐流");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "bilibili", setSnapshot);
   const [error, setError] = useState<string | null>(null);

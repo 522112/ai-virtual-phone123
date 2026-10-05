@@ -64,6 +64,7 @@ import { CheckPhoneWeiboPage } from "@/components/checkphone/checkphone-weibo-pa
 import { CheckPhoneXiaohongshuPage } from "@/components/checkphone/checkphone-xiaohongshu-page";
 import { CheckPhoneXPage } from "@/components/checkphone/checkphone-x-page";
 import { CheckPhoneYoutubePage } from "@/components/checkphone/checkphone-youtube-page";
+import { CheckPhoneSnoopLayer, buildSnoopReactionText, emitCheckPhoneFlip } from "@/components/checkphone/checkphone-snoop-reaction";
 import { loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
 import {
@@ -429,6 +430,27 @@ export function CheckPhoneApp({ onClose }: CheckPhoneAppProps) {
 
   const closeSelectedApp = () => setSelectedAppId(null);
 
+  // 查手机翻看：点开/切换 App 视为翻了一页，冒一层角色头像反应气泡
+  const prevSnoopAppRef = useRef<CheckPhoneAppId | null>(null);
+  useEffect(() => {
+    if (!selectedAppId || !activeCharacter) {
+      prevSnoopAppRef.current = null;
+      return;
+    }
+    if (prevSnoopAppRef.current === selectedAppId) return;
+    prevSnoopAppRef.current = selectedAppId;
+    const appLabel = CHECKPHONE_APP_SPECS[selectedAppId]?.label || selectedAppId;
+    const contentLabel = `${appLabel}首页`;
+    emitCheckPhoneFlip({
+      characterId: activeCharacter.id,
+      characterName: activeCharacter.name,
+      characterAvatar: activeCharacter.avatar || null,
+      appLabel,
+      contentLabel,
+      text: buildSnoopReactionText(activeCharacter, appLabel, contentLabel),
+    });
+  }, [selectedAppId, activeCharacter]);
+
   function updateCheckPhoneSettings(patch: Partial<CheckPhoneSettings>) {
     const next = { ...checkPhoneSettings, ...patch };
     setCheckPhoneSettings(next);
@@ -676,6 +698,8 @@ export function CheckPhoneApp({ onClose }: CheckPhoneAppProps) {
             </div>
           )}
 
+          {/* 查手机翻看反应层：翻页划痕 + 左下角角色头像气泡 */}
+          <CheckPhoneSnoopLayer />
           {activeState?.loading && !manifest && (
             <div className="cp-screen-loading">
               <span className="cp-loading-line"></span>

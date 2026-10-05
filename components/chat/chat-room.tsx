@@ -102,6 +102,7 @@ import { CHAT_PLUGIN_TOAST_EVENT, getChatPluginRuntime } from "@/lib/chat-plugin
 import { ChatPluginSlot } from "@/components/chat/chat-plugin-slot";
 import { RelationshipInviteModal } from "@/components/chat/relationship-invite-modal";
 import { CharacterBusinessCard } from "@/components/chat/character-business-card";
+import { PeerHomepage } from "@/components/chat/peer-homepage";
 import { RelationshipSpace } from "@/components/chat/relationship-space";
 import {
     acceptRelationship,
@@ -118,7 +119,9 @@ import {
     materializeRelationshipSpacePart,
     applyCharacterSpaceCover,
 } from "@/lib/relationship-storage";
-import { decideListenTogetherInvite, getActiveListenTogetherSession, getListenTogetherInvite, getPendingListenInvite, startListenTogetherSession } from "@/lib/listen-together-storage";
+import { createListenTogetherInvite, decideListenTogetherInvite, getActiveListenTogetherSession, getListenTogetherInvite, getPendingListenInvite, startListenTogetherSession } from "@/lib/listen-together-storage";
+import { generateListenTogetherReply, splitListenTogetherBubbles } from "@/lib/listen-together-engine";
+import { sendListenTogetherInviteCard, sendListenTogetherRefuse } from "@/lib/listen-together-share";
 import type { RelationshipSpaceCard } from "@/lib/relationship-storage";
 import type { RelationshipBinding, RelationshipKind } from "@/lib/relationship-types";
 
@@ -1172,6 +1175,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [activeCustomChatPlus, setActiveCustomChatPlus] = useState<ActiveCustomChatPlus | null>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [showBusinessCard, setShowBusinessCard] = useState(false);
+    // 对方个人主页浮层：单击消息区对方头像打开（微信式主页+仅 TA 朋友圈）
+    const [peerHomeCharId, setPeerHomeCharId] = useState<string | null>(null);
     const [showVoiceCall, setShowVoiceCall] = useState(false);
     const [showVideoCall, setShowVideoCall] = useState(false);
     const [callMinimized, setCallMinimized] = useState(false);
@@ -3659,7 +3664,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 void noteUserMessage({
                     characterId: session.contactId,
                     characterName: character?.name || "",
-                    userText: currentText,
+                    userText: content,
                 });
             }
             return true;
@@ -3730,14 +3735,17 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         setPendingGenerate(true);
     };
 
-    const handleListenInviteAction = (msg: ChatMessage, action: "accept" | "decline" | "open") => {
+    const handleListenInviteAction = (msg: ChatMessage, action: "accept" | "decline" | "open" | "cancel") => {
         const inviteId = (msg.mediaData?.inviteId as string | undefined) || "";
         const invite = inviteId ? getListenTogetherInvite(inviteId) : getPendingListenInvite(session.contactId);
-        const charName = character?.name || "\u5bf9\u65b9";
+        const direction = (msg.mediaData?.inviteDirection as string) === "outgoing" ? "outgoing" : "incoming";
+        // 方向铁律：我发出的邀请只能等对方、只能取消；只有对方主动邀请我，才有同意/拒绝
+        const isMine = direction === "outgoing" || msg.role === "user";
+        const charName = character?.name || "对方";
         const openMusicApp = () => {
             window.dispatchEvent(new CustomEvent("open-app", { detail: { appId: toCustomAppIconId("music") } }));
         };
-        const markCard = (status: "accepted" | "declined") => {
+        const markCard = (status: "accepted" | "declined" | "canceled") => {
             const updated = { ...msg.mediaData, status };
             updateMessageMediaData(msg.id, updated);
             setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, mediaData: updated } : m));
@@ -3757,23 +3765,97 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 }
                 openMusicApp(); return;
             }
-            showChatToast("\u8fd8\u6ca1\u6709\u53ef\u8fdb\u5165\u7684\u4e00\u8d77\u542c");
+            showChatToast("还没有可进入的一起听");
             return;
         }
         if (action === "accept") {
+            if (isMine) {
+                showChatToast("这是你发出的邀请，等对方回应");
+                return;
+            }
             if (invite) decideListenTogetherInvite(invite.id, "accepted");
             markCard("accepted");
             const running = getActiveListenTogetherSession();
             if (!running || running.status !== "active" || running.characterId !== session.contactId) {
                 startListenTogetherSession({ characterId: session.contactId, characterName: charName, track: invite?.track });
             }
-            pushChoice("\u6211\u8fdb\u5165\u4e86\u4e00\u8d77\u542c");
+            pushChoice("我进入了一起听");
             openMusicApp();
+            return;
+        }
+        if (action === "cancel") {
+            if (invite) decideListenTogetherInvite(invite.id, "declined");
+            markCard("canceled");
+            pushChoice("我取消了一起听邀请");
+            return;
+        }
+        if (isMine) {
+            showChatToast("这是你发出的邀请，只能取消");
             return;
         }
         if (invite) decideListenTogetherInvite(invite.id, "declined");
         markCard("declined");
-        pushChoice("\u6211\u62d2\u7edd\u4e86\u4e00\u8d77\u542c");
+        pushChoice("我拒绝了一起听");
+    };
+
+    // 对方主动邀请：用户聊到一起听，TA 可能反过来发邀请卡（只有这时才有同意/拒绝）
+    const maybePeerListenInvite = (userText: string) => {
+        if (session.isGroup) return;
+        if (!/一起听|一块听|陪我听/.test(userText)) return;
+        const active = getActiveListenTogetherSession();
+        if (active && active.status === "active" && active.characterId === session.contactId) return;
+        if (getPendingListenInvite(session.contactId)) return;
+        const targetChar = character;
+        if (!targetChar) return;
+        window.setTimeout(() => {
+            void (async () => {
+                try {
+                    if (getPendingListenInvite(session.contactId)) return;
+                    const running = getActiveListenTogetherSession();
+                    if (running && running.status === "active" && running.characterId === session.contactId) return;
+                    const reply = await generateListenTogetherReply({
+                        characterId: session.contactId,
+                        session: {
+                            id: "invite",
+                            characterId: session.contactId,
+                            characterName: targetChar.name,
+                            startedAt: new Date().toISOString(),
+                            tracks: [],
+                            messages: [],
+                            status: "active",
+                        },
+                        opening: true,
+                    });
+                    const refused = reply.actions.some(item => item.kind === "refuse");
+                    if (refused) {
+                        sendListenTogetherRefuse({
+                            characterId: session.contactId,
+                            characterName: targetChar.name,
+                            texts: splitListenTogetherBubbles(reply.text, [targetChar.name, "我", "用户"]),
+                        });
+                    } else {
+                        const invite = createListenTogetherInvite({
+                            characterId: session.contactId,
+                            characterName: targetChar.name,
+                            track: null,
+                            inviteText: reply.text,
+                            direction: "incoming",
+                        });
+                        sendListenTogetherInviteCard({
+                            characterId: session.contactId,
+                            characterName: targetChar.name,
+                            direction: "incoming",
+                            track: null,
+                            text: reply.text,
+                            inviteId: invite.id,
+                        });
+                    }
+                    setMessages(loadChatMessages(session.id));
+                } catch {
+                    // 对方这次没接话，不打扰
+                }
+            })();
+        }, 6000 + Math.random() * 6000);
     };
 
     const handleRelationshipAction = (msg: ChatMessage, action: "accept" | "decline" | "open") => {
@@ -4388,6 +4470,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 setMessages(prev => [...prev, diceAside]);
             }
             setPendingGenerate(true);
+            // 用户聊到"一起听"时，对方可能反过来主动发邀请卡（只有这种 incoming 卡才有同意/拒绝）
+            maybePeerListenInvite(currentText);
             // 按回复键发送：消息落库后立即触发模型回复（无论插件是否异步改写，
             // 都在消息真正写入后触发，避免回复基于旧上下文）
             if (options?.autoReply) void triggerAIResponse();
@@ -5938,11 +6022,13 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             {/* Header */}
             <header className="page-header chat-room-main-pane" data-ui="header">
                 <div className="page-header-safe-area" />
-                <div className="page-header-content">
+                <div className="page-header-content chat-room-header">
+                    <span className="chat-room-header-left">
                     <button className="page-back-btn" type="button" onClick={onBack} aria-label="返回">
                         <ChevronLeft size={24} strokeWidth={1.5} />
                     </button>
                     <button type="button" className="page-back-btn" onClick={() => setShowBusinessCard(true)} aria-label="card" style={{ marginRight: 2 }}>{character?.avatar ? <img src={character.avatar} alt="" style={{ width: 26, height: 26, borderRadius: 13, objectFit: "cover" }} /> : <ChatFallbackAvatar />}</button>
+                    </span>
                     <span className="page-title" style={{ position: 'relative' }}>
                         {offlineMode ? "线下 · " : ""}
                         {session.isGroup
@@ -5969,6 +6055,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 
             {showBusinessCard && !session.isGroup && (
                 <CharacterBusinessCard characterId={session.contactId} sessionId={session.id} onClose={() => setShowBusinessCard(false)} />
+            )}
+            {peerHomeCharId && (
+                <PeerHomepage characterId={peerHomeCharId} onClose={() => setPeerHomeCharId(null)} />
             )}
             {/* Message List */}
             <div
@@ -6488,7 +6577,13 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                             : character;
                                                         return (
                                                             <>
-                                                    <div onDoubleClick={() => {
+                                                    <div onClick={() => {
+                                                        if (msg.role === "user") return;
+                                                        const homeCharId = session.isGroup && msg.senderCharacterId
+                                                            ? msg.senderCharacterId
+                                                            : session.contactId;
+                                                        if (homeCharId) setPeerHomeCharId(homeCharId);
+                                                    }} onDoubleClick={() => {
                                                         const targetChar = session.isGroup && msg.senderCharacterId
                                                             ? groupCharMap.get(msg.senderCharacterId) || character
                                                             : character;

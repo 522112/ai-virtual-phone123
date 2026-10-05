@@ -8751,3 +8751,71 @@
 .char-card-moment p { margin: 0 0 4px; font-size: 13px; line-height: 1.5; }
 .char-card-moment span { font-size: 11px; opacity: .55; }
 .char-card-notice { margin-top: 8px; font-size: 12px; opacity: .7; text-align: center; }
+
+/* 聊天室头部：左侧返回+头像合成一组，占 grid 第一列；标题居中、更多按钮居右，一行不换行 */
+.page-header-content.chat-room-header { grid-template-columns: auto 1fr 40px; }
+.chat-room-header-left { display: flex; align-items: center; min-width: 0; }
+.chat-room-header-left .page-back-btn { width: 32px; }
+.chat-room-header .page-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 对方个人主页（微信风）：全屏浮层，封面+头像+朋友圈入口 */
+.peer-home-overlay { position: absolute; inset: 0; z-index: 60; background: var(--c-page-body-bg); display: flex; flex-direction: column; animation: peer-home-in .22s ease; }
+@keyframes peer-home-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+.peer-home { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; position: relative; }
+.peer-home-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 8px; padding: calc(var(--page-header-safe-top, 48px) + 4px) 12px 0; }
+.peer-home-back { border: 0; background: rgba(0,0,0,.28); color: #fff; width: 34px; height: 34px; border-radius: 17px; display: grid; place-items: center; cursor: pointer; }
+.peer-home-topbar-title { color: #fff; font-size: 16px; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.peer-home-cover { position: relative; height: 250px; flex-shrink: 0; }
+.peer-home-cover-btn { position: absolute; top: calc(var(--page-header-safe-top, 48px) + 4px); right: 12px; z-index: 2; display: flex; align-items: center; gap: 4px; border: 0; border-radius: 14px; background: rgba(0,0,0,.32); color: #fff; font-size: 12px; padding: 5px 10px; cursor: pointer; }
+.peer-home-idblock { position: absolute; right: 16px; bottom: -6px; display: flex; align-items: center; gap: 10px; }
+.peer-home-name { color: #fff; font-size: 18px; font-weight: 700; text-shadow: 0 1px 5px rgba(0,0,0,.5); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.peer-home-avatar { width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: var(--c-input); flex-shrink: 0; }
+.peer-home-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.peer-home-rows { padding: 26px 16px 16px; display: flex; flex-direction: column; overflow-y: auto; }
+.peer-home-row { display: flex; align-items: center; gap: 12px; padding: 13px 2px; border-bottom: 1px solid rgba(128,128,128,.18); font-size: 15px; background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; text-align: left; color: inherit; }
+button.peer-home-row { cursor: pointer; }
+.peer-home-label { color: #888; font-size: 14px; flex-shrink: 0; }
+.peer-home-value { color: var(--c-text-title); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.peer-home-sign { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.peer-home-moments-entry { align-items: center; }
+.peer-home-thumbs { flex: 1; display: flex; gap: 6px; justify-content: flex-end; min-width: 0; }
+.peer-home-thumb { width: 44px; height: 44px; border-radius: 6px; overflow: hidden; background: rgba(128,128,128,.15); flex-shrink: 0; }
+.peer-home-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.peer-home-empty { font-size: 13px; color: #999; }
+.peer-home-go { color: #aaa; flex-shrink: 0; }
+.peer-home-feed { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-top: calc(var(--page-header-safe-top, 48px) + 44px); }
+.peer-home-feed-head { display: flex; align-items: center; gap: 10px; padding: 0 16px 12px; cursor: pointer; }
+.peer-home-feed-avatar { width: 44px; height: 44px; border-radius: 6px; overflow: hidden; background: var(--c-input); }
+.peer-home-feed-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.peer-home-feed-name { font-size: 16px; font-weight: 700; color: var(--c-text-title); }
+.peer-home-pinned-tag { display: flex; align-items: center; gap: 5px; margin: 0 16px 8px; font-size: 12px; color: #b8860b; background: rgba(184,134,11,.1); border-radius: 8px; padding: 7px 10px; }
+.peer-home-feed-list { flex: 1; overflow-y: auto; padding: 0 12px 30px; display: flex; flex-direction: column; gap: 10px; }
+.peer-home-feed-item { display: flex; flex-direction: column; }
+.peer-home-pin-btn { align-self: flex-end; display: flex; align-items: center; gap: 4px; margin-top: 4px; border: 1px solid rgba(128,128,128,.3); background: none; color: #888; font-size: 12px; border-radius: 12px; padding: 4px 10px; cursor: pointer; }
+.peer-home-empty-feed { text-align: center; color: #999; font-size: 14px; padding: 40px 0; }
+.peer-home-notice { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.72); color: #fff; font-size: 13px; border-radius: 8px; padding: 8px 14px; white-space: nowrap; }
+
+/* 一起听邀请卡片（网易云风）：封面+歌名歌手+双人+进度 */
+.chat-lt-card { width: 100%; max-width: 250px; box-sizing: border-box; border-radius: 14px; padding: 12px; background: linear-gradient(160deg,#262130,#141318 60%,#1d1826); color: #f4efe8; border: 1px solid rgba(255,255,255,.09); box-shadow: 0 8px 28px rgba(0,0,0,.45); }
+.chat-lt-main { display: flex; gap: 10px; align-items: center; }
+.chat-lt-cover { width: 52px; height: 52px; object-fit: cover; border-radius: 10px; flex: 0 0 auto; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+.chat-lt-cover-fallback { width: 52px; height: 52px; border-radius: 10px; flex: 0 0 auto; background: linear-gradient(140deg,#3a3348,#23202b); display: flex; align-items: center; justify-content: center; color: #9d8fb3; }
+.chat-lt-info { min-width: 0; flex: 1; }
+.chat-lt-title { font-size: 14px; font-weight: 700; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-lt-artist { font-size: 12px; opacity: .65; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-lt-invite { font-size: 12px; margin-top: 4px; color: #e8b4b8; }
+.chat-lt-text { font-size: 11px; margin-top: 4px; opacity: .7; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.chat-lt-people { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.chat-lt-avatars { display: flex; align-items: center; }
+.chat-lt-avatars img, .chat-lt-avatars > div { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; border: 2px solid #2c2833; overflow: hidden; background: #333; }
+.chat-lt-avatars > *:nth-child(2) { margin-left: -8px; }
+.chat-lt-ids { font-size: 11px; opacity: .6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-lt-progress { height: 4px; border-radius: 2px; background: rgba(255,255,255,.12); margin-top: 10px; overflow: hidden; }
+.chat-lt-progress span { display: block; height: 100%; width: 40%; border-radius: 2px; background: linear-gradient(90deg,#e8b4b8,#9d8fb3); animation: chat-lt-loading 1.2s ease-in-out infinite; }
+@keyframes chat-lt-loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(280%); } }
+.chat-lt-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.chat-lt-status { font-size: 11px; opacity: .6; }
+.chat-lt-actions { display: flex; gap: 8px; }
+.chat-lt-btn { border: 0; border-radius: 14px; font-size: 12px; padding: 6px 14px; cursor: pointer; }
+.chat-lt-accept { background: #e8b4b8; color: #2a1e22; font-weight: 700; }
+.chat-lt-decline { background: rgba(255,255,255,.1); color: #f4efe8; }

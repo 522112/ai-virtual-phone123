@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import {
@@ -161,6 +163,7 @@ export function CheckPhoneTelegramPage({ character, onBack }: CheckPhoneTelegram
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneTelegramPayload> | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<TelegramFilter>("all");
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  useSnoopFlip(character, "TG", `${selectedFilter}|${selectedThreadId || ""}`, selectedThreadId ? "点开的这个聊天" : "会话列表");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "telegram", setSnapshot);
   const [error, setError] = useState<string | null>(null);

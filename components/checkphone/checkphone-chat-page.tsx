@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import {
@@ -707,6 +709,7 @@ export function CheckPhoneChatPage({
     string | null
   >(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  useSnoopFlip(character, "微信", `${selectedTab}|${selectedConversationId || ""}|${selectedGroupId || ""}`, selectedConversationId ? "点开的这个聊天" : selectedGroupId ? "点开的这个群聊" : "聊天列表");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "chat", setSnapshot);
   const [error, setError] = useState<string | null>(null);

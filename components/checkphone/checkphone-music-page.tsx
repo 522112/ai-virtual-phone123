@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { Bookmark, ChevronLeft, Clock3, Heart, House, Music2, RefreshCw, Trash2, UserRound, Disc3, Pause, Shuffle, SkipBack, SkipForward, ListMusic } from "lucide-react";
@@ -264,6 +266,7 @@ export function CheckPhoneMusicPage({ character, onBack }: CheckPhoneMusicPagePr
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneMusicPayload> | null>(null);
   const [selectedTab, setSelectedTab] = useState<MusicTabId>("home");
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  useSnoopFlip(character, "音乐", `${selectedTab}|${selectedPlaylistId || ""}`, selectedPlaylistId ? "点开的这个歌单" : "音乐首页");
   const [innerFloats, setInnerFloats] = useState<MusicInnerFloat[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "music", setSnapshot);

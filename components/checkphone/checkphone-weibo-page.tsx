@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
@@ -356,6 +358,7 @@ export function CheckPhoneWeiboPage({
   const [selectedTab, setSelectedTab] = useState<WeiboTabId>("home");
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  useSnoopFlip(character, "微博", `${selectedTab}|${selectedPostId || ""}|${selectedThreadId || ""}`, selectedPostId || selectedThreadId ? "点开的这条微博" : "微博首页");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

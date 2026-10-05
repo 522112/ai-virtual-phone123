@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ChevronLeft, RefreshCw, Search, Trash2, Clock, Bookmark, Globe } from "lucide-react";
@@ -32,6 +34,7 @@ export function CheckPhoneBrowserPage({ character, onBack }: CheckPhoneBrowserPa
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"history" | "bookmarks">("history");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  useSnoopFlip(character, "浏览器", `${activeTab}|${expandedId || ""}`, expandedId ? "展开的这条记录" : "浏览记录");
 
   function toggleExpand(id: string) {
     setExpandedId(prev => prev === id ? null : id);

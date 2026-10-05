@@ -215,6 +215,7 @@ export type ChatMessage = {
         adminMuteMinutes?: number;// 禁言时长（分钟）
         musicTitle?: string;      // 音乐标题
         musicArtist?: string;     // 音乐歌手
+        musicCover?: string;      // 音乐封面（一起听邀请卡用）
         xiaohongshuAuthor?: string;       // 小红书分享作者
         xiaohongshuTitle?: string;        // 小红书分享标题
         xiaohongshuBody?: string;         // 小红书分享正文

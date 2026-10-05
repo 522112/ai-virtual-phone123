@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState, type UIEvent } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import {
@@ -217,6 +219,7 @@ function handleRedditBodyScroll(event: UIEvent<HTMLElement>) {
 export function CheckPhoneRedditPage({ character, onBack }: CheckPhoneRedditPageProps) {
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneRedditPayload> | null>(null);
   const [selectedTab, setSelectedTab] = useState<RedditTabId>("posts");
+  useSnoopFlip(character, "Reddit", selectedTab, "帖子信息流");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "reddit", setSnapshot);
   const [error, setError] = useState<string | null>(null);

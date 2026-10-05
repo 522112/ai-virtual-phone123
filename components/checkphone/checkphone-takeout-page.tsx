@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ChevronLeft, StickyNote, Search, RotateCcw, Eraser } from "lucide-react";
@@ -69,6 +71,7 @@ export function CheckPhoneTakeoutPage({ character, onBack }: CheckPhoneTakeoutPa
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneTakeoutPayload> | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<TakeoutFilter>("全部");
+  useSnoopFlip(character, "外卖", `${selectedCategory}|${selectedOrderId || ""}`, selectedOrderId ? "点开的这笔订单" : "外卖首页");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "takeout", setSnapshot);
   const [error, setError] = useState<string | null>(null);

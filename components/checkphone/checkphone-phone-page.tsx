@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ArrowDownLeft, ArrowUpRight, ChevronLeft, PhoneCall, RefreshCw, Search, Trash2, UserRound, Voicemail } from "lucide-react";
@@ -87,6 +89,7 @@ export function CheckPhonePhonePage({ character, onBack }: CheckPhonePhonePagePr
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [selectedVoicemailId, setSelectedVoicemailId] = useState<string | null>(null);
+  useSnoopFlip(character, "电话", `${selectedTab}|${selectedCallId || ""}|${selectedContactId || ""}|${selectedVoicemailId || ""}`, selectedCallId || selectedContactId || selectedVoicemailId ? "点开的这条记录" : "通话记录");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "phone", setSnapshot);
   const [error, setError] = useState<string | null>(null);

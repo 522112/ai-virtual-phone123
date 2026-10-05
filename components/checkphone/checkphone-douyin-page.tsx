@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import {
   useEffect,
   useMemo,
@@ -152,6 +154,7 @@ export function CheckPhoneDouyinPage({
     useState<CheckPhoneSnapshot<CheckPhoneDouyinPayload> | null>(null);
   const [selectedTab, setSelectedTab] = useState<DouyinTabId>("works");
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  useSnoopFlip(character, "抖音", `${selectedTab}|${selectedVideoId || ""}`, selectedVideoId ? "点开的这条视频" : "视频推荐流");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "douyin", setSnapshot);
   const [error, setError] = useState<string | null>(null);

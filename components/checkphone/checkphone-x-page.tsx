@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import {
@@ -203,6 +205,7 @@ export function CheckPhoneXPage({ character, onBack }: CheckPhoneXPageProps) {
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneXPayload> | null>(null);
   const [selectedTab, setSelectedTab] = useState<XTabId>("posts");
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+  useSnoopFlip(character, "X", `${selectedTab}|${expandedEntryId || ""}`, expandedEntryId ? "展开的这条推文" : "时间信息流");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "x", setSnapshot);
   const [error, setError] = useState<string | null>(null);

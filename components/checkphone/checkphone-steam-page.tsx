@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ChevronLeft, RefreshCw, Trash2 } from "lucide-react";
@@ -125,6 +127,7 @@ export function CheckPhoneSteamPage({ character, onBack }: CheckPhoneSteamPagePr
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneSteamPayload> | null>(null);
   const [selectedTab, setSelectedTab] = useState<SteamTabId>("recent");
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  useSnoopFlip(character, "Steam", `${selectedTab}|${selectedEntryId || ""}`, selectedEntryId ? "点开的这条动态" : "游戏库");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "steam", setSnapshot);
   const [error, setError] = useState<string | null>(null);

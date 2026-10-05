@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ChevronLeft, Heart, RefreshCw, Search, ShoppingBag, Store, Trash2, Truck, ShoppingCart, Home, User, Star, Plus, type LucideIcon } from "lucide-react";
@@ -128,6 +130,7 @@ export function CheckPhoneShoppingPage({ character, onBack }: CheckPhoneShopping
   const [selectedTab, setSelectedTab] = useState<ShoppingTabId>("home");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<ShoppingProductDetail | null>(null);
+  useSnoopFlip(character, "购物", `${selectedTab}|${selectedOrderId || ""}|${selectedProduct ? "1" : ""}`, selectedProduct ? "点开的这个商品" : selectedOrderId ? "点开的这笔订单" : "商城首页");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "shopping", setSnapshot);
   const [error, setError] = useState<string | null>(null);

@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ChevronLeft, RefreshCw, Trash2, Wifi } from "lucide-react";
@@ -135,6 +137,7 @@ export function CheckPhoneAssetsPage({ character, onBack }: CheckPhoneAssetsPage
   const [snapshot, setSnapshot] = useState<CheckPhoneSnapshot<CheckPhoneAssetsPayload> | null>(null);
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null);
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  useSnoopFlip(character, "资产", `${activeAccountId || ""}|${selectedActivityId || ""}`, selectedActivityId ? "这条资产动态" : activeAccountId ? "点开的这个账户" : "资产首页");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "assets", setSnapshot);
   const [error, setError] = useState<string | null>(null);

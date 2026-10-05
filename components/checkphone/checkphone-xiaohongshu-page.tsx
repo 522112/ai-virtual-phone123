@@ -1,5 +1,7 @@
 "use client";
 
+import { useSnoopFlip } from "./checkphone-snoop-reaction";
+
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type TouchEvent, type UIEvent, type WheelEvent } from "react";
 import { useCheckPhoneRefresh } from "@/lib/checkphone-refresh-tracker";
 import { ChevronDown, ChevronLeft, CirclePlus, Eraser, Heart, House, MessageCircleMore, Mic, MoreHorizontal, RotateCcw, Settings, Smile, Plus, Search, Share } from "lucide-react";
@@ -361,6 +363,7 @@ export function CheckPhoneXiaohongshuPage({ character, onBack }: CheckPhoneXiaoh
   const [selectedTab, setSelectedTab] = useState<XiaohongshuTabId>("home");
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  useSnoopFlip(character, "小红书", `${selectedTab}|${selectedNoteId || ""}|${selectedThreadId || ""}`, selectedNoteId || selectedThreadId ? "点开的这条笔记" : "发现页");
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useCheckPhoneRefresh(character.id, "xiaohongshu", setSnapshot);
   const [error, setError] = useState<string | null>(null);
