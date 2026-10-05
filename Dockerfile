@@ -1,4 +1,4 @@
-# CloudBase 云托管构建用：Node 22，多阶段构建
+# CloudBase 云托管构建用：Node 22，多阶段构建 + Next standalone 输出
 FROM node:22-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -9,10 +9,12 @@ RUN npm run build
 FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-ENV HOST=0.0.0.0
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
 ENV NEXT_PUBLIC_SELF_HOSTED_MODE=true
-COPY --from=builder /app ./
-# 云托管容器端口固定为 3000；显式绑定 0.0.0.0:3000，避免探针 connection refused。
-# 堆内存限制调小，避免小规格实例启动时内存分配失败。
+# 只拷贝 standalone 运行产物（含必需的最小 node_modules 与 server.js），镜像体积大幅减小
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 EXPOSE 3000
-CMD ["node", "--max-old-space-size=1024", "scripts/local-next-server.mjs", "--prod", "--host", "0.0.0.0", "--port", "3000"]
+CMD ["node", "server.js"]
