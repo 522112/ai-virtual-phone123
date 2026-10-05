@@ -2597,7 +2597,6 @@ function ListenInviteBubble({ msg, onAction, characterId }: { msg: ChatMessage; 
     const data = msg.mediaData;
     const title = data?.musicTitle || "";
     const artist = data?.musicArtist || "";
-    const text = data?.inviteText || "";
     const direction = data?.inviteDirection === "outgoing" ? "outgoing" : "incoming";
     const status = data?.status || "pending";
     const incoming = msg.role === "assistant" && status === "pending" && direction === "incoming";
@@ -2615,7 +2614,6 @@ function ListenInviteBubble({ msg, onAction, characterId }: { msg: ChatMessage; 
     const cover = (data?.musicCover as string) || "";
     const inviteLine = direction === "incoming" ? peerDisplay + "邀请你一起听" : "你邀请" + peerDisplay + "一起听";
     const stateText = accepted ? "已进入一起听" : declined ? "已拒绝" : cancelled ? "已取消" : incoming ? "等你进入" : waiting ? "等待对方回应" : "一起听";
-    const desc = text || (title ? "想和你一起听《" + title + "》" : "一起听邀请");
     const showEnter = accepted;
     return (
         <div className="chat-lt-card" data-status={status}>
@@ -2631,7 +2629,6 @@ function ListenInviteBubble({ msg, onAction, characterId }: { msg: ChatMessage; 
                     <div className="chat-lt-title">{title || "一起听"}</div>
                     {artist ? <div className="chat-lt-artist">{artist}</div> : null}
                     <div className="chat-lt-invite">{inviteLine}</div>
-                    {text ? <div className="chat-lt-text">{text}</div> : null}
                 </div>
             </div>
             <div className="chat-lt-people">

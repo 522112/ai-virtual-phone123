@@ -254,31 +254,26 @@ export async function generateListenTogetherReply(input: {
       "若要私聊，【私聊】单独占一行，下一行再写正文。",
       "你听得见正在放的歌词，但要像这个人正在听歌：可以走神、接话、吐槽、哼一句，也可以聊别的。不必句句围着歌转。",
       input.opening
-        ? "用户刚邀请你一起听。这是一次性决定：只调用一次，当场同意或拒绝，不要说考虑考虑、不要含糊。"
+        ? "用户刚邀请你一起听。结合你的人设和当下状态，真诚地决定接受还是拒绝，不要说考虑考虑。"
         : input.trackChanged
-          ? "歌切了。若人设会接一句就接，不想说可以只回很短的一声，或输出动作不闲聊。"
+          ? "歌切了。按人设自然反应：想接就接，不想说也可以只回很短的一声。"
           : "用户刚发了一句，按人设接着聊。",
       input.opening && scheduleNow && scheduleNow !== "无"
         ? `你现在正在忙别的（真实日程）：${scheduleNow}。这会占用你当下的注意力——如果不方便，完全可以直接拒绝，并说明你在忙这件事。`
         : "",
       input.opening
-        ? "决定同意就正常回一句（可以顺带提一下正在放的歌），不要输出任何动作；决定拒绝就写一句符合人设的理由，并单独输出 [执行动作:拒绝一起听]。"
+        ? "接受就回一句自然的话（可以顺带提正在放的歌），不要输出任何动作；拒绝就按人设写理由，并单独输出 [执行动作:拒绝一起听]。"
         : "",
       "",
       `正在听：${formatTrackLine(current)}`,
       lyricBit ? `此刻歌词大概是：${lyricBit}` : "",
       input.session.tracks.length > 1 ? `这轮听过：${input.session.tracks.map(item => item.title).join("、")}` : "",
       playlistLine,
-      "加歌必须一次批量输出，不要一首一首分多次调用，格式：[执行动作:一起听加歌({\"songs\":[{\"query\":\"歌名\"},{\"query\":\"歌名 歌手\"}]})]，一次最多 20 首；只删一首时用[执行动作:一起听删歌({\"title\":\"歌名\"})]；想发表情弹幕时用[执行动作:一起听表情({\"emoji\":\"❤️\"})]。",
+      "【可用动作（要用时单独占一行，不要写进气泡，也不要解释）：刚被邀请时只许用“拒绝”；一起听过程中按人设选用：想放自己想听的用 [执行动作:播放音乐({\"query\":\"歌名\"})]，切上下首用 [执行动作:切换音乐({\"action\":\"next\"})] 或 prev，加歌一次批量 [执行动作:一起听加歌({\"songs\":[{\"query\":\"歌名\"}]})]（一次最多20首），删一首用 [执行动作:一起听删歌({\"title\":\"歌名\"})]，发表情弹幕用 [执行动作:一起听表情({\"emoji\":\"❤️\"})]，不想听了输出 [执行动作:结束一起听]。",
       recent ? `刚才的对话：\n${recent}` : "",
       input.userText ? `用户说：${input.userText}` : "",
       "",
-      "若人设此刻想换歌、搜自己想听的、结束一起听，或刚被邀请时要拒绝，可在回复里单独输出（可与闲聊并存）：",
-      '[执行动作:播放音乐({"query":"歌名"})]',
-      '[执行动作:切换音乐({"action":"next"})] 或 prev',
-      "[执行动作:结束一起听]",
-      "[执行动作:拒绝一起听]",
-      "动作标记单独一行，不要写进气泡，也不要向用户解释这些标记。",
+      "动作标记单独占一行，不要写进气泡，也不要向用户解释这些标记。",
     ].filter(Boolean).join("\n"),
   );
   const raw = await sendLLMRequest(
@@ -290,6 +285,11 @@ export async function generateListenTogetherReply(input: {
     { appId: "music", appTags: ["music", "listen_together"] },
   );
   const parsed = parseListenTogetherActions(raw);
+  if (input.opening) {
+    // 邀请决定只认拒绝动作：同意时模型若顺手带了别的动作标记，直接丢弃，防止乱调工具
+    parsed.actions = parsed.actions.filter(action => action.kind === "refuse");
+    if (parsed.actions.length === 0 && !parsed.text) throw new ChatEngineError("对方这句没有发出去。");
+  }
   const knownNames = [resolved.character.name, resolved.userName, "我", "用户"];
   parsed.text = splitListenTogetherBubbles(parsed.text, knownNames).join("\n\n");
   if (!parsed.text && parsed.actions.length === 0) throw new ChatEngineError("对方这句没有发出去。");

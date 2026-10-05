@@ -1032,6 +1032,12 @@ const MusicShellOverlays = memo(function MusicShellOverlays({
     onControllerChange(musicPlayer ? { closeFullPlayer: musicPlayer.closeFullPlayer } : null);
   }, [musicPlayer?.closeFullPlayer, onControllerChange]);
 
+  useEffect(() => {
+    const open = () => musicPlayer?.openFullPlayer();
+    window.addEventListener("open-music-player", open);
+    return () => window.removeEventListener("open-music-player", open);
+  }, [musicPlayer?.openFullPlayer]);
+
   return (
     <>
       {musicPlayer?.showFullPlayer && musicPlayer.currentTrack && <MusicPlayer />}
@@ -2391,6 +2397,14 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
           ? rawLaunchContext as Record<string, unknown>
           : {};
         if (customAppId) {
+          // 内置应用被包成 custom 前缀时（如音乐卡片）：直接走内置打开，不进自定义应用通道
+          if (customAppId in ICONS) {
+            setCustomAppLaunchContext(null);
+            setActiveApp(customAppId as DesktopIconId);
+            if (detail.sessionId) setChatInitSessionId(detail.sessionId);
+            else setChatInitSessionId(null);
+            return;
+          }
           openCustomAppWithBackgroundUpdateCheck(toCustomAppIconId(customAppId), launchContextRecord);
           if (detail.sessionId) setChatInitSessionId(detail.sessionId);
           else setChatInitSessionId(null);

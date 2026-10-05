@@ -224,6 +224,7 @@ const CHAT_VISUAL_MEDIA_TYPES = new Set([
     "video",
     "quote",
     "media_file",
+    "listen_invite",
     "relationship_invite",
     "accept_relationship",
     "decline_relationship",
@@ -1603,6 +1604,15 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 if (kvGet(pendingKey)) {
                     kvRemove(pendingKey);
                     window.dispatchEvent(new CustomEvent(CHAT_REQUEST_REPLY_EVENT, { detail: { sessionId: session.id } }));
+                }
+                // 刚收到对方的新消息：给角色一个主动邀你一起听的机会（低频+冷却）
+                try {
+                    const latest = loadChatMessages(session.id, 1)[0];
+                    if (latest && latest.role === "assistant" && latest.senderCharacterId === session.contactId) {
+                        window.setTimeout(() => tryProactivePeerInvite(), 4000 + Math.random() * 4000);
+                    }
+                } catch {
+                    // 读不到记录就不打扰
                 }
             }
         };
@@ -3744,6 +3754,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         const charName = character?.name || "对方";
         const openMusicApp = () => {
             window.dispatchEvent(new CustomEvent("open-app", { detail: { appId: toCustomAppIconId("music") } }));
+            window.dispatchEvent(new CustomEvent("open-music-player"));
         };
         const markCard = (status: "accepted" | "declined" | "canceled") => {
             const updated = { ...msg.mediaData, status };
@@ -3846,7 +3857,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                             inviteText: reply.text,
                             direction: "incoming",
                         });
-                        sendListenTogetherInviteCard({
+                        const sent = sendListenTogetherInviteCard({
                             characterId: session.contactId,
                             characterName: targetChar.name,
                             direction: "incoming",
@@ -3854,6 +3865,10 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                             text: reply.text,
                             inviteId: invite.id,
                         });
+                        // 角色的话单独发一条聊天消息，不进卡片
+                        for (const part of splitListenTogetherBubbles(reply.text, [targetChar.name, "我", "用户"])) {
+                            pushChatMessage({ sessionId: sent.sessionId, role: "assistant", content: part, senderName: targetChar.name, senderCharacterId: session.contactId });
+                        }
                     }
                     setMessages(loadChatMessages(session.id));
                 } catch {
@@ -3861,6 +3876,66 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 }
             })();
         }, 6000 + Math.random() * 6000);
+    };
+
+    /** 角色主动邀请：聊着聊着想拉你一起听（有人设+日程把关，不同意就悄悄算了） */
+    const tryProactivePeerInvite = () => {
+        if (session.isGroup) return;
+        const targetChar = character;
+        if (!targetChar) return;
+        const active = getActiveListenTogetherSession();
+        if (active && active.status === "active" && active.characterId === session.contactId) return;
+        if (getPendingListenInvite(session.contactId)) return;
+        const cooldownKey = `lt-proactive-${session.contactId}`;
+        const last = Number(kvGet(cooldownKey) || 0);
+        if (Date.now() - last < 30 * 60 * 1000) return;
+        if (Math.random() > 0.12) return;
+        kvSet(cooldownKey, String(Date.now()));
+        void (async () => {
+            try {
+                if (getPendingListenInvite(session.contactId)) return;
+                const running = getActiveListenTogetherSession();
+                if (running && running.status === "active" && running.characterId === session.contactId) return;
+                const reply = await generateListenTogetherReply({
+                    characterId: session.contactId,
+                    session: {
+                        id: "invite",
+                        characterId: session.contactId,
+                        characterName: targetChar.name,
+                        startedAt: new Date().toISOString(),
+                        tracks: [],
+                        messages: [],
+                        status: "active",
+                    },
+                    opening: true,
+                });
+                const refused = reply.actions.some(item => item.kind === "refuse");
+                if (refused) return;
+                const invite = createListenTogetherInvite({
+                    characterId: session.contactId,
+                    characterName: targetChar.name,
+                    track: null,
+                    inviteText: reply.text,
+                    direction: "incoming",
+                });
+                const sent = sendListenTogetherInviteCard({
+                    characterId: session.contactId,
+                    characterName: targetChar.name,
+                    direction: "incoming",
+                    track: null,
+                    text: reply.text,
+                    inviteId: invite.id,
+                });
+                // 角色的话单独发一条聊天消息，不进卡片
+                for (const part of splitListenTogetherBubbles(reply.text, [targetChar.name, "我", "用户"])) {
+                    pushChatMessage({ sessionId: sent.sessionId, role: "assistant", content: part, senderName: targetChar.name, senderCharacterId: session.contactId });
+                }
+                setMessages(loadChatMessages(session.id));
+                window.dispatchEvent(new CustomEvent("global-notice", { detail: `${targetChar.name}邀请你一起听，去聊天看看` }));
+            } catch {
+                // 对方这次没开口，不打扰
+            }
+        })();
     };
 
     const handleRelationshipAction = (msg: ChatMessage, action: "accept" | "decline" | "open") => {

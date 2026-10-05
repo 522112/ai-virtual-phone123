@@ -27,6 +27,7 @@ import {
     getPendingListenInvite,
     loadListenTogetherSessions,
     setListenTogetherBg,
+    startListenTogetherSession,
 } from "@/lib/listen-together-storage";
 import type { ListenTogetherSession, ListenTogetherTrack } from "@/lib/listen-together-types";
 import { parseChatBubbleDisplay, sanitizeListenTogetherText } from "@/lib/chat-message-display";
@@ -520,7 +521,7 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
     refresh();
     setBusy("对方正在决定");
     try {
-      // 发出邀请后直接调用一次 API：按人设+当下日程当场同意或拒绝，只调这一次
+      // 发出邀请后直接调用一次 API：按人设+当下日程当场同意或拒绝，只调这一次，不调工具
       const reply = await generateListenTogetherReply({
         characterId: character.id,
         session: draftSession,
@@ -530,21 +531,34 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
       });
       const refused = reply.actions.some(item => item.kind === "refuse");
       const peerTexts = splitListenTogetherBubbles(reply.text, [character.name, "我", "用户"]);
-      // 对方不会秒回：等几秒再揭晓，像真人看完消息才回
-      const timer = window.setTimeout(() => {
-        const done = revealListenTogetherOutcome({
-          sessionId: sent.sessionId,
-          messageId: sent.messageId,
-          inviteId: invite.id,
-          accept: !refused,
-          peerTexts,
-        });
-        if (done) {
-          notify(refused ? `${character.name}暂时来不了` : `${character.name}接受了邀请，去聊天进入一起听`);
-          refresh();
-        }
-      }, 6000 + Math.random() * 4000);
-      inviteTimers.current.push(timer);
+      if (refused) {
+        const timer = window.setTimeout(() => {
+          const done = revealListenTogetherOutcome({
+            sessionId: sent.sessionId,
+            messageId: sent.messageId,
+            inviteId: invite.id,
+            accept: false,
+            peerTexts,
+          });
+          if (done) {
+            notify(`${character.name}暂时来不了：${peerTexts[0] || "现在不方便"}`);
+            refresh();
+          }
+        }, 4000 + Math.random() * 3000);
+        inviteTimers.current.push(timer);
+        return;
+      }
+      // 同意：直接开始一起听，无需再回聊天窗口；聊天卡也更新为已接受
+      startListenTogetherSession({ characterId: character.id, characterName: character.name, track });
+      revealListenTogetherOutcome({
+        sessionId: sent.sessionId,
+        messageId: sent.messageId,
+        inviteId: invite.id,
+        accept: true,
+        peerTexts,
+      });
+      notify(`${character.name}和你一起听了`);
+      refresh();
       return;
     } catch (error) {
       notify(error instanceof Error ? error.message : "对方还没开口");
