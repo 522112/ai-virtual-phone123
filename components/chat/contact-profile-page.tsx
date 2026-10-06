@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Heart, Plus, Trash2 } from "lucide-react";
+import { Heart } from "lucide-react";
 import { PageShell } from "@/components/ui/page-shell";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
@@ -12,16 +12,10 @@ import {
 } from "@/lib/settings-storage";
 import {
     COUPLE_AVATARS_UPDATED_EVENT,
-    addCoupleAvatarPair,
-    applyCoupleAvatarPair,
-    loadCoupleAvatarPairs,
     overlayCharacterForDisplay,
     overlayUserIdentityForDisplay,
-    removeCoupleAvatarPair,
-    sendCoupleAvatarToChat,
     setContactCharacterAvatar,
     setContactUserAvatar,
-    type CoupleAvatarPair,
 } from "@/lib/couple-avatar-storage";
 import type { Character } from "@/lib/character-types";
 import type { UserIdentity } from "@/components/settings/user-identity";
@@ -104,18 +98,13 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
     const [identity, setIdentity] = useState<UserIdentity | null>(() =>
         overlayUserIdentityForDisplay(characterId, resolveUserIdentity(characterId, "chat")),
     );
-    const [pairs, setPairs] = useState<CoupleAvatarPair[]>(() => loadCoupleAvatarPairs(characterId));
-    const [draftUser, setDraftUser] = useState<string | null>(null);
-    const [draftCharacter, setDraftCharacter] = useState<string | null>(null);
-    const [draftLabel, setDraftLabel] = useState("");
-    const [busySide, setBusySide] = useState<"user" | "character" | "draft-user" | "draft-character" | null>(null);
+    const [busySide, setBusySide] = useState<"user" | "character" | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
 
     const refresh = useCallback(() => {
         const raw = loadCharacters().find(item => item.id === characterId) || null;
         setCharacter(raw ? overlayCharacterForDisplay(raw) : null);
         setIdentity(overlayUserIdentityForDisplay(characterId, resolveUserIdentity(characterId, "chat")));
-        setPairs(loadCoupleAvatarPairs(characterId));
     }, [characterId]);
 
     useEffect(() => {
@@ -161,65 +150,6 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
         }
     };
 
-    const pickDraft = async (side: "draft-user" | "draft-character", file: File) => {
-        setBusySide(side);
-        try {
-            const url = await fileToAvatarDataUrl(file);
-            if (side === "draft-user") setDraftUser(url);
-            else setDraftCharacter(url);
-        } catch (error) {
-            showNotice(error instanceof Error ? error.message : "图片处理失败");
-        } finally {
-            setBusySide(null);
-        }
-    };
-
-    const saveDraftPair = () => {
-        if (!draftUser || !draftCharacter) {
-            showNotice("请先上传双方的情头");
-            return;
-        }
-        const pair = addCoupleAvatarPair({
-            characterId,
-            userAvatar: draftUser,
-            characterAvatar: draftCharacter,
-            label: draftLabel,
-        });
-        if (!pair) {
-            showNotice("保存失败");
-            return;
-        }
-        setDraftUser(null);
-        setDraftCharacter(null);
-        setDraftLabel("");
-        refresh();
-        showNotice("情头已保存");
-    };
-
-    const handleApplyPair = (pairId: string) => {
-        const applied = applyCoupleAvatarPair(characterId, pairId);
-        if (!applied) {
-            showNotice("换上失败");
-            return;
-        }
-        const session = createOrGetSession(characterId);
-        onSelectSession(session);
-    };
-
-    const handleSendPair = (pairId: string) => {
-        const sent = sendCoupleAvatarToChat({
-            characterId,
-            pairId,
-            characterName: character?.name,
-        });
-        if (!sent) {
-            showNotice("发送失败");
-            return;
-        }
-        const session = createOrGetSession(characterId);
-        onSelectSession(session);
-    };
-
     const wechatId = useMemo(() => character?.wechatID || "N/A", [character?.wechatID]);
 
     if (!character) {
@@ -261,71 +191,6 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
                 >
                     发消息
                 </button>
-                <p className="couple-profile-tip">
-                    在这里保存双方情头。换上或发给对方时，只戴你这边的头像；对方那张会发进聊天，由人设决定接不接。
-                </p>
-
-                <div className="couple-pair-section">
-                    <div className="couple-pair-title">情头</div>
-                    {pairs.length === 0 && (
-                        <div className="menu-desc">还没有保存的情头，下面可以加一对。</div>
-                    )}
-                    <div className="couple-pair-list">
-                        {pairs.map(pair => (
-                            <div key={pair.id} className="couple-pair-card">
-                                <div className="couple-pair-thumbs">
-                                    <img src={pair.userAvatar} alt="" />
-                                    <img src={pair.characterAvatar} alt="" />
-                                </div>
-                                <div className="couple-pair-body">
-                                    <div className="couple-pair-name">{pair.label || "未命名情头"}</div>
-                                    <div className="couple-pair-actions">
-                                        <button type="button" className="ui-btn ui-btn-ghost" onClick={() => handleApplyPair(pair.id)}>换上</button>
-                                        <button type="button" className="ui-btn ui-btn-success" onClick={() => handleSendPair(pair.id)}>发给对方</button>
-                                        <button
-                                            type="button"
-                                            className="couple-pair-delete"
-                                            onClick={() => { removeCoupleAvatarPair(pair.id); refresh(); }}
-                                            aria-label="删除情头"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="couple-pair-section">
-                    <div className="couple-pair-title">添加一对情头</div>
-                    <div className="couple-profile-hero couple-profile-hero-compact">
-                        <AvatarSlot
-                            label="我的这张"
-                            src={draftUser}
-                            busy={busySide === "draft-user"}
-                            onPick={file => void pickDraft("draft-user", file)}
-                        />
-                        <div className="couple-profile-heart" aria-hidden="true">
-                            <Plus size={20} strokeWidth={1.8} />
-                        </div>
-                        <AvatarSlot
-                            label="对方那张"
-                            src={draftCharacter}
-                            busy={busySide === "draft-character"}
-                            onPick={file => void pickDraft("draft-character", file)}
-                        />
-                    </div>
-                    <input
-                        className="ui-input w-full"
-                        value={draftLabel}
-                        onChange={event => setDraftLabel(event.target.value)}
-                        placeholder="备注，比如春日情头"
-                    />
-                    <button type="button" className="ui-btn ui-btn-success w-full" onClick={saveDraftPair}>
-                        保存这对情头
-                    </button>
-                </div>
                 {notice && <div className="couple-profile-toast">{notice}</div>}
             </div>
         </PageShell>

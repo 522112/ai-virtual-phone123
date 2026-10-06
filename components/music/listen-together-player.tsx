@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadCharacters } from "@/lib/character-storage";
+import { overlayCharacterForDisplay, overlayUserIdentityForDisplay } from "@/lib/couple-avatar-storage";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { ChatFallbackAvatar } from "@/components/chat/chat-fallback-avatar";
 import { FramedAvatar, AvatarFrameEditor } from "./avatar-frame";
@@ -148,8 +149,8 @@ function DuoBar({ sessionId, characterName, playing }: { sessionId: string; char
     void tick;
     if (!session) return null;
     const raw = loadCharacters().find(item => item.id === session.characterId) || null;
-    const character = raw;
-    const identity = resolveUserIdentity(session.characterId, "chat");
+    const character = raw ? overlayCharacterForDisplay(raw) : null;
+    const identity = overlayUserIdentityForDisplay(session.characterId, resolveUserIdentity(session.characterId, "chat"));
     const userName = identity?.screenName?.trim() || identity?.name || "我";
     const peerName = character?.screenName?.trim() || characterName;
     const fresh = (author: "user" | "character") =>
@@ -205,14 +206,14 @@ function FloatLayer({ sessionId }: { sessionId: string }) {
     if (mine.length === 0 && theirs.length === 0) return null;
     return (
         <div className="ltp-float-layer" aria-hidden="true">
-            <div className="ltp-float-col" data-side="me">
-                {mine.slice(0, mineShown).map((m, i) => (
-                    <span key={m.id} className="ltp-float-bubble is-me" style={{ animationDelay: `${i * 0.9}s` }}>{m.text}</span>
-                ))}
-            </div>
             <div className="ltp-float-col" data-side="peer">
                 {theirs.slice(Math.max(0, peerShown - 2), peerShown).map((m, i) => (
                     <span key={m.id} className="ltp-float-bubble" style={{ animationDelay: `${i * 0.9}s` }}>{m.text}</span>
+                ))}
+            </div>
+            <div className="ltp-float-col" data-side="me">
+                {mine.slice(0, mineShown).map((m, i) => (
+                    <span key={m.id} className="ltp-float-bubble is-me" style={{ animationDelay: `${i * 0.9}s` }}>{m.text}</span>
                 ))}
             </div>
         </div>
@@ -239,7 +240,7 @@ function ChatBubbles({ sessionId, limit }: { sessionId: string; limit?: number }
     const raw = session ? loadCharacters().find(item => item.id === session.characterId) || null : null;
     const character = raw;
     const identity = session
-        ? resolveUserIdentity(session.characterId, "chat")
+        ? overlayUserIdentityForDisplay(session.characterId, resolveUserIdentity(session.characterId, "chat"))
         : null;
     const removeMsg = (id: string) => {
         deleteListenTogetherMessage(sessionId, id);
@@ -507,6 +508,7 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
     const [draft, setDraft] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [showConfirmClose, setShowConfirmClose] = useState(false);
     const [sending, setSending] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -648,9 +650,12 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
     };
 
     const closeTogether = () => {
+        const active = getActiveListenTogetherSession();
+        if (active) endListenTogetherSession(active.id);
         endListenTogetherSession(session.id);
         setShowMenu(false);
-        onNotice("一起听已结束，可在历史里回看");
+        setShowConfirmClose(false);
+        onNotice("一起听已结束，下次是全新的一次");
         onOpenHistory();
     };
 
@@ -709,7 +714,7 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                                         ref={quickRef}
                                         value={quick}
                                         onChange={e => setQuick(e.target.value)}
-                                        onKeyDown={e => { if (e.key === "Enter") { if (appendUserText(quick)) setQuick(""); } }}
+                                        onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); if (appendUserText(quick)) setQuick(""); } }}
                                         placeholder="边听边说一句..."
                                     />
                                     <button type="button" className="ltp-emoji-btn" onClick={() => setShowEmoji(prev => !prev)} aria-label="表情">
@@ -733,7 +738,19 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                                 <span className="ltp-menu">
                                     <button type="button" onClick={() => { setShowMenu(false); onOpenHistory(); }}>历史听歌记录</button>
                                     <button type="button" onClick={() => { setShowMenu(false); onOpenFrame(); }}>头像框</button>
-                                    <button type="button" onClick={closeTogether}>关闭一起听</button>
+                                    <button type="button" onClick={() => { setShowMenu(false); setShowConfirmClose(true); }}>关闭一起听</button>
+                                </span>
+                            )}
+                            {showConfirmClose && (
+                                <span className="ltp-confirm-mask" onClick={() => setShowConfirmClose(false)}>
+                                    <span className="ltp-confirm-box" onClick={e => e.stopPropagation()}>
+                                        <span className="ltp-confirm-title">结束本次一起听？</span>
+                                        <span className="ltp-confirm-desc">结束后下次是全新的一次，记录保留在历史里</span>
+                                        <span className="ltp-confirm-btns">
+                                            <button type="button" className="ltp-confirm-cancel" onClick={() => setShowConfirmClose(false)}>继续听</button>
+                                            <button type="button" className="ltp-confirm-ok" onClick={closeTogether}>结束</button>
+                                        </span>
+                                    </span>
                                 </span>
                             )}
                         </span>
@@ -750,7 +767,7 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                             ref={inputRef}
                             value={draft}
                             onChange={e => setDraft(e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter") appendUserText(draft); }}
+                            onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); appendUserText(draft); } }}
                             placeholder="说点什么...（长按气泡可删除）"
                         />
                         <button type="button" className="ltp-emoji-btn" onClick={() => setShowEmoji(prev => !prev)} aria-label="表情">

@@ -10,6 +10,7 @@ import { usePhoneBack } from "@/lib/phone-navigation";
 import { resolveCloudSttConfig, transcribeAudioBlob } from "@/lib/stt-cloud";
 import { resolveContactCard } from "@/lib/contact-card";
 import { loadCharacters } from "@/lib/character-storage";
+import { overlayCharacterForDisplay, overlayUserIdentityForDisplay } from "@/lib/couple-avatar-storage";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { CHAT_OPEN_SESSION_EVENT, dispatchOpenAddContact } from "@/lib/chat-notification-events";
 import { ContactCardGenerateFlow } from "@/components/chat/contact-card-generate-flow";
@@ -1145,9 +1146,9 @@ function ListenReportCard({ msg, characterId }: { msg: ChatMessage; characterId?
         date: structured?.date ?? str(/(\d{4}\.\d{2}\.\d{2})/) ?? "",
     };
     const cid = (d?.reportCharacterId as string) || characterId || "";
-    const peer = cid ? loadCharacters().find(c => c.id === cid) || null : null;
-    const peerAvatar = peer?.avatar || null;
-    const myAvatar = resolveUserIdentity(cid || "", "chat")?.avatarUrl || null;
+    const rawPeer = cid ? loadCharacters().find(c => c.id === cid) || null : null;
+    const peerAvatar = (rawPeer ? overlayCharacterForDisplay(rawPeer) : null)?.avatar || null;
+    const myAvatar = overlayUserIdentityForDisplay(cid || "", resolveUserIdentity(cid || "", "chat"))?.avatarUrl || null;
     const avatarStyle: React.CSSProperties = { width: 46, height: 46, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.9)", background: "rgba(255,255,255,0.2)", flexShrink: 0 };
     const avatarFallbackStyle: React.CSSProperties = { ...avatarStyle, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.25)" };
     const avatarFallback = (
