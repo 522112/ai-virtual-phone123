@@ -15,7 +15,8 @@ import {
     LISTEN_TOGETHER_UPDATED_EVENT,
 } from "@/lib/listen-together-storage";
 import type { ListenTogetherSession, ListenTogetherTrack } from "@/lib/listen-together-types";
-import { generateListenTogetherReply, parseLyricLines, splitListenTogetherBubbles } from "@/lib/listen-together-engine";
+import { generateListenTogetherReply, splitListenTogetherBubbles } from "@/lib/listen-together-engine";
+import { parseLyricLines } from "./listen-together";
 import { sendListenTogetherReportCard } from "@/lib/listen-together-share";
 import { getMusicControlBridge } from "@/lib/music-control-bridge";
 import { STICKER_PACKS } from "@/lib/sticker-data";

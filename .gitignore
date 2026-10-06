@@ -32,3 +32,6 @@ tools/weixin-local-assistant/config.txt
 android-shell/local.properties
 android-shell/.gradle/
 android-shell/app/build/
+
+.vercel
+.env*
