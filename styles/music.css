@@ -5611,3 +5611,11 @@
 .ltp-frame-item-del { border: 0; background: none; color: #d98; font-size: 12px; cursor: pointer; padding: 0 2px; }
 
 .ltp-history-live { font-size: 10px; font-weight: 700; color: #fff; background: #e8354b; border-radius: 999px; padding: 2px 8px; }
+
+.ltp-frame-sheet { max-height: 92%; background: #221c27; color: #f4efe8; }
+.ltp-frame-sheet .ltp-sheet-title { color: #fff; }
+.ltp-frame-sheet .ltp-x { color: rgba(255,255,255,.7); }
+.ltp-frame-scroll { max-height: 58vh; }
+.ltp-frame-preview-avatar { width: 140px; height: 140px; }
+.ltp-frame-row { color: #eee; }
+.ltp-frame-lib-title { color: rgba(255,255,255,.6); }

@@ -8821,7 +8821,7 @@ button.peer-home-row { cursor: pointer; }
 .chat-lt-decline { background: rgba(255,255,255,.1); color: #f4efe8; }
 .chat-bubble-lt-invite { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
 
-.chat-app-listen-report { width: min(280px, calc(100% - 8px)); border-radius: 14px; }
+.chat-app-listen-report { width: min(268px, calc(100% - 8px)); }
 .chat-app-listen-report-body { width: 100%; }
 .chat-app-listen-report-body section { margin: 0 !important; }
 .chat-app-listen-report-body img { max-width: 100%; }

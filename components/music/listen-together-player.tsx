@@ -372,8 +372,6 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
             if (b.status === "active" && a.status !== "active") return 1;
             return Date.parse(b.startedAt) - Date.parse(a.startedAt);
         });
-    const totalTracks = sessions.reduce((sum, s) => sum + (s.heardTrackIds?.length || s.tracks.length), 0);
-    const totalMessages = sessions.reduce((sum, s) => sum + s.messages.length, 0);
     const raw = loadCharacters().find(item => item.id === characterId) || null;
     const character = raw ? overlayCharacterForDisplay(raw) : null;
     return (
@@ -399,7 +397,7 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
                             <span>本次一起听了 <b>{item.heardTrackIds?.length || item.tracks.length}首歌曲</b></span>
                             <span>本次陪伴彼此 <b>{formatListenDuration(item)}</b></span>
                         </div>
-                        <div className="ltp-history-sub">累计{totalTracks}首歌曲 · 互发消息{totalMessages}条</div>
+                        <div className="ltp-history-sub">本会话互发消息{item.messages.length}条</div>
                         <div className="ltp-history-actions">
                             <button type="button" onClick={() => onOpenRecords(item.id)}>聊天记录</button>
                             <button

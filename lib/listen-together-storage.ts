@@ -266,18 +266,42 @@ function normalizePreset(value: unknown): AvatarFramePreset | null {
   if (!value || typeof value !== "object") return null;
   const item = value as Partial<AvatarFramePreset>;
   if (typeof item.id !== "string" || typeof item.frameUrl !== "string" || !item.frameUrl) return null;
+  const num = (v: unknown, fb: number) => (typeof v === "number" && Number.isFinite(v) ? v : fb);
+  const clamp = (v: number) => Math.max(-80, Math.min(80, Math.round(v)));
   return {
     id: item.id,
     name: typeof item.name === "string" && item.name.trim() ? item.name : "方案",
     frameUrl: item.frameUrl,
-    scale: typeof item.scale === "number" ? item.scale : 1,
-    offsetX: typeof item.offsetX === "number" ? item.offsetX : 0,
-    offsetY: typeof item.offsetY === "number" ? item.offsetY : 0,
+    scale: num(item.scale, 1),
+    // 偏移统一为“相对头像自身尺寸的百分比”，多大头像显示都一致
+    offsetX: clamp(num(item.offsetX, 0)),
+    offsetY: clamp(num(item.offsetY, 0)),
     createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
   };
 }
 
+// 一次性迁移：老方案存的是 px（基于 96px 预览），换算成百分比
+function migrateAvatarFrameOffsetsOnce(): void {
+  try {
+    const flag = readJson<string | null>("ai_phone_listen_avatar_frame_migrated_v1", null);
+    if (flag === "done") return;
+    const items = readJson<unknown[]>(AVATAR_FRAME_PRESETS_KEY, []);
+    let touched = false;
+    const next = items.map(raw => {
+      const p = normalizePreset(raw);
+      if (!p) return raw;
+      const px2pct = (px: number) => Math.max(-80, Math.min(80, Math.round((px / 96) * 100)));
+      const converted: AvatarFramePreset = { ...p, offsetX: px2pct(p.offsetX), offsetY: px2pct(p.offsetY) };
+      if (converted.offsetX !== p.offsetX || converted.offsetY !== p.offsetY) touched = true;
+      return converted;
+    });
+    if (touched) writeJson(AVATAR_FRAME_PRESETS_KEY, next);
+    writeJson("ai_phone_listen_avatar_frame_migrated_v1", "done");
+  } catch { /* 忽略 */ }
+}
+
 export function listAvatarFramePresets(): AvatarFramePreset[] {
+  migrateAvatarFrameOffsetsOnce();
   const items = readJson<unknown[]>(AVATAR_FRAME_PRESETS_KEY, []);
   return items.map(normalizePreset).filter((x): x is AvatarFramePreset => Boolean(x));
 }

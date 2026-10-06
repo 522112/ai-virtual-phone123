@@ -35,7 +35,7 @@ export function FramedAvatar({ avatarUrl, target, className, imgClassName }: {
                     src={frame.frameUrl}
                     alt=""
                     className="avatar-frame-png"
-                    style={{ transform: `translate(${frame.offsetX}px, ${frame.offsetY}px) scale(${frame.scale})` }}
+                    style={{ transform: `translate(${frame.offsetX}%, ${frame.offsetY}%) scale(${frame.scale})` }}
                 />
             ) : null}
         </span>
@@ -119,7 +119,7 @@ export function AvatarFrameEditor({ characterName, myAvatar, characterAvatar, on
                                     src={draft.frameUrl}
                                     alt=""
                                     className="avatar-frame-png"
-                                    style={{ transform: `translate(${draft.offsetX}px, ${draft.offsetY}px) scale(${draft.scale})` }}
+                                    style={{ transform: `translate(${draft.offsetX}%, ${draft.offsetY}%) scale(${draft.scale})` }}
                                 />
                             ) : null}
                         </span>
@@ -130,12 +130,12 @@ export function AvatarFrameEditor({ characterName, myAvatar, characterAvatar, on
                             <input type="range" min={0.4} max={2.2} step={0.02} value={draft.scale} onChange={e => patch({ scale: Number(e.target.value) })} />
                         </label>
                         <label className="ltp-frame-row">
-                            <span>左右</span>
-                            <input type="range" min={-60} max={60} step={1} value={draft.offsetX} onChange={e => patch({ offsetX: Number(e.target.value) })} />
+                            <span>左右%</span>
+                            <input type="range" min={-80} max={80} step={1} value={draft.offsetX} onChange={e => patch({ offsetX: Number(e.target.value) })} />
                         </label>
                         <label className="ltp-frame-row">
-                            <span>上下</span>
-                            <input type="range" min={-60} max={60} step={1} value={draft.offsetY} onChange={e => patch({ offsetY: Number(e.target.value) })} />
+                            <span>上下%</span>
+                            <input type="range" min={-80} max={80} step={1} value={draft.offsetY} onChange={e => patch({ offsetY: Number(e.target.value) })} />
                         </label>
                     </div>
                     <div className="ltp-frame-actions">
@@ -150,7 +150,7 @@ export function AvatarFrameEditor({ characterName, myAvatar, characterAvatar, on
                             <div key={item.id} className="ltp-frame-item" data-active={item.id === appliedId ? "" : undefined}>
                                 <span className="ltp-frame-item-dot">
                                     {previewAvatar ? <img src={previewAvatar} alt="" /> : <ChatFallbackAvatar />}
-                                    <img src={item.frameUrl} alt="" className="avatar-frame-png" style={{ transform: `translate(${item.offsetX}px, ${item.offsetY}px) scale(${item.scale})` }} />
+                                    <img src={item.frameUrl} alt="" className="avatar-frame-png" style={{ transform: `translate(${item.offsetX}%, ${item.offsetY}%) scale(${item.scale})` }} />
                                 </span>
                                 <span className="ltp-frame-item-name">{item.name}</span>
                                 <button type="button" className="ltp-frame-item-use" onClick={() => applyPreset(item.id)}>{item.id === appliedId ? "已用" : "使用"}</button>

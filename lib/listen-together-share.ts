@@ -86,7 +86,7 @@ export function buildListenTogetherReportHtml(session: ListenTogetherSession, op
     : `${Math.floor(cumulativeMinutes / 60)}小时${cumulativeMinutes % 60}分钟`;
   const messageCount = session.messages.length;
   return `
-<section style="width:100%;box-sizing:border-box;margin:0;padding:0;background:linear-gradient(170deg,#ff6a5e,#f43f4e 45%,#e8344a);color:#fff;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,0.45);overflow:hidden;">
+<section style="width:100%;box-sizing:border-box;margin:0;padding:0;background:linear-gradient(170deg,#ff6a5e,#f43f4e 45%,#e8344a);color:#fff;border-radius:14px;border:1px solid rgba(0,0,0,0.06);box-shadow:0 8px 28px rgba(0,0,0,0.25);font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;overflow:hidden;">
   <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:10px 12px 0;opacity:0.9;">
     <span>网易云音乐 | 一起听</span>
     <span>${escapeHtml(date)}</span>
@@ -95,7 +95,7 @@ export function buildListenTogetherReportHtml(session: ListenTogetherSession, op
     ${userAvatar ? `<img src="${userAvatar}" alt="" style="width:46px;height:46px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.9);" />` : ""}
     ${peerAvatar ? `<img src="${peerAvatar}" alt="" style="width:46px;height:46px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.9);margin-left:-14px;" />` : ""}
   </div>
-  <div style="margin:10px 12px 0;background:#fff;color:#e8354b;border-radius:16px;padding:16px 12px;text-align:center;">
+  <div style="margin:10px 12px 0;background:#fff;color:#e8354b;border-radius:16px;padding:16px 12px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,0.12);">
     <div style="display:flex;">
       <div style="flex:1;">
         <div style="font-size:11px;color:#e58aa0;">本次一起听了</div>
