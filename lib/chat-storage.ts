@@ -251,6 +251,13 @@ export type ChatMessage = {
         appCardSummary?: string;
         appCardTone?: string;
         appCardLayout?: Record<string, unknown>;
+        reportKind?: string;
+        reportStats?: {
+            listenedCount?: number; duration?: string; cumulativeTracks?: number;
+            cumulativeDuration?: string; messageCount?: number; date?: string;
+        };
+        reportCharacterId?: string;
+        reportCharacterName?: string;
         appDirectiveId?: string;
         appDirectiveLabel?: string;
         appDirectiveArgs?: string[];

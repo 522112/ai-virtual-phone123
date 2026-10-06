@@ -1120,6 +1120,68 @@ function PaymentRequestBubble({ msg, charName, userName, onShowDetail }: {
 
 // ── Custom App Card ─────────────────────────────
 
+/** 一起听报告卡：纯原生 JSX（不依赖 HTML 字符串），新老消息都能完整渲染 */
+function ListenReportCard({ msg, characterId }: { msg: ChatMessage; characterId?: string }) {
+    const d = msg.mediaData as Record<string, unknown> | undefined;
+    const structured = (d?.reportStats as {
+        listenedCount?: number; duration?: string; cumulativeTracks?: number;
+        cumulativeDuration?: string; messageCount?: number; date?: string;
+    } | undefined) || undefined;
+    const html = String((d?.appCardLayout as Record<string, unknown> | undefined)?.html || "");
+    const num = (re: RegExp): number | null => {
+        const m = html.match(re);
+        return m ? Number(m[1]) : null;
+    };
+    const str = (re: RegExp): string | null => {
+        const m = html.match(re);
+        return m ? m[1].trim() : null;
+    };
+    const stats = {
+        listenedCount: structured?.listenedCount ?? num(/本次一起听了[\s\S]{0,120}?(\d+)\s*首歌曲/) ?? 0,
+        duration: structured?.duration ?? str(/本次陪伴彼此[\s\S]{0,200}?>([^<]{1,30})</) ?? "",
+        cumulativeTracks: structured?.cumulativeTracks ?? num(/累计\s*(\d+)\s*首歌曲/) ?? 0,
+        cumulativeDuration: structured?.cumulativeDuration ?? str(/累计\s*\d+\s*首歌曲\s*、\s*([^<]{1,30})/) ?? "",
+        messageCount: structured?.messageCount ?? num(/互发消息\s*(\d+)\s*条/) ?? 0,
+        date: structured?.date ?? str(/(\d{4}\.\d{2}\.\d{2})/) ?? "",
+    };
+    const cid = (d?.reportCharacterId as string) || characterId || "";
+    const peer = cid ? loadCharacters().find(c => c.id === cid) || null : null;
+    const peerAvatar = peer?.avatar || null;
+    const myAvatar = resolveUserIdentity(cid || "", "chat")?.avatarUrl || null;
+    return (
+        <div className="chat-lr-card">
+            <div className="chat-lr-head">
+                <span className="chat-lr-brand">网易云音乐 | 一起听</span>
+                {stats.date ? <span className="chat-lr-date">{stats.date}</span> : null}
+            </div>
+            <div className="chat-lr-avatars">
+                {myAvatar ? <img src={myAvatar} alt="" /> : <ChatFallbackAvatar />}
+                {peerAvatar ? <img src={peerAvatar} alt="" /> : <ChatFallbackAvatar />}
+            </div>
+            <div className="chat-lr-white">
+                <div className="chat-lr-cols">
+                    <div className="chat-lr-col">
+                        <div className="chat-lr-label">本次一起听了</div>
+                        <div className="chat-lr-num">{stats.listenedCount}首歌曲</div>
+                    </div>
+                    <div className="chat-lr-col">
+                        <div className="chat-lr-label">本次陪伴彼此</div>
+                        <div className="chat-lr-num">{stats.duration}</div>
+                    </div>
+                </div>
+                <div className="chat-lr-fav">收藏到歌单</div>
+                <div className="chat-lr-total">累计{stats.cumulativeTracks}首歌曲、{stats.cumulativeDuration}</div>
+            </div>
+            <div className="chat-lr-msgs">互发消息 {stats.messageCount}条</div>
+            <div className="chat-lr-qr">扫码或用云音乐搜索「一起听」</div>
+            <div className="chat-lr-actions">
+                <span className="chat-lr-btn">聊天记录</span>
+                <span className="chat-lr-btn solid">分享报告</span>
+            </div>
+        </div>
+    );
+}
+
 function AppCardBubble({ msg, characterId, characterName }: { msg: ChatMessage; characterId?: string; characterName?: string }) {
     const d = msg.mediaData;
     const appName = d?.appName || "APP";
@@ -1166,12 +1228,9 @@ function AppCardBubble({ msg, characterId, characterName }: { msg: ChatMessage; 
 
     if (layout.html) {
         // 一起听报告卡：原生渲染，不走 iframe（iframe 高度塌陷会导致只剩标题行）；纯展示，点击不跳转
-        if (layout.html.includes("一起听")) {
-            return (
-                <div className="chat-app-listen-report" style={style}>
-                    <div className="chat-app-listen-report-body" dangerouslySetInnerHTML={{ __html: stripAppCardExecutableHtml(layout.html) }} />
-                </div>
-            );
+        const reportKind = (msg.mediaData as Record<string, unknown> | undefined)?.reportKind;
+        if (reportKind === "listen-report" || layout.html.includes("一起听")) {
+            return <ListenReportCard msg={msg} characterId={characterId} />;
         }
         return (
             <div className={`chat-app-custom-card${toneClass}`} data-disabled={cardOpenDisabled || undefined} style={style} onClick={openApp}>

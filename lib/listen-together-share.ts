@@ -58,12 +58,17 @@ export function buildListenTogetherCardHtml(session: ListenTogetherSession, opts
   <div style="margin-top:10px;">${trackHtml}</div>${avatars}${idsRow}
 </section>`;
 }
-export function buildListenTogetherReportHtml(session: ListenTogetherSession, opts?: { characterAvatar?: string; userAvatar?: string }): string {
+export type ListenTogetherReportStats = {
+  listenedCount: number;
+  duration: string;
+  cumulativeTracks: number;
+  cumulativeDuration: string;
+  messageCount: number;
+  date: string;
+};
+
+export function getListenTogetherReportStats(session: ListenTogetherSession): ListenTogetherReportStats {
   const duration = formatListenDuration(session);
-  const peerChar = loadCharacters().find(c => c.id === session.characterId) || null;
-  const peerAvatar = opts?.characterAvatar || peerChar?.avatar || "";
-  const identity = resolveUserIdentity(session.characterId, "chat");
-  const userAvatar = opts?.userAvatar || identity?.avatarUrl || "";
   const date = (session.startedAt || "").slice(0, 10).replace(/-/g, ".");
   const listenedCount = session.heardTrackIds?.length || session.tracks.length;
   let cumulativeTracks = listenedCount;
@@ -84,7 +89,15 @@ export function buildListenTogetherReportHtml(session: ListenTogetherSession, op
   const cumulativeDuration = cumulativeMinutes < 60
     ? `${cumulativeMinutes}分钟`
     : `${Math.floor(cumulativeMinutes / 60)}小时${cumulativeMinutes % 60}分钟`;
-  const messageCount = session.messages.length;
+  return { listenedCount, duration, cumulativeTracks, cumulativeDuration, messageCount: session.messages.length, date };
+}
+
+export function buildListenTogetherReportHtml(session: ListenTogetherSession, opts?: { characterAvatar?: string; userAvatar?: string }): string {
+  const { listenedCount, duration, cumulativeTracks, cumulativeDuration, messageCount, date } = getListenTogetherReportStats(session);
+  const peerChar = loadCharacters().find(c => c.id === session.characterId) || null;
+  const peerAvatar = opts?.characterAvatar || peerChar?.avatar || "";
+  const identity = resolveUserIdentity(session.characterId, "chat");
+  const userAvatar = opts?.userAvatar || identity?.avatarUrl || "";
   return `
 <section style="width:100%;box-sizing:border-box;margin:0;padding:0;background:linear-gradient(170deg,#ff6a5e,#f43f4e 45%,#e8344a);color:#fff;border-radius:14px;border:1px solid rgba(0,0,0,0.06);box-shadow:0 8px 28px rgba(0,0,0,0.25);font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;overflow:hidden;">
   <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:10px 12px 0;opacity:0.9;">
@@ -136,6 +149,7 @@ export function sendListenTogetherReportCard(input: {
   const html = buildListenTogetherReportHtml(input.session);
   const title = `和${input.session.characterName}的一起听报告`;
   const listened = input.session.heardTrackIds?.length || input.session.tracks.length;
+  const stats = getListenTogetherReportStats(input.session);
   const message = pushChatMessage({
     sessionId: chat.id,
     role: "user",
@@ -144,6 +158,10 @@ export function sendListenTogetherReportCard(input: {
     mediaData: {
       appId: "music",
       appName: "音乐",
+      reportKind: "listen-report",
+      reportStats: stats,
+      reportCharacterId: input.characterId,
+      reportCharacterName: input.session.characterName,
       appCardTitle: title,
       appCardBody: `本次一起听了${listened}首歌曲 · ${formatListenDuration(input.session)}`,
       appCardSummary: `一起听报告 · 互发消息${input.session.messages.length}条`,
@@ -197,6 +215,7 @@ export function sendListenTogetherShare(input: {
   const listened = input.session.heardTrackIds?.length || input.session.tracks.length;
   const history = formatHistory(input.session);
   const html = buildListenTogetherReportHtml(input.session);
+  const stats = getListenTogetherReportStats(input.session);
   const message = pushChatMessage({
     sessionId: chat.id,
     role: "user",
@@ -205,6 +224,10 @@ export function sendListenTogetherShare(input: {
     mediaData: {
       appId: "music",
       appName: "音乐",
+      reportKind: "listen-report",
+      reportStats: stats,
+      reportCharacterId: input.characterId,
+      reportCharacterName: input.session.characterName,
       appCardTitle: title,
       appCardBody: `本次一起听了${listened}首歌曲 · ${formatListenDuration(input.session)}`,
       appCardSummary: `一起听报告 · 互发消息${input.session.messages.length}条`,
