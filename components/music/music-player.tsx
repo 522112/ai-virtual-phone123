@@ -169,6 +169,16 @@ export default function MusicPlayer() {
         clearMusicToast();
     }, [clearMusicToast, pendingPlayTrackId, player.currentTrack?.id]);
 
+    // 一起听：本次实际播放到的歌计入“本次一起听了X首”
+    useEffect(() => {
+        const sid = player.currentTrack?.id;
+        if (!sid) return;
+        void import("@/lib/listen-together-storage").then(m => {
+            const active = m.getActiveListenTogetherSession();
+            if (active) m.markListenTogetherHeard(active.id, sid);
+        });
+    }, [player.currentTrack?.id]);
+
     useEffect(() => () => {
         if (musicToastTimerRef.current) clearTimeout(musicToastTimerRef.current);
         if (musicLoadingFallbackRef.current) clearTimeout(musicLoadingFallbackRef.current);
@@ -519,7 +529,6 @@ export default function MusicPlayer() {
                         tab={ltBodyTab}
                         onTabChange={setLtBodyTab}
                         onOpenQueue={() => setShowLtQueue(true)}
-                        onSeek={time => player.seek(time)}
                         onNotice={showMusicToast}
                         showQueue={showLtQueue}
                         onCloseQueue={() => setShowLtQueue(false)}
@@ -685,18 +694,6 @@ export default function MusicPlayer() {
                     </svg>
                     <span>{commentTotal > 0 ? formatCount(commentTotal) : "评论"}</span>
                 </button>
-                {listenTogether && (
-                    <button
-                        className="mp-social-btn"
-                        onClick={() => window.dispatchEvent(new CustomEvent("lt-focus-input"))}
-                        title="边听边说"
-                    >
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                        </svg>
-                        <span>聊天</span>
-                    </button>
-                )}
                 <ListenTogetherControls
                     track={{
                         id: track.id,

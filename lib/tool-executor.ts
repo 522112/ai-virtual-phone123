@@ -2757,14 +2757,33 @@ async function executeListenTogetherInvite(call: ToolCall, context?: ToolExecuti
     }
     const peerTexts = engine.splitListenTogetherBubbles(reply.text, [target.name, "我", "用户"]);
     const refused = reply.actions.some(a => a.kind === "refuse");
+    // 角色自己选一首歌：优先开场回复里的播放动作，其次当前在播，再次角色歌单第一首
+    let pick: { id: string; title: string; artist: string; coverUrl?: string } | null = null;
+    const bridge = getMusicControlBridge();
+    const query = reply.actions.find(a => a.kind === "play" && a.query) as { query?: string } | undefined;
+    if (query?.query) {
+        const r = await bridge?.resolveByQuery(query.query).catch(() => null);
+        if (r) pick = { id: r.id, title: r.title, artist: r.artist || "", coverUrl: r.coverUrl };
+    }
+    if (!pick) {
+        const cur = bridge?.getState().currentTrack;
+        if (cur) pick = { id: cur.id, title: cur.title, artist: cur.artist || "", coverUrl: cur.coverUrl };
+    }
+    if (!pick && !refused) {
+        const { getCharacterFavorites } = await import("./music-favorites-storage");
+        const fav = getCharacterFavorites(characterId, target.name);
+        const first = (fav.songs || []).find(s => s.title?.trim());
+        if (first) pick = { id: `fav_${first.id}`, title: first.title, artist: first.artist || "", coverUrl: first.coverUrl };
+    }
+    if (pick) st.updateListenTogetherInviteTrack(invite.id, pick);
     share.revealListenTogetherOutcome({
         sessionId: sent.sessionId, messageId: sent.messageId, inviteId: invite.id, accept: !refused, peerTexts,
     });
     if (refused) {
         return musicToolSuccess(call.name, `对方拒绝：${reply.text}`, { userNotice: peerTexts[0] || "对方暂时来不了" });
     }
-    st.startListenTogetherSession({ characterId, characterName: target.name });
-    return musicToolSuccess(call.name, `对方已接受并开始一起听：${peerTexts.join(" ")}。直接在聊天里说话，用户去音乐播放页会合`, {
+    st.startListenTogetherSession({ characterId, characterName: target.name, track: pick || undefined });
+    return musicToolSuccess(call.name, `对方已接受并开始一起听${pick ? `，正在放《${pick.title}》` : ""}。用户去音乐播放页会合，你也可以在聊天里继续说话`, {
         userNotice: `${peerTexts[0] || "对方接受了邀请"}，去音乐里和TA一起听吧`,
     });
 }

@@ -34,6 +34,8 @@ export type ListenTogetherSession = {
   messages: ListenTogetherMessage[];
   status: "active" | "ended";
   playlist?: ListenTogetherPlaylist;
+  /** 本次实际听过的歌（按播放顺序去重计数，用于“本次一起听了X首歌曲”） */
+  heardTrackIds?: string[];
 };
 
 export type ListenTogetherInviteDirection = "incoming" | "outgoing";

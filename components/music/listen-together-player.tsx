@@ -33,7 +33,6 @@ type Props = {
     tab: ListenTogetherBodyTab;
     onTabChange: (tab: ListenTogetherBodyTab) => void;
     onOpenQueue: () => void;
-    onSeek: (time: number) => void;
     onNotice: (text: string) => void;
     showQueue: boolean;
     onCloseQueue: () => void;
@@ -89,14 +88,7 @@ function DuoBar({ sessionId, characterName, playing }: { sessionId: string; char
                 </span>
                 <em className="ltp-name">{userName}</em>
             </span>
-            <span className="ltp-together" aria-hidden="true">
-                <svg viewBox="0 0 120 44" width="120" height="44">
-                    <path d="M14 2 C 14 26, 38 34, 58 36" fill="none" strokeWidth="2" strokeLinecap="round" />
-                    <path d="M106 2 C 106 26, 82 34, 62 36" fill="none" strokeWidth="2" strokeLinecap="round" />
-                    <circle cx="60" cy="37" r="3" fill="none" strokeWidth="2" />
-                    <circle cx="60" cy="37" r="1.2" fill="currentColor" stroke="none" />
-                </svg>
-            </span>
+            <span className="ltp-together" aria-hidden="true" />
             <span className="ltp-person">
                 <span className="ltp-avatar">
                     {character?.avatar ? <img src={character.avatar} alt="" /> : <ChatFallbackAvatar />}
@@ -220,10 +212,17 @@ function EmojiPanel({ onPick }: { onPick: (emoji: string) => void }) {
     );
 }
 
-/** 当前正在一起听歌单：固定高度可滑动；从歌单/播放列表整单导入，或让TA加歌 */
-export function ListenTogetherQueueSheet({ sessionId, characterId, onClose, onNotice, onAskPeer }: { sessionId: string; characterId: string; onClose: () => void; onNotice: (text: string) => void; onAskPeer: () => void }) {
+/** 当前正在一起听：网易云风格贴底半屏面板，点歌直接播、垃圾桶清空 */
+export function ListenTogetherQueueSheet({ sessionId, currentTrackId, onClose, onNotice, onAskPeer, onPlayTrack }: {
+    sessionId: string;
+    currentTrackId?: string;
+    onClose: () => void;
+    onNotice: (text: string) => void;
+    onAskPeer: () => void;
+    onPlayTrack: (trackId: string) => void;
+}) {
     const [, force] = useState(0);
-    const [busy, setBusy] = useState(false);
+    const [confirmClear, setConfirmClear] = useState(false);
     useEffect(() => {
         const refresh = () => force(n => n + 1);
         window.addEventListener(LISTEN_TOGETHER_UPDATED_EVENT, refresh);
@@ -231,84 +230,70 @@ export function ListenTogetherQueueSheet({ sessionId, characterId, onClose, onNo
     }, []);
     const session = getListenTogetherSession(sessionId);
     const tracks = session?.tracks || [];
-    const importFromFavPlaylist = async () => {
-        if (busy) return;
-        setBusy(true);
-        try {
-            const { getCharacterFavorites } = await import("@/lib/music-favorites-storage");
-            const fav = getCharacterFavorites(characterId);
-            const songs = (fav.songs || []).filter(s => s.title?.trim());
-            if (songs.length === 0) {
-                onNotice("TA的歌单还是空的");
-                return;
-            }
-            const { addManyListenTogetherPlaylistTracks } = await import("@/lib/listen-together-storage");
-            addManyListenTogetherPlaylistTracks(sessionId, songs.map(s => ({
-                id: `fav_${s.id}`,
-                title: s.title,
-                artist: s.artist || "",
-                coverUrl: s.coverUrl,
-            })));
-            onNotice(`已导入TA的歌单${songs.length}首`);
-        } finally {
-            setBusy(false);
-        }
-    };
-    const importFromQueue = async () => {
-        if (busy) return;
-        setBusy(true);
-        try {
-            const bridge = getMusicControlBridge();
-            const queue = bridge?.getState().queue || [];
-            if (queue.length === 0) {
-                onNotice("播放列表是空的");
-                return;
-            }
-            const { addManyListenTogetherPlaylistTracks } = await import("@/lib/listen-together-storage");
-            const latest = getListenTogetherSession(sessionId);
-            const have = new Set((latest?.tracks || []).map(t => t.id));
-            const fresh = queue.filter(t => !have.has(t.id));
-            if (fresh.length === 0) {
-                onNotice("播放列表的歌都已经在了");
-                return;
-            }
-            addManyListenTogetherPlaylistTracks(sessionId, fresh.map(item => ({
-                id: item.id,
-                title: item.title,
-                artist: item.artist || "",
-                coverUrl: item.coverUrl,
-            })));
-            onNotice(`已从播放列表加入${fresh.length}首`);
-        } finally {
-            setBusy(false);
-        }
-    };
     const removeTrack = async (trackId: string, title: string) => {
         const { removeListenTogetherPlaylistTrack } = await import("@/lib/listen-together-storage");
         removeListenTogetherPlaylistTrack(sessionId, trackId);
         onNotice(`已移出：${title}`);
     };
+    const clearAll = async () => {
+        const { clearListenTogetherPlaylist } = await import("@/lib/listen-together-storage");
+        clearListenTogetherPlaylist(sessionId);
+        setConfirmClear(false);
+        onNotice("已清空一起听歌单");
+    };
     return (
         <div className="ltp-sheet-mask" onClick={onClose}>
-            <div className="ltp-sheet" onClick={e => e.stopPropagation()}>
-                <div className="ltp-sheet-title">当前正在一起听</div>
-                <div className="ltp-sheet-list">
-                    {tracks.length === 0 && <div className="ltp-sheet-empty">还没加歌，从下面整单导入吧</div>}
-                    {tracks.map(item => (
-                        <div key={item.id} className="ltp-track-row">
-                            <span className="ltp-track-note" aria-hidden="true">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-                            </span>
-                            <span className="ltp-track-name">{item.title}{item.artist ? ` · ${item.artist}` : ""}</span>
-                            <button type="button" className="ltp-track-x" onClick={() => void removeTrack(item.id, item.title)} aria-label="移出">×</button>
+            <div className="ltp-wy-sheet" onClick={e => e.stopPropagation()}>
+                <span className="ltp-wy-handle" aria-hidden="true" />
+                <div className="ltp-wy-title">当前正在一起听<sup>{tracks.length}</sup></div>
+                <div className="ltp-wy-tools">
+                    <span className="ltp-wy-pill">单曲循环</span>
+                    <span className="ltp-wy-pill">已开启</span>
+                    <span className="ltp-wy-spacer" />
+                    <button type="button" className="ltp-wy-icon" aria-label="下载" onClick={() => onNotice("一起听暂不支持下载")}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4" /><path d="M4 21h16" /></svg>
+                    </button>
+                    <button type="button" className="ltp-wy-icon" aria-label="让TA加歌" onClick={onAskPeer}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M3 6h13M3 12h13M3 18h9" /><path d="M19 14v6m-3-3h6" /></svg>
+                    </button>
+                    <button type="button" className="ltp-wy-icon" aria-label="清空" onClick={() => setConfirmClear(true)}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" /></svg>
+                    </button>
+                </div>
+                <div className="ltp-wy-hint">
+                    <span className="ltp-wy-vip">VIP</span>
+                    根据双方口味，心动推荐
+                </div>
+                <div className="ltp-wy-list">
+                    {tracks.length === 0 && <div className="ltp-wy-empty">歌单还空着，让TA加几首吧</div>}
+                    {tracks.map(item => {
+                        const isCurrent = item.id === currentTrackId;
+                        return (
+                            <div
+                                key={item.id}
+                                className="ltp-wy-row"
+                                {...(isCurrent ? { "data-current": "" } : {})}
+                                onClick={() => { onPlayTrack(item.id); onClose(); }}
+                            >
+                                <span className="ltp-wy-name">{item.title}<span className="ltp-wy-artist">{item.artist ? ` · ${item.artist}` : ""}</span></span>
+                                {isCurrent && <span className="ltp-wy-src">来源</span>}
+                                <button type="button" className="ltp-wy-x" onClick={e => { e.stopPropagation(); void removeTrack(item.id, item.title); }} aria-label="移出">×</button>
+                            </div>
+                        );
+                    })}
+                    <div className="ltp-wy-foot">正在播放心动歌曲，好歌持续推荐中</div>
+                </div>
+                {confirmClear && (
+                    <div className="ltp-confirm-mask" onClick={e => { e.stopPropagation(); setConfirmClear(false); }}>
+                        <div className="ltp-confirm" onClick={e => e.stopPropagation()}>
+                            <p>清空整个一起听歌单？</p>
+                            <div className="ltp-confirm-actions">
+                                <button type="button" onClick={() => setConfirmClear(false)}>取消</button>
+                                <button type="button" className="ltp-confirm-danger" onClick={() => void clearAll()}>清空</button>
+                            </div>
                         </div>
-                    ))}
-                </div>
-                <div className="ltp-import-row">
-                    <button type="button" disabled={busy} onClick={() => void importFromFavPlaylist()}>从TA歌单导入</button>
-                    <button type="button" disabled={busy} onClick={() => void importFromQueue()}>从播放列表添加</button>
-                    <button type="button" disabled={busy} onClick={onAskPeer}>让TA加歌</button>
-                </div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -376,7 +361,7 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
                 {sessions.map(item => (
                     <div key={item.id} className="ltp-history-card">
                         <div className="ltp-history-stats">
-                            <span>本次一起听了 <b>{item.tracks.length}首歌曲</b></span>
+                            <span>本次一起听了 <b>{item.heardTrackIds?.length || item.tracks.length}首歌曲</b></span>
                             <span>本次陪伴彼此 <b>{formatListenDuration(item)}</b></span>
                         </div>
                         <div className="ltp-history-sub">累计{totalTracks}首歌曲 · 互发消息{totalMessages}条</div>
@@ -408,6 +393,10 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
     const [now, setNow] = useState(() => Date.now());
     const [quick, setQuick] = useState("");
     const quickRef = useRef<HTMLInputElement>(null);
+    const [showInput, setShowInput] = useState(false);
+    const [coverMode, setCoverMode] = useState<"art" | "lyrics">("art");
+    const lyricListRef = useRef<HTMLDivElement>(null);
+    const chatListRef = useRef<HTMLDivElement>(null);
     const [draft, setDraft] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
@@ -432,13 +421,37 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
     const nowLyric = lyricActive >= 0 ? lyricLines[lyricActive]?.text : "";
 
     useEffect(() => {
+        if (coverMode !== "lyrics") return;
+        const el = lyricListRef.current?.querySelector('[data-active]');
+        el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, [lyricActive, coverMode]);
+
+    useEffect(() => {
         const focus = () => {
             onTabChange("player");
-            window.setTimeout(() => quickRef.current?.focus(), 60);
+            setCoverMode("art");
+            setShowInput(true);
+            window.setTimeout(() => quickRef.current?.focus(), 80);
         };
         window.addEventListener("lt-focus-input", focus);
         return () => window.removeEventListener("lt-focus-input", focus);
     }, [onTabChange]);
+
+    useEffect(() => {
+        const el = chatListRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+    }, [tab, sending, draft]);
+
+    useEffect(() => {
+        const onUpd = () => {
+            window.requestAnimationFrame(() => {
+                const el = chatListRef.current;
+                if (el) el.scrollTop = el.scrollHeight;
+            });
+        };
+        window.addEventListener(LISTEN_TOGETHER_UPDATED_EVENT, onUpd);
+        return () => window.removeEventListener(LISTEN_TOGETHER_UPDATED_EVENT, onUpd);
+    }, []);
 
     /** 只发消息，不调用：等用户点“调用”才让对方回 */
     const appendUserText = (text: string): boolean => {
@@ -519,6 +532,7 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
             onNotice("对方这次没接上，稍后再调用");
         } finally {
             setSending(false);
+            setShowInput(false);
         }
     };
 
@@ -539,42 +553,71 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
 
     return (
         <div className="ltp-wrap">
-            <DuoBar sessionId={session.id} characterName={session.characterName} playing={isPlaying} />
-            <div className="ltp-elapsed">{formatTogetherElapsed(session.startedAt, now)}</div>
-            {tab === "player" ? (
-                <>
-                    <div className="ltp-art" data-mode={playerStyle} {...(isPlaying ? { "data-playing": "" } : {})}>
-                        {playerStyle === "vinyl" ? (
-                            <span className="ltp-vinyl">
-                                <span className="ltp-vinyl-disc">
-                                    {track.coverUrl ? <img src={track.coverUrl} alt="" /> : null}
-                                </span>
-                            </span>
-                        ) : (
-                            <span className="ltp-cover">
-                                {track.coverUrl ? <img src={track.coverUrl} alt="" /> : <ChatFallbackAvatar />}
-                            </span>
-                        )}
+            {tab === "player" && coverMode === "lyrics" ? (
+                <div className="ltp-lyrics-full" ref={lyricListRef}>
+                    <div className="ltp-lyrics-head">
+                        <span className="ltp-lyrics-title">{track.title}</span>
+                        <button type="button" className="ltp-lyrics-back" onClick={() => setCoverMode("art")} aria-label="返回封面">收起</button>
                     </div>
-                    <div className="ltp-song">{track.title}</div>
-                    <div className="ltp-artist">{track.artist || "未知歌手"}</div>
-                    {nowLyric ? <div className="ltp-now-lyric">{nowLyric}</div> : null}
-                    <FloatLayer sessionId={session.id} />
-                    <div className="ltp-quick-row">
-                        <input
-                            ref={quickRef}
-                            value={quick}
-                            onChange={e => setQuick(e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter" && appendUserText(quick)) setQuick(""); }}
-                            placeholder="边听边说一句..."
-                        />
-                        {quick.trim() && (
-                            <button type="button" className="ltp-send" onClick={() => { if (appendUserText(quick)) setQuick(""); }}>发送</button>
-                        )}
-                    </div>
-                </>
+                    {lyricLines.length === 0 ? (
+                        <div className="ltp-lyric-row" data-active=""><span className="ltp-lyric">暂无歌词</span></div>
+                    ) : (
+                        lyricLines.map((line, i) => (
+                            <div key={`${line.time}-${i}`} className="ltp-lyric-row" {...(i === lyricActive ? { "data-active": "" } : {})}>
+                                <span className="ltp-lyric">{line.text || " "}</span>
+                            </div>
+                        ))
+                    )}
+                </div>
             ) : (
-                <div className="ltp-chat">
+                <>
+                    <DuoBar sessionId={session.id} characterName={session.characterName} playing={isPlaying} />
+                    <div className="ltp-elapsed">{formatTogetherElapsed(session.startedAt, now)}</div>
+                    {tab === "player" ? (
+                        <>
+                            <button
+                                type="button"
+                                className="ltp-art"
+                                data-mode={playerStyle}
+                                {...(isPlaying ? { "data-playing": "" } : {})}
+                                onClick={() => setCoverMode("lyrics")}
+                                aria-label="查看歌词"
+                            >
+                                {playerStyle === "vinyl" ? (
+                                    <span className="ltp-vinyl">
+                                        <span className="ltp-vinyl-disc">
+                                            {track.coverUrl ? <img src={track.coverUrl} alt="" /> : null}
+                                        </span>
+                                    </span>
+                                ) : (
+                                    <span className="ltp-cover">
+                                        {track.coverUrl ? <img src={track.coverUrl} alt="" /> : <ChatFallbackAvatar />}
+                                    </span>
+                                )}
+                            </button>
+                            <div className="ltp-song">{track.title}</div>
+                            <div className="ltp-artist">{track.artist || "未知歌手"}</div>
+                            {nowLyric ? <div className="ltp-now-lyric">{nowLyric}</div> : null}
+                            <FloatLayer sessionId={session.id} />
+                            {showInput && (
+                                <div className="ltp-quick-row">
+                                    <input
+                                        ref={quickRef}
+                                        value={quick}
+                                        onChange={e => setQuick(e.target.value)}
+                                        onKeyDown={e => { if (e.key === "Enter") { if (appendUserText(quick)) { setQuick(""); void callPeer(); } } }}
+                                        placeholder="边听边说一句..."
+                                    />
+                                    <button type="button" className="ltp-emoji-btn" onClick={() => setShowEmoji(prev => !prev)} aria-label="表情">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="12" cy="12" r="9" /><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none" /><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none" /><path d="M8.5 14.5c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8" strokeLinecap="round" /></svg>
+                                    </button>
+                                    <button type="button" className="ltp-call" disabled={sending} onClick={() => { if (appendUserText(quick)) { setQuick(""); void callPeer(); } else { void callPeer(); } }}>{sending ? "…" : "调用"}</button>
+                                </div>
+                            )}
+                            {showEmoji && <EmojiPanel onPick={emoji => { appendUserText(emoji); setQuick(emoji); }} />}
+                        </>
+                    ) : (
+                        <div className="ltp-chat">
                     <div className="ltp-chat-head">
                         <span className="ltp-song">{track.title}</span>
                         <span className="ltp-menu-wrap">
@@ -589,7 +632,7 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                             )}
                         </span>
                     </div>
-                    <div className="ltp-chat-list">
+                    <div className="ltp-chat-list" ref={chatListRef}>
                         <ChatBubbles sessionId={session.id} />
                         {sending && (
                             <div className="ltp-calling"><span /><span /><span /></div>
@@ -620,35 +663,42 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                     {showEmoji && <EmojiPanel onPick={pickEmoji} />}
                 </div>
             )}
-            <div className="ltp-tab">
-                <button type="button" data-active={tab === "player" ? "" : undefined} onClick={() => onTabChange("player")} aria-label="播放">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-                </button>
-                <button type="button" data-active={tab === "chat" ? "" : undefined} onClick={() => onTabChange("chat")} aria-label="聊天">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-                </button>
-                <button type="button" className="ltp-queue-link" onClick={onOpenQueue}>歌单</button>
-            </div>
-            {showHistory && (
-                <ListenTogetherHistorySheet
-                    characterId={session.characterId}
-                    characterName={session.characterName}
-                    onClose={() => setShowHistory(false)}
-                    onOpenRecords={setRecordsId}
-                    onNotice={onNotice}
-                />
-            )}
-            {showQueue && (
-                <ListenTogetherQueueSheet
-                    sessionId={session.id}
-                    characterId={session.characterId}
-                    onClose={onCloseQueue}
-                    onNotice={onNotice}
-                    onAskPeer={askPeerForSongs}
-                />
-            )}
-            {recordsId && (
-                <ListenTogetherRecordsSheet sessionId={recordsId} onClose={() => setRecordsId(null)} />
+                    <div className="ltp-tab ltp-tab-fixed">
+                        <button type="button" data-active={tab === "player" ? "" : undefined} onClick={() => onTabChange("player")} aria-label="播放">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+                        </button>
+                        <button type="button" data-active={tab === "chat" ? "" : undefined} onClick={() => onTabChange("chat")} aria-label="聊天">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                        </button>
+                        <button type="button" className="ltp-queue-link" onClick={onOpenQueue}>歌单</button>
+                    </div>
+                    {showHistory && (
+                        <ListenTogetherHistorySheet
+                            characterId={session.characterId}
+                            characterName={session.characterName}
+                            onClose={() => setShowHistory(false)}
+                            onOpenRecords={setRecordsId}
+                            onNotice={onNotice}
+                        />
+                    )}
+                    {showQueue && (
+                        <ListenTogetherQueueSheet
+                            sessionId={session.id}
+                            currentTrackId={track.id}
+                            onClose={onCloseQueue}
+                            onNotice={onNotice}
+                            onAskPeer={askPeerForSongs}
+                            onPlayTrack={async trackId => {
+                                const bridge = getMusicControlBridge();
+                                const now = getListenTogetherSession(session.id)?.tracks.find(t => t.id === trackId);
+                                if (now) await bridge?.playByQuery(`${now.title} ${now.artist || ""}`.trim());
+                            }}
+                        />
+                    )}
+                    {recordsId && (
+                        <ListenTogetherRecordsSheet sessionId={recordsId} onClose={() => setRecordsId(null)} />
+                    )}
+                </>
             )}
         </div>
     );

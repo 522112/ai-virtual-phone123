@@ -92,6 +92,7 @@ function normalizeSession(value: unknown): ListenTogetherSession | null {
     messages: Array.isArray(item.messages) ? item.messages.map(normalizeMessage).filter(Boolean) as ListenTogetherMessage[] : [],
     status: item.status === "active" ? "active" : "ended",
     playlist: normalizePlaylist((item as { playlist?: unknown }).playlist),
+    heardTrackIds: Array.isArray(item.heardTrackIds) ? item.heardTrackIds.filter((x): x is string => typeof x === "string") : [],
   };
 }
 
@@ -136,7 +137,7 @@ export function startListenTogetherSession(input: {
 
 export function updateListenTogetherSession(
   sessionId: string,
-  patch: Partial<Pick<ListenTogetherSession, "tracks" | "messages" | "status" | "endedAt" | "playlist">>,
+  patch: Partial<Pick<ListenTogetherSession, "tracks" | "messages" | "status" | "endedAt" | "playlist" | "heardTrackIds">>,
 ): ListenTogetherSession | null {
   const items = loadListenTogetherSessions();
   let updated: ListenTogetherSession | null = null;
@@ -174,8 +175,7 @@ export function appendListenTogetherMessage(
   return message;
 }
 
-export function endListenTogetherSession(sessionId: string): ListenTogetherSession | null {
-  const session = getListenTogetherSession(sessionId);
+export function endListenTogetherSession(sessionId: string): ListenTogetherSession | null {  const session = getListenTogetherSession(sessionId);
   if (!session) return null;
   if (session.status === "ended") return session;
   return updateListenTogetherSession(sessionId, {
@@ -206,9 +206,22 @@ export function deleteListenTogetherMessage(sessionId: string, messageId: string
   return updateListenTogetherSession(sessionId, { messages: next });
 }
 
+/** 记录本次实际听过一首歌（去重计数） */
+export function markListenTogetherHeard(sessionId: string, trackId: string): void {
+  const session = getListenTogetherSession(sessionId);
+  if (!session || session.status !== "active" || !trackId) return;
+  const heard = session.heardTrackIds || [];
+  if (heard.includes(trackId)) return;
+  updateListenTogetherSession(sessionId, { heardTrackIds: [...heard, trackId] });
+}
+
+/** 清空整个一起听歌单（保留会话与聊天记录） */
+export function clearListenTogetherPlaylist(sessionId: string): ListenTogetherSession | null {
+  return updateListenTogetherSession(sessionId, { tracks: [] });
+}
+
 // 一起听背景：按角色 id 长久保存（dataURL 进 kv，随备份走）
-export function getListenTogetherBg(characterId: string): string {
-  const map = readJson<Record<string, string>>(LISTEN_BG_KEY, {});
+export function getListenTogetherBg(characterId: string): string {  const map = readJson<Record<string, string>>(LISTEN_BG_KEY, {});
   return typeof map[characterId] === "string" ? map[characterId] : "";
 }
 
@@ -357,8 +370,20 @@ export function createListenTogetherInvite(input: {
   return invite;
 }
 
-export function decideListenTogetherInvite(
-  id: string,
+/** 角色选歌后补进邀请卡（发出时可能还没定歌） */
+export function updateListenTogetherInviteTrack(id: string, track: ListenTogetherTrack): ListenTogetherInvite | null {
+  const items = loadInvites();
+  let updated: ListenTogetherInvite | null = null;
+  const next = items.map(item => {
+    if (item.id !== id) return item;
+    updated = { ...item, track };
+    return updated;
+  });
+  if (updated) saveInvites(next);
+  return updated;
+}
+
+export function decideListenTogetherInvite(  id: string,
   decision: "accepted" | "declined",
 ): ListenTogetherInvite | null {
   const items = loadInvites();

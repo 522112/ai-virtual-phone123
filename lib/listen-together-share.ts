@@ -64,18 +64,26 @@ export function buildListenTogetherReportHtml(session: ListenTogetherSession, op
   const peerAvatar = opts?.characterAvatar || peerChar?.avatar || "";
   const identity = resolveUserIdentity(session.characterId, "chat");
   const userAvatar = opts?.userAvatar || identity?.avatarUrl || "";
-  const peerId = peerChar?.screenName?.trim() || session.characterName;
-  const myId = identity?.name || "我";
   const date = (session.startedAt || "").slice(0, 10).replace(/-/g, ".");
-  let cumulativeTracks = session.tracks.length;
+  const listenedCount = session.heardTrackIds?.length || session.tracks.length;
+  let cumulativeTracks = listenedCount;
+  let cumulativeMinutes = Math.max(1, Math.round((new Date(session.endedAt || Date.now()).getTime() - new Date(session.startedAt).getTime()) / 60000));
   try {
     const mine = loadListenTogetherSessions().filter(item => item.characterId === session.characterId);
     if (mine.length > 0) {
-      cumulativeTracks = mine.reduce((sum, item) => sum + item.tracks.length, 0);
+      cumulativeTracks = mine.reduce((sum, item) => sum + (item.heardTrackIds?.length || item.tracks.length), 0);
+      cumulativeMinutes = mine.reduce((sum, item) => {
+        const start = new Date(item.startedAt).getTime();
+        const end = new Date(item.endedAt || Date.now()).getTime();
+        return sum + Math.max(1, Math.round((end - start) / 60000));
+      }, 0);
     }
   } catch {
     // 取不到累计就只显示本次
   }
+  const cumulativeDuration = cumulativeMinutes < 60
+    ? `${cumulativeMinutes}分钟`
+    : `${Math.floor(cumulativeMinutes / 60)}小时${cumulativeMinutes % 60}分钟`;
   const messageCount = session.messages.length;
   return `
 <section style="width:100%;box-sizing:border-box;margin:0;padding:0;background:linear-gradient(170deg,#ff6a5e,#f43f4e 45%,#e8344a);color:#fff;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,0.45);overflow:hidden;">
@@ -83,27 +91,38 @@ export function buildListenTogetherReportHtml(session: ListenTogetherSession, op
     <span>网易云音乐 | 一起听</span>
     <span>${escapeHtml(date)}</span>
   </div>
-  <div style="display:flex;justify-content:center;margin-top:6px;">
-    ${userAvatar ? `<img src="${userAvatar}" alt="" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.85);" />` : ""}
-    ${peerAvatar ? `<img src="${peerAvatar}" alt="" style="width:44px;height:44px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.85);margin-left:-12px;" />` : ""}
+  <div style="display:flex;justify-content:center;margin-top:8px;">
+    ${userAvatar ? `<img src="${userAvatar}" alt="" style="width:46px;height:46px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.9);" />` : ""}
+    ${peerAvatar ? `<img src="${peerAvatar}" alt="" style="width:46px;height:46px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.9);margin-left:-14px;" />` : ""}
   </div>
-  <div style="margin:10px 12px 0;background:#fff;color:#e8354b;border-radius:12px;padding:14px 10px;text-align:center;">
+  <div style="margin:10px 12px 0;background:#fff;color:#e8354b;border-radius:16px;padding:16px 12px;text-align:center;">
     <div style="display:flex;">
       <div style="flex:1;">
-        <div style="font-size:11px;opacity:0.75;">本次一起听了</div>
-        <div style="font-size:17px;font-weight:800;margin-top:4px;">${session.tracks.length}首歌曲</div>
+        <div style="font-size:11px;color:#e58aa0;">本次一起听了</div>
+        <div style="font-size:18px;font-weight:800;margin-top:5px;">${listenedCount}首歌曲</div>
       </div>
       <div style="flex:1;">
-        <div style="font-size:11px;opacity:0.75;">本次陪伴彼此</div>
-        <div style="font-size:17px;font-weight:800;margin-top:4px;">${escapeHtml(duration)}</div>
+        <div style="font-size:11px;color:#e58aa0;">本次陪伴彼此</div>
+        <div style="font-size:18px;font-weight:800;margin-top:5px;">${escapeHtml(duration)}</div>
       </div>
     </div>
-    <div style="margin-top:10px;font-size:11px;opacity:0.65;">累计${cumulativeTracks}首歌曲 · ${escapeHtml(peerId)} · ${escapeHtml(myId)}</div>
+    <div style="margin-top:14px;display:inline-flex;align-items:center;gap:6px;border:1px solid #f0c8d2;border-radius:16px;padding:6px 16px;font-size:12px;color:#e8354b;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e8354b" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+      收藏到歌单
+    </div>
+    <div style="margin-top:12px;font-size:11px;color:#c98a99;">累计${cumulativeTracks}首歌曲、${escapeHtml(cumulativeDuration)}</div>
   </div>
-  <div style="margin:10px 12px 0;background:rgba(255,255,255,0.18);border-radius:12px;padding:10px;text-align:center;font-size:12px;">
+  <div style="margin:10px 12px 0;background:rgba(255,255,255,0.2);border-radius:12px;padding:11px;text-align:center;font-size:12px;">
     互发消息 ${messageCount}条
   </div>
-  <div style="padding:12px;text-align:center;font-size:10px;opacity:0.75;">扫码或用云音乐搜索「一起听」</div>
+  <div style="margin:12px 12px 0;display:flex;align-items:center;justify-content:center;gap:10px;">
+    <span style="width:52px;height:52px;border-radius:8px;background:rgba(255,255,255,0.9);display:inline-block;background-image:repeating-linear-gradient(0deg,#e8354b 0 3px,transparent 3px 6px),repeating-linear-gradient(90deg,#e8354b 0 3px,transparent 3px 6px);background-size:12px 12px;background-position:2px 2px;"></span>
+    <span style="font-size:10px;opacity:0.85;line-height:1.5;">扫码或用云音乐<br/>搜索「一起听」</span>
+  </div>
+  <div style="display:flex;gap:10px;padding:14px 12px 16px;">
+    <span style="flex:1;text-align:center;border:1px solid rgba(255,255,255,0.7);border-radius:22px;padding:9px 0;font-size:13px;font-weight:600;">聊天记录</span>
+    <span style="flex:1;text-align:center;background:#fff;color:#e8354b;border-radius:22px;padding:9px 0;font-size:13px;font-weight:700;">分享报告</span>
+  </div>
 </section>`;
 }
 

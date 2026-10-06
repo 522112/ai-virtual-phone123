@@ -3752,9 +3752,13 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         // 方向铁律：我发出的邀请只能等对方、只能取消；只有对方主动邀请我，才有同意/拒绝
         const isMine = direction === "outgoing" || msg.role === "user";
         const charName = character?.name || "对方";
-        const openMusicApp = () => {
+        const openMusicApp = (playTrack?: { title: string; artist?: string } | null) => {
             window.dispatchEvent(new CustomEvent("open-app", { detail: { appId: toCustomAppIconId("music") } }));
             window.dispatchEvent(new CustomEvent("open-music-player"));
+            if (playTrack?.title) {
+                const bridge = getMusicControlBridge();
+                void bridge?.playByQuery(`${playTrack.title} ${playTrack.artist || ""}`.trim());
+            }
         };
         const markCard = (status: "accepted" | "declined" | "canceled") => {
             const updated = { ...msg.mediaData, status };
@@ -3779,7 +3783,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     }
                     startListenTogetherSession({ characterId: session.contactId, characterName: charName, track: invite.track });
                 }
-                openMusicApp(); return;
+                openMusicApp(invite.track ? { title: invite.track.title, artist: invite.track.artist } : null); return;
             }
             showChatToast("还没有可进入的一起听");
             return;
@@ -3801,7 +3805,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 }
             }
             pushChoice("我进入了一起听");
-            openMusicApp();
+            openMusicApp(invite?.track ? { title: invite.track.title, artist: invite.track.artist } : null);
             return;
         }
         if (action === "cancel") {
@@ -3817,6 +3821,24 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         if (invite) decideListenTogetherInvite(invite.id, "declined");
         markCard("declined");
         pushChoice("我拒绝了一起听");
+    };
+
+    /** 角色邀请前自己挑一首歌：开场回复里的播放动作 > 当前在播 > 角色歌单第一首 */
+    const pickListenInviteTrack = async (reply: { actions: Array<{ kind: string; query?: string }> }) => {
+        const bridge = getMusicControlBridge();
+        const play = reply.actions.find(a => a.kind === "play" && a.query);
+        if (play?.query) {
+            const r = await bridge?.resolveByQuery(play.query).catch(() => null);
+            if (r) return { id: r.id, title: r.title, artist: r.artist || "", coverUrl: r.coverUrl };
+        }
+        const cur = bridge?.getState().currentTrack;
+        if (cur) return { id: cur.id, title: cur.title, artist: cur.artist || "", coverUrl: cur.coverUrl };
+        if (character) {
+            const fav = (await import("@/lib/music-favorites-storage")).getCharacterFavorites(session.contactId, character.name);
+            const first = (fav.songs || []).find(s => s.title?.trim());
+            if (first) return { id: `fav_${first.id}`, title: first.title, artist: first.artist || "", coverUrl: first.coverUrl };
+        }
+        return null;
     };
 
     // 对方主动邀请：用户聊到一起听，TA 可能反过来发邀请卡（只有这时才有同意/拒绝）
@@ -3855,10 +3877,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                             texts: splitListenTogetherBubbles(reply.text, [targetChar.name, "我", "用户"]),
                         });
                     } else {
+                        const track = await pickListenInviteTrack(reply);
                         const invite = createListenTogetherInvite({
                             characterId: session.contactId,
                             characterName: targetChar.name,
-                            track: null,
+                            track,
                             inviteText: reply.text,
                             direction: "incoming",
                         });
@@ -3866,7 +3889,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                             characterId: session.contactId,
                             characterName: targetChar.name,
                             direction: "incoming",
-                            track: null,
+                            track,
                             text: reply.text,
                             inviteId: invite.id,
                         });
@@ -3916,10 +3939,11 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 });
                 const refused = reply.actions.some(item => item.kind === "refuse");
                 if (refused) return;
+                const track = await pickListenInviteTrack(reply);
                 const invite = createListenTogetherInvite({
                     characterId: session.contactId,
                     characterName: targetChar.name,
-                    track: null,
+                    track,
                     inviteText: reply.text,
                     direction: "incoming",
                 });
@@ -3927,7 +3951,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     characterId: session.contactId,
                     characterName: targetChar.name,
                     direction: "incoming",
-                    track: null,
+                    track,
                     text: reply.text,
                     inviteId: invite.id,
                 });
