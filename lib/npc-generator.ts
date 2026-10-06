@@ -16,6 +16,7 @@ import {
     moveCharacterToWorld,
 } from "./character-world-storage";
 import { loadMomentsConfig, saveMomentsConfig, loadMomentPosts, loadMomentComments } from "./moments-storage";
+import { pickAvatarResource } from "./resource-library";
 import { loadMemoryConfig } from "./memory-storage";
 import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
@@ -290,7 +291,7 @@ export function materializeSupportingCharacter(
         personality: result.personality || undefined,
         briefPersona: result.briefPersona || undefined,
         briefPersonaUpdatedAt: result.briefPersona ? now : undefined,
-        avatar: null,
+        avatar: pickAvatarResource(targetCharacterId, "NPC头像"),
         tags: ["配角"],
     });
     const baseX = target?.canvasX ?? 120;

@@ -11,6 +11,7 @@
 
 import type { ChatMessage } from "./chat-storage";
 import type { StateValue } from "./chat-storage";
+import { getResource } from "./resource-library";
 import { parseStateValues, mergeStateValues } from "./state-value-parser";
 import { stripActionShells } from "./action-parser";
 import { stripTextToolDirectives } from "./text-tool-protocol";
@@ -28,6 +29,7 @@ export interface ParsedMessagePart {
     content: string;
     mediaType?: ChatMessage["mediaType"];
     mediaData?: ChatMessage["mediaData"];
+    mediaUrl?: string;
 }
 
 export interface ParsedAIResponse {
@@ -259,6 +261,17 @@ const RICH_PATTERNS: {
                 mediaType: "listen_invite" as const,
                 mediaData: { musicTitle: title, label: title || "一起听" },
             };
+        },
+    },
+    {
+        // [发送资源:资源id] — 角色从资源库发图/视频/语音给用户
+        regex: new RegExp(`\\[发送资源${C}([^\\]]+)\\]`),
+        build: (m) => {
+            const id = m[1].trim();
+            const item = getResource(id);
+            if (!item) return { content: "" };
+            const mediaType = item.kind === "video" ? "video" as const : item.kind === "audio" ? "audio" as const : "image" as const;
+            return { content: item.note || "", mediaType, mediaUrl: item.dataUrl };
         },
     },
     {

@@ -62,7 +62,10 @@ function normalizeMessage(value: unknown): ListenTogetherMessage | null {
     author: item.author === "character" ? "character" : "user",
     text: item.text,
     createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
-    kind: item.kind === "emoji" ? "emoji" : "text",
+    kind: item.kind === "emoji" ? "emoji"
+      : item.kind === "image" || item.kind === "video" || item.kind === "audio" ? item.kind
+      : "text",
+    mediaUrl: typeof item.mediaUrl === "string" && item.mediaUrl.trim() ? item.mediaUrl : undefined,
   };
 }
 
@@ -185,18 +188,21 @@ export function appendListenTogetherTrack(sessionId: string, track: ListenTogeth
 
 export function appendListenTogetherMessage(
   sessionId: string,
-  input: { author: ListenTogetherMessage["author"]; text: string; kind?: "text" | "emoji" },
+  input: { author: ListenTogetherMessage["author"]; text: string; kind?: ListenTogetherMessage["kind"]; mediaUrl?: string },
 ): ListenTogetherMessage | null {
   const session = getListenTogetherSession(sessionId);
   if (!session || session.status !== "active") return null;
+  const kind: ListenTogetherMessage["kind"] = input.kind === "emoji" || input.kind === "image" || input.kind === "video" || input.kind === "audio" ? input.kind : "text";
+  const mediaUrl = typeof input.mediaUrl === "string" && input.mediaUrl.trim() ? input.mediaUrl : undefined;
   const message: ListenTogetherMessage = {
     id: generateId("lmsg"),
     author: input.author,
     text: input.text.trim(),
     createdAt: new Date().toISOString(),
-    kind: input.kind === "emoji" ? "emoji" : "text",
+    kind,
+    ...(mediaUrl ? { mediaUrl } : {}),
   };
-  if (!message.text) return null;
+  if (!message.text && !mediaUrl) return null;
   updateListenTogetherSession(sessionId, { messages: [...session.messages, message] });
   return message;
 }

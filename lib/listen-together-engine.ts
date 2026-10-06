@@ -19,6 +19,7 @@ import type { Character } from "./character-types";
 import type { ListenTogetherSession, ListenTogetherTrack } from "./listen-together-types";
 import { parseChatBubbleDisplay, sanitizeListenTogetherText } from "./chat-message-display";
 import { getCurrentCalendarScheduleForPrompt } from "./calendar-storage";
+import { describeResourcesForPrompt } from "./resource-library";
 
 type ResolvedListenGeneration = {
   character: Character;
@@ -35,6 +36,7 @@ export type ListenTogetherAction =
   | { kind: "end" }
   | { kind: "refuse" }
   | { kind: "emoji"; emoji: string }
+  | { kind: "resource"; resourceId: string }
   | { kind: "playlist_add"; queries: string[] }
   | { kind: "playlist_remove"; title: string };
 
@@ -212,6 +214,14 @@ export function parseListenTogetherActions(raw: string): ListenTogetherReply {
     } catch { /* ignore */ }
     return "";
   });
+  text = text.replace(/\[执行动作:发送资源\((\{[\s\S]*?\})\)\]/g, (_whole, json: string) => {
+    try {
+      const parsed = JSON.parse(json) as { resourceId?: string; id?: string };
+      const resourceId = (parsed.resourceId || parsed.id || "").trim();
+      if (resourceId) actions.push({ kind: "resource", resourceId });
+    } catch { /* ignore */ }
+    return "";
+  });
   text = text.replace(/\[执行动作:一起听删歌\((\{[\s\S]*?\})\)\]/g, (_whole, json: string) => {
     try {
       const parsed = JSON.parse(json) as { title?: string };
@@ -269,6 +279,7 @@ export async function generateListenTogetherReply(input: {
       lyricBit ? `此刻歌词大概是：${lyricBit}` : "",
       input.session.tracks.length > 1 ? `这轮听过：${input.session.tracks.map(item => item.title).join("、")}` : "",
       playlistLine,
+      describeResourcesForPrompt(input.characterId) ? `【资源库】用户上传了一些素材（备注写明了用途）：\n${describeResourcesForPrompt(input.characterId)}\n需要发图/发语音给用户时，用动作 [执行动作:发送资源({"resourceId":"资源id"})] 单独占一行；一次只发一个。` : "",
       "【可用动作（要用时单独占一行，不要写进气泡，也不要解释）：刚被邀请时只许用“拒绝”；一起听过程中按人设选用：想放自己想听的用 [执行动作:播放音乐({\"query\":\"歌名\"})]，切上下首用 [执行动作:切换音乐({\"action\":\"next\"})] 或 prev，加歌一次批量 [执行动作:一起听加歌({\"songs\":[{\"query\":\"歌名\"}]})]（一次最多20首），删一首用 [执行动作:一起听删歌({\"title\":\"歌名\"})]，发表情弹幕用 [执行动作:一起听表情({\"emoji\":\"❤️\"})]，不想听了输出 [执行动作:结束一起听]。",
       recent ? `刚才的对话：\n${recent}` : "",
       input.userText ? `用户说：${input.userText}` : "",

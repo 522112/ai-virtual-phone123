@@ -5747,8 +5747,7 @@
   line-height: 1;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
-.mem-tl-clear {
-  border: 1px solid rgba(232, 53, 75, 0.4);
+.mem-tl-clear {  border: 1px solid rgba(232, 53, 75, 0.4);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -5788,3 +5787,6 @@
   gap: 6px;
   padding: 0 10px 8px;
 }
+
+.mem-tl-del { position: absolute; right: 8px; top: 8px; z-index: 5; border: none; background: transparent; color: var(--c-danger, #e8354b); font-size: 12px; font-weight: 700; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+.mem-tl-del:active { background: rgba(0,0,0,0.06); }

@@ -19,7 +19,7 @@ import {
     loadListenTogetherSessions,
     LISTEN_TOGETHER_UPDATED_EVENT,
 } from "@/lib/listen-together-storage";
-import type { ListenTogetherSession, ListenTogetherTrack, TogetherPlayMode } from "@/lib/listen-together-types";
+import type { ListenTogetherMessage, ListenTogetherSession, ListenTogetherTrack, TogetherPlayMode } from "@/lib/listen-together-types";
 import { generateListenTogetherReply, splitListenTogetherBubbles } from "@/lib/listen-together-engine";
 import { parseLyricLines } from "./listen-together";
 import { sendListenTogetherReportCard } from "@/lib/listen-together-share";
@@ -82,6 +82,8 @@ export async function requestPeerForSongs(
                 if (hit) removeListenTogetherPlaylistTrack(active.id, hit.id);
             } else if (action.kind === "emoji" && action.emoji) {
                 appendListenTogetherMessage(active.id, { author: "character", text: action.emoji, kind: "emoji" });
+            } else if (action.kind === "resource" && action.resourceId) {
+                await sendResourceIntoSession(active.id, action.resourceId, onNotice);
             } else if (action.kind === "end" || action.kind === "refuse") {
                 endListenTogetherSession(active.id);
                 onNotice("对方结束了一起听");
@@ -208,12 +210,12 @@ function FloatLayer({ sessionId }: { sessionId: string }) {
         <div className="ltp-float-layer" aria-hidden="true">
             <div className="ltp-float-col" data-side="peer">
                 {theirs.slice(Math.max(0, peerShown - 2), peerShown).map((m, i) => (
-                    <span key={m.id} className="ltp-float-bubble" style={{ animationDelay: `${i * 0.9}s` }}>{m.text}</span>
+                    <span key={m.id} className="ltp-float-bubble" style={{ animationDelay: `${i * 0.9}s` }}>{listenFloatText(m)}</span>
                 ))}
             </div>
             <div className="ltp-float-col" data-side="me">
                 {mine.map((m, i) => (
-                    <span key={m.id} className="ltp-float-bubble is-me" style={{ animationDelay: `${i * 0.9}s` }}>{m.text}</span>
+                    <span key={m.id} className="ltp-float-bubble is-me" style={{ animationDelay: `${i * 0.9}s` }}>{listenFloatText(m)}</span>
                 ))}
             </div>
         </div>
@@ -273,7 +275,7 @@ function ChatBubbles({ sessionId, limit }: { sessionId: string; limit?: number }
                             <FramedAvatar avatarUrl={character?.avatar} target="character" />
                         </span>
                     )}
-                    <span className="ltp-msg-text">{m.text}</span>
+                    <ListenMessageContent m={m} />
                     {m.author === "user" && (
                         <span className="ltp-msg-avatar" data-me="">
                             <FramedAvatar avatarUrl={identity?.avatarUrl} target="me" />
@@ -313,6 +315,44 @@ function EmojiPanel({ onPick }: { onPick: (emoji: string) => void }) {
 /** 当前正在一起听：网易云风格贴底半屏面板，点歌直接播、垃圾桶清空 */
 function playModeLabel(mode: TogetherPlayMode): string {
     return mode === "repeat-one" ? "单曲循环" : mode === "sequence" ? "顺序播放" : "随机播放";
+}
+
+/** 把资源库素材发进一起听会话：图片/视频/语音变媒体消息；分类为歌单封面的图换封面 */
+async function sendResourceIntoSession(sessionId: string, resourceId: string, onNotice: (text: string) => void): Promise<void> {
+    const { getResource } = await import("@/lib/resource-library");
+    const item = getResource(resourceId);
+    if (!item) return;
+    if (item.category === "歌单封面" && item.kind === "image") {
+        const { updateListenTogetherPlaylist } = await import("@/lib/listen-together-storage");
+        updateListenTogetherPlaylist(sessionId, { coverUrl: item.dataUrl }, "character");
+        onNotice("已换上资源库封面");
+        return;
+    }
+    const kind = item.kind === "video" ? "video" : item.kind === "audio" ? "audio" : "image";
+    appendListenTogetherMessage(sessionId, { author: "character", text: item.note || "", kind, mediaUrl: item.dataUrl });
+}
+
+/** 一起听消息内容渲染：媒体消息显示图/视频/语音 */
+function ListenMessageContent({ m }: { m: ListenTogetherMessage }) {
+    if (m.kind === "image" || m.kind === "video" || m.kind === "audio") {
+        return (
+            <span className="ltp-msg-media">
+                {m.kind === "image" && m.mediaUrl ? <img src={m.mediaUrl} alt="" /> : null}
+                {m.kind === "video" && m.mediaUrl ? <video src={m.mediaUrl} controls playsInline style={{ maxWidth: 180, borderRadius: 12 }} /> : null}
+                {m.kind === "audio" && m.mediaUrl ? <audio src={m.mediaUrl} controls style={{ maxWidth: 180 }} /> : null}
+                {m.text ? <span className="ltp-msg-text">{m.text}</span> : null}
+            </span>
+        );
+    }
+    return <span className="ltp-msg-text">{m.text}</span>;
+}
+
+function listenFloatText(m: ListenTogetherMessage): string {
+    if (m.text.trim()) return m.text;
+    if (m.kind === "image") return "[图片]";
+    if (m.kind === "video") return "[视频]";
+    if (m.kind === "audio") return "[语音]";
+    return "";
 }
 
 export function ListenTogetherQueueSheet({ sessionId, currentTrackId, onClose, onNotice, onAskPeer, onPlayTrack }: {
@@ -438,7 +478,7 @@ export function ListenTogetherRecordsSheet({ sessionId, onClose }: { sessionId: 
                                     <FramedAvatar avatarUrl={character?.avatar} target="character" />
                                 </span>
                             )}
-                            <span className="ltp-msg-text">{m.text}</span>
+                            <ListenMessageContent m={m} />
                             {m.author === "user" && (
                                 <span className="ltp-msg-avatar" data-me="">
                                     <FramedAvatar avatarUrl={identity?.avatarUrl} target="me" />
@@ -684,6 +724,8 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                     if (hit) removeListenTogetherPlaylistTrack(active.id, hit.id);
                 } else if (action.kind === "emoji" && action.emoji) {
                     appendListenTogetherMessage(active.id, { author: "character", text: action.emoji, kind: "emoji" });
+                } else if (action.kind === "resource" && action.resourceId) {
+                    await sendResourceIntoSession(active.id, action.resourceId, onNotice);
                 } else if (action.kind === "end" || action.kind === "refuse") {
                     endListenTogetherSession(active.id);
                     onNotice("对方结束了一起听");

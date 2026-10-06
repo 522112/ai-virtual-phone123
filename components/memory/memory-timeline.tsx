@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { MoreHorizontal, Trash2 } from "lucide-react";
 import type { NativeTimelineEntry } from "@/lib/short-term-assembler";
 import { buildTwoLevelMomentThreads } from "@/lib/moments-comment-threading";
 import { findStickerByName } from "@/lib/sticker-data";
@@ -612,7 +611,6 @@ const CLUSTER_PAGE_SIZE = 30;
 export function MemoryTimeline({ events, userName, onDeleteEntries }: Props) {
     const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
     const [visibleCount, setVisibleCount] = useState(CLUSTER_PAGE_SIZE);
-    const [menuClusterId, setMenuClusterId] = useState<string | null>(null);
 
     const clusters = useMemo(() => {
         const pairs = events
@@ -637,13 +635,6 @@ export function MemoryTimeline({ events, userName, onDeleteEntries }: Props) {
 
     return (
         <>
-            {menuClusterId && (
-                <button
-                    className="mem-entry-menu-backdrop"
-                    aria-label="关闭菜单"
-                    onClick={() => setMenuClusterId(null)}
-                />
-            )}
             <div className="mem-tl mem-tl-cards">
                 {clusters.slice(0, visibleCount).map((cluster) => {
                     const expanded = expandedClusterId === cluster.id;
@@ -651,44 +642,22 @@ export function MemoryTimeline({ events, userName, onDeleteEntries }: Props) {
                         <div
                             key={cluster.id}
                             className={`g-card mem-tl-card${expanded ? " is-expanded" : ""}`}
-                            onClick={() => {
-                                if (menuClusterId) {
-                                    setMenuClusterId(null);
-                                    return;
-                                }
-                                setExpandedClusterId(expanded ? null : cluster.id);
-                            }}
+                            onClick={() => setExpandedClusterId(expanded ? null : cluster.id)}
                         >
                             <span className="ts-10 font-bold uppercase tracking-widest" style={{
-                                color: "var(--c-danger)", opacity: 0.6, position: "absolute", right: 44, top: 12
+                                color: "var(--c-danger)", opacity: 0.6, position: "absolute", right: 64, top: 12
                             }}>REPORT</span>
                             {onDeleteEntries && (
-                                <div className="mem-entry-menu-wrap" style={{ position: "absolute", right: 8, top: 8, zIndex: 5 }}>
-                                    <button
-                                        className="mem-entry-menu-btn"
-                                        onClick={(event) => {
-                                            event.stopPropagation();
-                                            setMenuClusterId(prev => prev === cluster.id ? null : cluster.id);
-                                        }}
-                                        title="更多"
-                                    >
-                                        <MoreHorizontal size={16} />
-                                    </button>
-                                    {menuClusterId === cluster.id && (
-                                        <div className="mem-entry-menu" onClick={event => event.stopPropagation()}>
-                                            <button
-                                                className="is-danger"
-                                                onClick={() => {
-                                                    setMenuClusterId(null);
-                                                    onDeleteEntries(cluster.nativeEntries);
-                                                }}
-                                            >
-                                                <Trash2 size={13} />
-                                                <span>删除本卡</span>
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
+                                <button
+                                    type="button"
+                                    className="mem-tl-del"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onDeleteEntries(cluster.nativeEntries);
+                                    }}
+                                >
+                                    删除
+                                </button>
                             )}
                             <div className="flex justify-between items-center pb-2 mb-2" style={{ borderBottom: "1px dashed var(--c-panel-border)" }}>
                                 <span className="ts-11 text-secondary" style={{ letterSpacing: "1px" }}>[ DATE: {formatClusterDate(cluster)} ]</span>

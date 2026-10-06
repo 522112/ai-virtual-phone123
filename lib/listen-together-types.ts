@@ -16,7 +16,8 @@ export type ListenTogetherMessage = {
   author: ListenTogetherAuthor;
   text: string;
   createdAt: string;
-  kind?: "text" | "emoji";
+  kind?: "text" | "emoji" | "image" | "video" | "audio";
+  mediaUrl?: string;
 };
 
 export type ListenTogetherPlaylist = {
