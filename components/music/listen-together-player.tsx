@@ -48,7 +48,7 @@ function formatTogetherElapsed(startedAt: string, now: number): string {
     return `一起听了${hours}小时${mins}分钟`;
 }
 
-/** 双人头（只头像+名，气泡走悬浮层） */
+/** 双人头：一副耳机两人分听，播放时线缆相连随乐摆动 */
 function DuoBar({ sessionId, characterName, playing }: { sessionId: string; characterName: string; playing: boolean }) {
     const [tick, setTick] = useState(0);
     const [now, setNow] = useState(() => Date.now());
@@ -89,7 +89,14 @@ function DuoBar({ sessionId, characterName, playing }: { sessionId: string; char
                 </span>
                 <em className="ltp-name">{userName}</em>
             </span>
-            <span className="ltp-together" aria-hidden="true" />
+            <span className="ltp-together" aria-hidden="true">
+                <svg viewBox="0 0 120 44" width="120" height="44">
+                    <path d="M14 2 C 14 26, 38 34, 58 36" fill="none" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M106 2 C 106 26, 82 34, 62 36" fill="none" strokeWidth="2" strokeLinecap="round" />
+                    <circle cx="60" cy="37" r="3" fill="none" strokeWidth="2" />
+                    <circle cx="60" cy="37" r="1.2" fill="currentColor" stroke="none" />
+                </svg>
+            </span>
             <span className="ltp-person">
                 <span className="ltp-avatar">
                     {character?.avatar ? <img src={character.avatar} alt="" /> : <ChatFallbackAvatar />}
@@ -397,10 +404,11 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
     );
 }
 
-export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTime, playerStyle, tab, onTabChange, onOpenQueue, onSeek, onNotice, showQueue, onCloseQueue }: Props & { showQueue: boolean; onCloseQueue: () => void }) {
+export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTime, playerStyle, tab, onTabChange, onOpenQueue, onNotice, showQueue, onCloseQueue }: Props & { showQueue: boolean; onCloseQueue: () => void }) {
     const [now, setNow] = useState(() => Date.now());
-    const [coverMode, setCoverMode] = useState<"art" | "lyrics">("art");
-    const lyricListRef = useRef<HTMLDivElement>(null);
+    const [draft, setDraft] = useState("");
+    const [quick, setQuick] = useState("");
+    const quickRef = useRef<HTMLInputElement>(null);
     const [draft, setDraft] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
@@ -422,11 +430,16 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
         });
         return idx;
     }, [lyricLines, currentTime]);
+    const nowLyric = lyricActive >= 0 ? lyricLines[lyricActive]?.text : "";
 
     useEffect(() => {
-        const el = lyricListRef.current?.querySelector('[data-active]');
-        el?.scrollIntoView({ block: "center", behavior: "smooth" });
-    }, [lyricActive]);
+        const focus = () => {
+            onTabChange("player");
+            window.setTimeout(() => quickRef.current?.focus(), 60);
+        };
+        window.addEventListener("lt-focus-input", focus);
+        return () => window.removeEventListener("lt-focus-input", focus);
+    }, [onTabChange]);
 
     /** 只发消息，不调用：等用户点“调用”才让对方回 */
     const appendUserText = (text: string): boolean => {
@@ -527,64 +540,40 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
 
     return (
         <div className="ltp-wrap">
-            {coverMode === "lyrics" && tab === "player" ? (
-                <div className="ltp-lyrics-full" ref={lyricListRef}>
-                    {lyricLines.length === 0 ? (
-                        <span className="ltp-lyric" data-active="">暂无歌词</span>
-                    ) : (
-                        lyricLines.map((line, i) => (
-                            <span
-                                key={`${line.time}-${i}`}
-                                className="ltp-lyric-row"
-                                {...(i === lyricActive ? { "data-active": "" } : {})}
-                            >
-                                <span className="ltp-lyric" onClick={() => setCoverMode("art")}>{line.text || " "}</span>
-                                <button
-                                    type="button"
-                                    className="ltp-lyric-play"
-                                    aria-label="从这句播放"
-                                    onClick={() => onSeek(line.time)}
-                                >
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-                                </button>
-                            </span>
-                        ))
-                    )}
-                </div>
-            ) : (
-                <>
-                    <DuoBar sessionId={session.id} characterName={session.characterName} playing={isPlaying} />
-                    <div className="ltp-elapsed">{formatTogetherElapsed(session.startedAt, now)}</div>
-                </>
-            )}
+            <DuoBar sessionId={session.id} characterName={session.characterName} playing={isPlaying} />
+            <div className="ltp-elapsed">{formatTogetherElapsed(session.startedAt, now)}</div>
             {tab === "player" ? (
-                coverMode === "lyrics" ? null : (
-                    <>
-                        <button
-                            type="button"
-                            className="ltp-art"
-                            data-mode={playerStyle}
-                            data-playing={isPlaying ? "" : undefined}
-                            onClick={() => setCoverMode("lyrics")}
-                            aria-label="查看歌词"
-                        >
-                            {playerStyle === "vinyl" ? (
-                                <span className="ltp-vinyl">
-                                    <span className="ltp-vinyl-disc">
-                                        {track.coverUrl ? <img src={track.coverUrl} alt="" /> : null}
-                                    </span>
+                <>
+                    <div className="ltp-art" data-mode={playerStyle} {...(isPlaying ? { "data-playing": "" } : {})}>
+                        {playerStyle === "vinyl" ? (
+                            <span className="ltp-vinyl">
+                                <span className="ltp-vinyl-disc">
+                                    {track.coverUrl ? <img src={track.coverUrl} alt="" /> : null}
                                 </span>
-                            ) : (
-                                <span className="ltp-cover">
-                                    {track.coverUrl ? <img src={track.coverUrl} alt="" /> : <ChatFallbackAvatar />}
-                                </span>
-                            )}
-                        </button>
-                        <div className="ltp-song">{track.title}</div>
-                        <div className="ltp-artist">{track.artist || "未知歌手"}</div>
-                        <FloatLayer sessionId={session.id} />
-                    </>
-                )
+                            </span>
+                        ) : (
+                            <span className="ltp-cover">
+                                {track.coverUrl ? <img src={track.coverUrl} alt="" /> : <ChatFallbackAvatar />}
+                            </span>
+                        )}
+                    </div>
+                    <div className="ltp-song">{track.title}</div>
+                    <div className="ltp-artist">{track.artist || "未知歌手"}</div>
+                    {nowLyric ? <div className="ltp-now-lyric">{nowLyric}</div> : null}
+                    <FloatLayer sessionId={session.id} />
+                    <div className="ltp-quick-row">
+                        <input
+                            ref={quickRef}
+                            value={quick}
+                            onChange={e => setQuick(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter" && appendUserText(quick)) setQuick(""); }}
+                            placeholder="边听边说一句..."
+                        />
+                        {quick.trim() && (
+                            <button type="button" className="ltp-send" onClick={() => { if (appendUserText(quick)) setQuick(""); }}>发送</button>
+                        )}
+                    </div>
+                </>
             ) : (
                 <div className="ltp-chat">
                     <div className="ltp-chat-head">

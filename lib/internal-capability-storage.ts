@@ -289,11 +289,17 @@ const MUSIC_CONTROL_USAGE_GUIDE = [
 const LISTEN_TOGETHER_USAGE_GUIDE = [
     "以下是你获取指令的返回结果：",
     "服务：一起听",
-    "用途：在聊天里和{{user}}一起听歌：管理共同歌单（加歌/删歌/改名/改详情/换封面/切歌）、发弹幕表情回应。",
+    "用途：在聊天里和{{user}}一起听歌：管理共同歌单、发弹幕表情回应。网易云音乐工具管的是你自己的播放，一起听工具只在当前一起听会话里生效，两套不要混用。没有进行中的一起听时只调“一起听邀请”，不许调加歌/切歌/删歌/表情。",
     "歌单是独立的：一起听歌单只存在当前一起听会话里，和主页「歌单」tab 的角色歌单完全分开，不要混淆，更不要读写角色歌单。",
     "你的权限只有：批量加歌、删歌、查看歌单、知道用户加了什么歌、知道当前在播哪首。不能改歌单名/详情/封面。",
     "",
     "执行时必须使用下面的具体动作名，不要输出“一起听”本身。",
+    "",
+    "动作：一起听邀请",
+    "描述：用户想一起听、或你想邀用户一起听时用。会发出邀请卡并按你的人设当场决定接受/拒绝；接受会立刻开始一起听。没有会话时只调这一个。",
+    "参数：无",
+    "示例：",
+    "[执行动作:一起听邀请({})]",
     "",
     "动作：一起听加歌",
     "描述：往当前一起听歌单里批量加歌，一次调用加多首（不要一首调一次）。",
@@ -752,6 +758,7 @@ const LISTEN_TOGETHER_EMOJI_SCHEMA = JSON.stringify({
 });
 
 const LISTEN_TOGETHER_SUBTOOLS: InternalToolDefinition[] = [
+    { name: "一起听邀请", description: "用户想一起听（或你想邀用户）时用：发邀请卡并按人设当场决定接受/拒绝，接受直接开会话。没有会话时只许调这个，不许调下面的加歌/切歌。", parameterSchema: LISTEN_TOGETHER_EMPTY_SCHEMA },
     { name: "一起听加歌", description: "往当前一起听歌单里批量加歌，一次调用加多首。", parameterSchema: LISTEN_TOGETHER_ADD_SCHEMA },
     { name: "一起听删歌", description: "从当前一起听歌单里删掉一首歌。", parameterSchema: LISTEN_TOGETHER_REMOVE_SCHEMA },
     { name: "一起听歌单", description: "查看当前一起听歌单的名字、详情和全部歌曲。", parameterSchema: LISTEN_TOGETHER_EMPTY_SCHEMA },

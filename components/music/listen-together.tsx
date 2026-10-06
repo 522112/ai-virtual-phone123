@@ -36,6 +36,7 @@ import { loadRelationshipBindings } from "@/lib/relationship-storage";
 type ListenTogetherControlsProps = {
   track: ListenTogetherTrack;
   onNotice?: (message: string) => void;
+  onOpenChat?: () => void;
 };
 
 type Panel = "closed" | "pick" | "chat" | "history" | "result" | "playlist";
@@ -318,7 +319,7 @@ function ListenTogetherPlaylistPanel({ session, track, onBack, onNotice, refresh
   );
 }
 
-export function ListenTogetherControls({ track, onNotice }: ListenTogetherControlsProps) {
+export function ListenTogetherControls({ track, onNotice, onOpenChat }: ListenTogetherControlsProps) {
   const player = useMusicPlayer();
   const [panel, setPanel] = useState<Panel>("closed");
   const [session, setSession] = useState<ListenTogetherSession | null>(() => getActiveListenTogetherSession());
@@ -635,15 +636,12 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
         type="button"
         className="mp-social-btn"
         data-listen={session ? "" : undefined}
-        onClick={() => { if (!session) setPanel("pick"); }}
+        onClick={() => { if (session) onOpenChat?.(); else setPanel("pick"); }}
       >
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-          <path d="M9 18V6l12-2v12" />
-          <circle cx="6" cy="18" r="3" />
-          <circle cx="18" cy="16" r="3" />
-          <path d="M6 15v-4" />
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
-        <span>{session ? "听着" : "一起听"}</span>
+        <span>{session ? "聊天" : "一起听"}</span>
       </button>
 
       {panel !== "closed" && playerRoot ? createPortal(

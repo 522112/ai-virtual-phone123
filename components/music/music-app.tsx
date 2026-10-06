@@ -28,6 +28,7 @@ import { clearMusicCloudSyncData } from "@/lib/chat-engine";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import MusicCommentsPage from "./music-comments";
 import MusicFavoritesView from "./music-favorites-view";
+import { useActiveListenTogetherSession } from "./listen-together";
 import {
     loadMusicBg, saveMusicBg, clearMusicBg, fileToCompressedDataUrl, appBgStyle,
     MUSIC_BG_EVENT, type MusicBgConfig, type MusicPlayerBgMode,
@@ -1224,6 +1225,8 @@ function OnlineSearchTab({ player, formatTime, onPlayNetease }: {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<NeteaseSearchResult[]>([]);
     const [searching, setSearching] = useState(false);
+    const ltSession = useActiveListenTogetherSession();
+    const [joinedTitles, setJoinedTitles] = useState<string[]>([]);
 
     const doSearch = async () => {
         if (!query.trim()) return;
@@ -1233,6 +1236,18 @@ function OnlineSearchTab({ player, formatTime, onPlayNetease }: {
             setResults(r);
         } catch { /* ignore */ }
         setSearching(false);
+    };
+
+    const joinLt = async (r: NeteaseSearchResult) => {
+        if (!ltSession) return;
+        const { addListenTogetherPlaylistTrack } = await import("@/lib/listen-together-storage");
+        addListenTogetherPlaylistTrack(ltSession.id, {
+            id: `netease_${r.id}`,
+            title: r.name,
+            artist: r.artists || "",
+            coverUrl: r.coverUrl,
+        });
+        setJoinedTitles(prev => (prev.includes(r.name) ? prev : [...prev, r.name]));
     };
 
     return (
@@ -1273,6 +1288,19 @@ function OnlineSearchTab({ player, formatTime, onPlayNetease }: {
                                 <div className="music-song-title">{r.name}</div>
                                 <div className="music-song-artist">{r.artists}{r.album ? ` · ${r.album}` : ""}</div>
                             </div>
+                            {ltSession && (
+                                joinedTitles.includes(r.name) || ltSession.tracks.some(t => t.title === r.name) ? (
+                                    <span className="music-song-joined">已加入</span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        className="music-song-join"
+                                        onClick={e => { e.stopPropagation(); void joinLt(r); }}
+                                    >
+                                        加入
+                                    </button>
+                                )
+                            )}
                             <div className="music-song-duration">{formatTime(r.duration / 1000)}</div>
                         </div>
                     ))}

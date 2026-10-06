@@ -1032,7 +1032,8 @@ function isMusicControlToolName(name: string): boolean {
 }
 
 function isListenTogetherToolName(name: string): boolean {
-    return name === "一起听加歌"
+    return name === "一起听邀请"
+        || name === "一起听加歌"
         || name === "一起听删歌"
         || name === "一起听歌单"
         || name === "一起听切歌"
@@ -2719,7 +2720,58 @@ function listenTogetherGuard(): { session: ReturnType<typeof getActiveListenToge
     return { session };
 }
 
+/** 聊天里发起一起听邀请：建卡→按人设当场决定→同意直接开会话，拒绝只回话 */
+async function executeListenTogetherInvite(call: ToolCall, context?: ToolExecutionContext): Promise<ToolResult> {
+    const fail = (userNotice: string): ToolResult => ({
+        name: call.name, success: false, error: userNotice, continueConversation: true, persistToHistory: false, userNotice,
+    });
+    const characterId = context?.characterId || "";
+    const target = loadCharacters().find(c => c.id === characterId);
+    if (!target) return fail("先选一位朋友再一起听吧");
+    const st = await import("./listen-together-storage");
+    const running = st.getActiveListenTogetherSession();
+    if (running && running.characterId === characterId) {
+        return musicToolSuccess(call.name, "已经在和用户一起听了", { userNotice: "已经在听了，直接聊天就行" });
+    }
+    if (st.getPendingListenInvite(characterId)) {
+        return musicToolSuccess(call.name, "已有待回应的邀请", { userNotice: "邀请已经发出去了，等对方回应" });
+    }
+    const share = await import("./listen-together-share");
+    const invite = st.createListenTogetherInvite({
+        characterId, characterName: target.name, track: null, inviteText: "想和你一起听", direction: "outgoing",
+    });
+    const sent = share.sendListenTogetherInviteCard({
+        characterId, characterName: target.name, direction: "outgoing", track: null, inviteId: invite.id,
+    });
+    const engine = await import("./listen-together-engine");
+    const draftSession = {
+        id: "invite", characterId, characterName: target.name,
+        startedAt: new Date().toISOString(), tracks: [], messages: [], status: "active" as const,
+    };
+    let reply: engine.ListenTogetherReply;
+    try {
+        reply = await engine.generateListenTogetherReply({ characterId, session: draftSession, opening: true });
+    } catch {
+        st.decideListenTogetherInvite(invite.id, "declined");
+        return fail("对方这次没接上，稍后再邀");
+    }
+    const peerTexts = engine.splitListenTogetherBubbles(reply.text, [target.name, "我", "用户"]);
+    const refused = reply.actions.some(a => a.kind === "refuse");
+    share.revealListenTogetherOutcome({
+        sessionId: sent.sessionId, messageId: sent.messageId, inviteId: invite.id, accept: !refused, peerTexts,
+    });
+    if (refused) {
+        return musicToolSuccess(call.name, `对方拒绝：${reply.text}`, { userNotice: peerTexts[0] || "对方暂时来不了" });
+    }
+    st.startListenTogetherSession({ characterId, characterName: target.name });
+    return musicToolSuccess(call.name, `对方已接受并开始一起听：${peerTexts.join(" ")}。直接在聊天里说话，用户去音乐播放页会合`, {
+        userNotice: `${peerTexts[0] || "对方接受了邀请"}，去音乐里和TA一起听吧`,
+    });
+}
+
 async function executeListenTogetherTool(call: ToolCall, context?: ToolExecutionContext): Promise<ToolResult> {
+    // 邀请不走会话守卫：没会话时才需要它
+    if (call.name === "一起听邀请") return executeListenTogetherInvite(call, context);
     const guard = listenTogetherGuard();
     if (guard.capabilityError) return { ...guard.capabilityError, name: call.name };
     const session = guard.session!;

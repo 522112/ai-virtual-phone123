@@ -688,8 +688,8 @@ export default function MusicPlayer() {
                 {listenTogether && (
                     <button
                         className="mp-social-btn"
-                        onClick={() => setLtBodyTab("chat")}
-                        title="一起听聊天"
+                        onClick={() => window.dispatchEvent(new CustomEvent("lt-focus-input"))}
+                        title="边听边说"
                     >
                         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -706,6 +706,7 @@ export default function MusicPlayer() {
                         lyrics: track.lyrics,
                     }}
                     onNotice={showMusicToast}
+                    onOpenChat={() => setLtBodyTab("chat")}
                 />
             </div>
 
@@ -723,6 +724,18 @@ export default function MusicPlayer() {
                         <div className="music-queue-list">
                             {player.queue.map((t, idx) => {
                                 const isCurrent = t.id === track.id;
+                                const inLt = listenTogether ? listenTogether.tracks.some(item => item.id === t.id) : false;
+                                const joinLt = async () => {
+                                    if (!listenTogether || inLt) return;
+                                    const { addListenTogetherPlaylistTrack } = await import("@/lib/listen-together-storage");
+                                    addListenTogetherPlaylistTrack(listenTogether.id, {
+                                        id: t.id,
+                                        title: t.title,
+                                        artist: t.artist || "",
+                                        coverUrl: t.coverUrl,
+                                    });
+                                    showMusicToast(`已加入一起听：${t.title}`);
+                                };
                                 return (
                                     <div
                                         key={t.id}
@@ -737,6 +750,15 @@ export default function MusicPlayer() {
                                             <div className="music-queue-item-title">{t.title}</div>
                                             <div className="music-queue-item-artist">{t.artist}</div>
                                         </div>
+                                        {listenTogether ? (
+                                            <button
+                                                className="music-queue-item-join"
+                                                {...(inLt ? { "data-joined": "" } : {})}
+                                                onClick={e => { e.stopPropagation(); void joinLt(); }}
+                                            >
+                                                {inLt ? "已加入" : "加入"}
+                                            </button>
+                                        ) : null}
                                         {isCurrent && player.isPlaying && (
                                             <div className="music-wave music-queue-wave">{[0, 1, 2].map(i => <span key={i} className="music-wave-bar" style={{ animationDelay: `${i * 0.15}s` }} />)}</div>
                                         )}
