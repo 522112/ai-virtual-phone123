@@ -87,12 +87,26 @@ function normalizeSession(value: unknown): ListenTogetherSession | null {
     characterId: item.characterId,
     characterName: typeof item.characterName === "string" ? item.characterName : "对方",
     startedAt: typeof item.startedAt === "string" ? item.startedAt : new Date().toISOString(),
-    endedAt: typeof item.endedAt === "string" ? item.endedAt : undefined,
+    // (endedAt 由下方回填逻辑统一处理)
     tracks: Array.isArray(item.tracks) ? item.tracks.map(normalizeTrack).filter(Boolean) as ListenTogetherTrack[] : [],
     messages: Array.isArray(item.messages) ? item.messages.map(normalizeMessage).filter(Boolean) as ListenTogetherMessage[] : [],
     status: item.status === "active" ? "active" : "ended",
     playlist: normalizePlaylist((item as { playlist?: unknown }).playlist),
     heardTrackIds: Array.isArray(item.heardTrackIds) ? item.heardTrackIds.filter((x): x is string => typeof x === "string") : [],
+    // 老数据：已结束但缺 endedAt 的，用最后一条消息时间回填，避免时长随“现在”越长越大
+    endedAt: (() => {
+      if (typeof item.endedAt === "string" && item.endedAt) return item.endedAt;
+      if (item.status === "active") return undefined;
+      try {
+        const msgs = Array.isArray(item.messages) ? item.messages : [];
+        const last = msgs.length ? msgs[msgs.length - 1] : null;
+        const t = last && typeof (last as { createdAt?: unknown }).createdAt === "string"
+          ? (last as { createdAt: string }).createdAt
+          : null;
+        if (t && !Number.isNaN(Date.parse(t))) return t;
+      } catch { /* 忽略 */ }
+      return typeof item.startedAt === "string" ? item.startedAt : new Date().toISOString();
+    })(),
   };
 }
 
@@ -119,6 +133,17 @@ export function startListenTogetherSession(input: {
   track?: ListenTogetherTrack;
 }): ListenTogetherSession {
   const now = new Date().toISOString();
+  // 幂等：同角色已有进行中会话就直接复用，不再新建（避免 accept/open 连点产生重复记录）
+  const existing = loadListenTogetherSessions().find(
+    item => item.status === "active" && item.characterId === input.characterId,
+  );
+  if (existing) {
+    if (input.track && !existing.tracks.some(t => t.id === input.track!.id)) {
+      updateListenTogetherSession(existing.id, { tracks: [...existing.tracks, input.track] });
+      return getListenTogetherSession(existing.id) || existing;
+    }
+    return existing;
+  }
   const current = loadListenTogetherSessions().map(item => (
     item.status === "active" ? { ...item, status: "ended" as const, endedAt: item.endedAt || now } : item
   ));

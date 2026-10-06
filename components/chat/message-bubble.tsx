@@ -1165,6 +1165,14 @@ function AppCardBubble({ msg, characterId, characterName }: { msg: ChatMessage; 
     };
 
     if (layout.html) {
+        // 一起听报告卡：原生渲染，不走 iframe（iframe 高度塌陷会导致只剩标题行）
+        if (layout.html.includes("一起听")) {
+            return (
+                <div className={`chat-app-custom-card chat-app-listen-report${toneClass}`} data-disabled={cardOpenDisabled || undefined} style={style} onClick={openApp}>
+                    <div className="chat-app-listen-report-body" dangerouslySetInnerHTML={{ __html: stripAppCardExecutableHtml(layout.html) }} />
+                </div>
+            );
+        }
         return (
             <div className={`chat-app-custom-card${toneClass}`} data-disabled={cardOpenDisabled || undefined} style={style} onClick={openApp}>
                 <iframe

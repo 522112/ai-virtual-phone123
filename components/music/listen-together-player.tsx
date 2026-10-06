@@ -365,7 +365,13 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
     onOpenRecords: (sessionId: string) => void;
     onNotice: (text: string) => void;
 }) {
-    const sessions = loadListenTogetherSessions().filter(s => s.characterId === characterId);
+    const sessions = loadListenTogetherSessions()
+        .filter(s => s.characterId === characterId)
+        .sort((a, b) => {
+            if (a.status === "active" && b.status !== "active") return -1;
+            if (b.status === "active" && a.status !== "active") return 1;
+            return Date.parse(b.startedAt) - Date.parse(a.startedAt);
+        });
     const totalTracks = sessions.reduce((sum, s) => sum + (s.heardTrackIds?.length || s.tracks.length), 0);
     const totalMessages = sessions.reduce((sum, s) => sum + s.messages.length, 0);
     const raw = loadCharacters().find(item => item.id === characterId) || null;
@@ -389,6 +395,7 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
                 {sessions.map(item => (
                     <div key={item.id} className="ltp-history-card">
                         <div className="ltp-history-stats">
+                            {item.status === "active" && <span className="ltp-history-live">进行中</span>}
                             <span>本次一起听了 <b>{item.heardTrackIds?.length || item.tracks.length}首歌曲</b></span>
                             <span>本次陪伴彼此 <b>{formatListenDuration(item)}</b></span>
                         </div>

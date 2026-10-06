@@ -5609,3 +5609,5 @@
 .ltp-frame-item-use { border: 1px solid rgba(255,255,255,.2); background: none; color: #ddd; font-size: 12px; border-radius: 12px; padding: 3px 10px; cursor: pointer; }
 .ltp-frame-item[data-active] .ltp-frame-item-use { border-color: #e85a6e; color: #e85a6e; }
 .ltp-frame-item-del { border: 0; background: none; color: #d98; font-size: 12px; cursor: pointer; padding: 0 2px; }
+
+.ltp-history-live { font-size: 10px; font-weight: 700; color: #fff; background: #e8354b; border-radius: 999px; padding: 2px 8px; }
