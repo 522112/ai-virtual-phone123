@@ -5,6 +5,7 @@ import { loadCharacters } from "@/lib/character-storage";
 import { overlayCharacterForDisplay, overlayUserIdentityForDisplay } from "@/lib/couple-avatar-storage";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { ChatFallbackAvatar } from "@/components/chat/chat-fallback-avatar";
+import { FramedAvatar, AvatarFrameEditor } from "./avatar-frame";
 import {
     appendListenTogetherMessage,
     deleteListenTogetherMessage,
@@ -47,6 +48,20 @@ function formatTogetherElapsed(startedAt: string, now: number): string {
     return `一起听了${hours}小时${mins}分钟`;
 }
 
+/** 逐条揭示：总数增加时按 delay 一条条冒出，避免一次性全显示 */
+function useStaggeredCount(total: number, delay = 900): number {
+    const [count, setCount] = useState(() => Math.max(0, total));
+    useEffect(() => {
+        setCount(prev => Math.min(prev, total));
+    }, [total]);
+    useEffect(() => {
+        if (count >= total) return;
+        const timer = window.setTimeout(() => setCount(c => Math.min(c + 1, total)), delay);
+        return () => window.clearTimeout(timer);
+    }, [count, total, delay]);
+    return Math.min(count, total);
+}
+
 /** 双人头：一副耳机两人分听，播放时线缆相连随乐摆动 */
 function DuoBar({ sessionId, characterName, playing }: { sessionId: string; characterName: string; playing: boolean }) {
     const [tick, setTick] = useState(0);
@@ -84,14 +99,14 @@ function DuoBar({ sessionId, characterName, playing }: { sessionId: string; char
         <div className="ltp-duo" {...(playing ? { "data-playing": "" } : {})}>
             <span className="ltp-person">
                 <span className="ltp-avatar" data-me="">
-                    {identity?.avatarUrl ? <img src={identity.avatarUrl} alt="" /> : <ChatFallbackAvatar />}
+                    <FramedAvatar avatarUrl={identity?.avatarUrl} target="me" />
                 </span>
                 <em className="ltp-name">{userName}</em>
             </span>
             <span className="ltp-together" aria-hidden="true" />
             <span className="ltp-person">
                 <span className="ltp-avatar">
-                    {character?.avatar ? <img src={character.avatar} alt="" /> : <ChatFallbackAvatar />}
+                    <FramedAvatar avatarUrl={character?.avatar} target="character" />
                 </span>
                 <em className="ltp-name">{peerName}</em>
             </span>
@@ -113,23 +128,25 @@ function FloatLayer({ sessionId }: { sessionId: string }) {
         };
     }, []);
     const session = getListenTogetherSession(sessionId);
-    if (!session) return null;
     const pick = (author: "user" | "character") =>
-        (session.messages || [])
+        (session?.messages || [])
             .filter(m => m.author === author && now - Date.parse(m.createdAt) < 14000)
             .slice(-2);
     const mine = pick("user");
     const theirs = pick("character");
+    const peerShown = useStaggeredCount(theirs.length, 1100);
+    const mineShown = useStaggeredCount(mine.length, 700);
+    if (!session) return null;
     if (mine.length === 0 && theirs.length === 0) return null;
     return (
         <div className="ltp-float-layer" aria-hidden="true">
             <div className="ltp-float-col" data-side="me">
-                {mine.map((m, i) => (
+                {mine.slice(0, mineShown).map((m, i) => (
                     <span key={m.id} className="ltp-float-bubble is-me" style={{ animationDelay: `${i * 0.9}s` }}>{m.text}</span>
                 ))}
             </div>
             <div className="ltp-float-col" data-side="peer">
-                {theirs.map((m, i) => (
+                {theirs.slice(Math.max(0, peerShown - 2), peerShown).map((m, i) => (
                     <span key={m.id} className="ltp-float-bubble" style={{ animationDelay: `${i * 0.9}s` }}>{m.text}</span>
                 ))}
             </div>
@@ -162,9 +179,10 @@ function ChatBubbles({ sessionId, limit }: { sessionId: string; limit?: number }
     const removeMsg = (id: string) => {
         deleteListenTogetherMessage(sessionId, id);
     };
+    const shown = useStaggeredCount(messages.length, 900);
     return (
         <div className="ltp-bubbles">
-            {messages.map(m => (
+            {messages.slice(0, shown).map(m => (
                 <div
                     key={m.id}
                     className={`ltp-msg${m.author === "user" ? " is-me" : ""}`}
@@ -172,13 +190,13 @@ function ChatBubbles({ sessionId, limit }: { sessionId: string; limit?: number }
                 >
                     {m.author !== "user" && (
                         <span className="ltp-msg-avatar">
-                            {character?.avatar ? <img src={character.avatar} alt="" /> : <ChatFallbackAvatar />}
+                            <FramedAvatar avatarUrl={character?.avatar} target="character" />
                         </span>
                     )}
                     <span className="ltp-msg-text">{m.text}</span>
                     {m.author === "user" && (
                         <span className="ltp-msg-avatar" data-me="">
-                            {identity?.avatarUrl ? <img src={identity.avatarUrl} alt="" /> : <ChatFallbackAvatar />}
+                            <FramedAvatar avatarUrl={identity?.avatarUrl} target="me" />
                         </span>
                     )}
                 </div>
@@ -304,6 +322,11 @@ export function ListenTogetherRecordsSheet({ sessionId, onClose }: { sessionId: 
     const session = getListenTogetherSession(sessionId);
     const raw = session ? loadCharacters().find(item => item.id === session.characterId) || null : null;
     const character = raw ? overlayCharacterForDisplay(raw) : null;
+    const identity = session
+        ? overlayUserIdentityForDisplay(session.characterId, resolveUserIdentity(session.characterId, "chat"))
+        : null;
+    const messages = session?.messages || [];
+    const shown = useStaggeredCount(messages.length, 800);
     return (
         <div className="ltp-sheet-mask" onClick={onClose}>
             <div className="ltp-sheet ltp-sheet-tall" onClick={e => e.stopPropagation()}>
@@ -312,17 +335,22 @@ export function ListenTogetherRecordsSheet({ sessionId, onClose }: { sessionId: 
                     <button type="button" className="ltp-x" onClick={onClose} aria-label="关闭">×</button>
                 </div>
                 <div className="ltp-bubbles ltp-bubbles-full">
-                    {(session?.messages || []).map(m => (
+                    {messages.slice(0, shown).map(m => (
                         <div key={m.id} className={`ltp-msg${m.author === "user" ? " is-me" : ""}`}>
                             {m.author !== "user" && (
                                 <span className="ltp-msg-avatar">
-                                    {character?.avatar ? <img src={character.avatar} alt="" /> : <ChatFallbackAvatar />}
+                                    <FramedAvatar avatarUrl={character?.avatar} target="character" />
                                 </span>
                             )}
                             <span className="ltp-msg-text">{m.text}</span>
+                            {m.author === "user" && (
+                                <span className="ltp-msg-avatar" data-me="">
+                                    <FramedAvatar avatarUrl={identity?.avatarUrl} target="me" />
+                                </span>
+                            )}
                         </div>
                     ))}
-                    {(session?.messages || []).length === 0 && <div className="ltp-sheet-empty">还没有聊天记录</div>}
+                    {messages.length === 0 && <div className="ltp-sheet-empty">还没有聊天记录</div>}
                 </div>
             </div>
         </div>
@@ -400,6 +428,7 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
     const [draft, setDraft] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
+    const [showFrameEditor, setShowFrameEditor] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const [recordsId, setRecordsId] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
@@ -552,7 +581,7 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
     };
 
     return (
-        <div className="ltp-wrap">
+        <div className="ltp-wrap" onClick={() => { if (showInput) setShowInput(false); }}>
             {tab === "player" && coverMode === "lyrics" ? (
                 <div className="ltp-lyrics-full" ref={lyricListRef} onClick={() => setCoverMode("art")}>
                     <div className="ltp-lyrics-head">
@@ -600,12 +629,12 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                             {nowLyric ? <div className="ltp-now-lyric">{nowLyric}</div> : null}
                             <FloatLayer sessionId={session.id} />
                             {showInput && (
-                                <div className="ltp-quick-row">
+                                <div className="ltp-quick-row" onClick={e => e.stopPropagation()}>
                                     <input
                                         ref={quickRef}
                                         value={quick}
                                         onChange={e => setQuick(e.target.value)}
-                                        onKeyDown={e => { if (e.key === "Enter") { if (appendUserText(quick)) { setQuick(""); void callPeer(); } } }}
+                                        onKeyDown={e => { if (e.key === "Enter") { if (appendUserText(quick)) setQuick(""); } }}
                                         placeholder="边听边说一句..."
                                     />
                                     <button type="button" className="ltp-emoji-btn" onClick={() => setShowEmoji(prev => !prev)} aria-label="表情">
@@ -627,6 +656,7 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                             {showMenu && (
                                 <span className="ltp-menu">
                                     <button type="button" onClick={() => { setShowMenu(false); setShowHistory(true); }}>历史听歌记录</button>
+                                    <button type="button" onClick={() => { setShowMenu(false); setShowFrameEditor(true); }}>头像框</button>
                                     <button type="button" onClick={closeTogether}>关闭一起听</button>
                                 </span>
                             )}
@@ -697,6 +727,14 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                     )}
                     {recordsId && (
                         <ListenTogetherRecordsSheet sessionId={recordsId} onClose={() => setRecordsId(null)} />
+                    )}
+                    {showFrameEditor && (
+                        <AvatarFrameEditor
+                            characterName={session.characterName}
+                            myAvatar={resolveUserIdentity(session.characterId, "chat")?.avatarUrl}
+                            characterAvatar={loadCharacters().find(c => c.id === session.characterId)?.avatar}
+                            onClose={() => setShowFrameEditor(false)}
+                        />
                     )}
                 </>
             )}

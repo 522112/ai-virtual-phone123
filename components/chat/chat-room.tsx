@@ -4570,6 +4570,14 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             });
 
             setMessages(prev => [...prev, newMsg]);
+            if (!session.isGroup) {
+                dispatchChatMessageNotice({
+                    sessionId: session.id,
+                    senderName: "我",
+                    avatar: resolveUserIdentity(session.contactId, "chat")?.avatarUrl || null,
+                    body: currentText.slice(0, 80),
+                });
+            }
             if (diceOnly) {
                 const diceAside = pushChatMessage({
                     sessionId: session.id,

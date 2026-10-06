@@ -2615,8 +2615,17 @@ function ListenInviteBubble({ msg, onAction, characterId }: { msg: ChatMessage; 
     const inviteLine = direction === "incoming" ? peerDisplay + "邀请你一起听" : "你邀请" + peerDisplay + "一起听";
     const stateText = accepted ? "已进入一起听" : declined ? "已拒绝" : cancelled ? "已取消" : incoming ? "等你进入" : waiting ? "等待对方回应" : "一起听";
     const showEnter = accepted;
+    const cardClickable = incoming || showEnter;
+    const onCardClick = () => {
+        if (incoming) onAction?.(msg, "accept");
+        else if (showEnter) onAction?.(msg, "open");
+    };
     return (
-        <div className="chat-lt-card" data-status={status}>
+        <div
+            className="chat-lt-card"
+            data-status={status}
+            {...(cardClickable ? { role: "button", tabIndex: 0, style: { cursor: "pointer" }, onClick: onCardClick } : {})}
+        >
             <div className="chat-lt-main">
                 {cover ? (
                     <img src={cover} alt="" className="chat-lt-cover" />

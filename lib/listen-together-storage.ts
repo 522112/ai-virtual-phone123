@@ -220,6 +220,110 @@ export function clearListenTogetherPlaylist(sessionId: string): ListenTogetherSe
   return updateListenTogetherSession(sessionId, { tracks: [] });
 }
 
+// ── 一起听头像框方案库（全局，可存多套，任意角色可复用） ──
+
+export type AvatarFramePreset = {
+  id: string;
+  name: string;
+  frameUrl: string;
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  createdAt: string;
+};
+
+export type AvatarFrameTarget = "me" | "character";
+
+const AVATAR_FRAME_PRESETS_KEY = "ai_phone_listen_avatar_frame_presets_v1";
+const AVATAR_FRAME_APPLIED_KEY = "ai_phone_listen_avatar_frame_applied_v1";
+
+function normalizePreset(value: unknown): AvatarFramePreset | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Partial<AvatarFramePreset>;
+  if (typeof item.id !== "string" || typeof item.frameUrl !== "string" || !item.frameUrl) return null;
+  return {
+    id: item.id,
+    name: typeof item.name === "string" && item.name.trim() ? item.name : "方案",
+    frameUrl: item.frameUrl,
+    scale: typeof item.scale === "number" ? item.scale : 1,
+    offsetX: typeof item.offsetX === "number" ? item.offsetX : 0,
+    offsetY: typeof item.offsetY === "number" ? item.offsetY : 0,
+    createdAt: typeof item.createdAt === "string" ? item.createdAt : new Date().toISOString(),
+  };
+}
+
+export function listAvatarFramePresets(): AvatarFramePreset[] {
+  const items = readJson<unknown[]>(AVATAR_FRAME_PRESETS_KEY, []);
+  return items.map(normalizePreset).filter((x): x is AvatarFramePreset => Boolean(x));
+}
+
+export function saveAvatarFramePreset(input: {
+  id?: string;
+  name?: string;
+  frameUrl: string;
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}): AvatarFramePreset {
+  const presets = listAvatarFramePresets();
+  const id = input.id || generateId("aframe");
+  const preset: AvatarFramePreset = {
+    id,
+    name: input.name?.trim() || `方案 ${presets.length + 1}`,
+    frameUrl: input.frameUrl,
+    scale: input.scale,
+    offsetX: input.offsetX,
+    offsetY: input.offsetY,
+    createdAt: new Date().toISOString(),
+  };
+  const next = presets.some(p => p.id === id)
+    ? presets.map(p => (p.id === id ? preset : p))
+    : [...presets, preset];
+  writeJson(AVATAR_FRAME_PRESETS_KEY, next);
+  emitAvatarFrameUpdated();
+  return preset;
+}
+
+export function deleteAvatarFramePreset(id: string): void {
+  const next = listAvatarFramePresets().filter(p => p.id !== id);
+  writeJson(AVATAR_FRAME_PRESETS_KEY, next);
+  const applied = loadAppliedAvatarFrames();
+  let changed = false;
+  for (const target of ["me", "character"] as AvatarFrameTarget[]) {
+    if (applied[target] === id) { delete applied[target]; changed = true; }
+  }
+  if (changed) writeJson(AVATAR_FRAME_APPLIED_KEY, applied);
+  emitAvatarFrameUpdated();
+}
+
+function loadAppliedAvatarFrames(): Partial<Record<AvatarFrameTarget, string>> {
+  return readJson<Partial<Record<AvatarFrameTarget, string>>>(AVATAR_FRAME_APPLIED_KEY, {});
+}
+
+export function getAppliedAvatarFrameTargetId(target: AvatarFrameTarget): string | null {
+  return loadAppliedAvatarFrames()[target] || null;
+}
+
+export function getAppliedAvatarFrame(target: AvatarFrameTarget): AvatarFramePreset | null {
+  const id = getAppliedAvatarFrameTargetId(target);
+  if (!id) return null;
+  return listAvatarFramePresets().find(p => p.id === id) || null;
+}
+
+export function applyAvatarFramePreset(target: AvatarFrameTarget, presetId: string | null): void {
+  const applied = loadAppliedAvatarFrames();
+  if (presetId) applied[target] = presetId;
+  else delete applied[target];
+  writeJson(AVATAR_FRAME_APPLIED_KEY, applied);
+  emitAvatarFrameUpdated();
+}
+
+function emitAvatarFrameUpdated(): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("avatar-frame-updated"));
+  }
+}
+
 // 一起听背景：按角色 id 长久保存（dataURL 进 kv，随备份走）
 export function getListenTogetherBg(characterId: string): string {  const map = readJson<Record<string, string>>(LISTEN_BG_KEY, {});
   return typeof map[characterId] === "string" ? map[characterId] : "";

@@ -2737,12 +2737,6 @@ async function executeListenTogetherInvite(call: ToolCall, context?: ToolExecuti
         return musicToolSuccess(call.name, "已有待回应的邀请", { userNotice: "邀请已经发出去了，等对方回应" });
     }
     const share = await import("./listen-together-share");
-    const invite = st.createListenTogetherInvite({
-        characterId, characterName: target.name, track: null, inviteText: "想和你一起听", direction: "outgoing",
-    });
-    const sent = share.sendListenTogetherInviteCard({
-        characterId, characterName: target.name, direction: "outgoing", track: null, inviteId: invite.id,
-    });
     const engine = await import("./listen-together-engine");
     const draftSession = {
         id: "invite", characterId, characterName: target.name,
@@ -2752,7 +2746,6 @@ async function executeListenTogetherInvite(call: ToolCall, context?: ToolExecuti
     try {
         reply = await engine.generateListenTogetherReply({ characterId, session: draftSession, opening: true });
     } catch {
-        st.decideListenTogetherInvite(invite.id, "declined");
         return fail("对方这次没接上，稍后再邀");
     }
     const peerTexts = engine.splitListenTogetherBubbles(reply.text, [target.name, "我", "用户"]);
@@ -2775,7 +2768,13 @@ async function executeListenTogetherInvite(call: ToolCall, context?: ToolExecuti
         const first = (fav.songs || []).find(s => s.title?.trim());
         if (first) pick = { id: `fav_${first.id}`, title: first.title, artist: first.artist || "", coverUrl: first.coverUrl };
     }
-    if (pick) st.updateListenTogetherInviteTrack(invite.id, pick);
+    // 角色邀请：先把歌定好再发卡，卡片带歌名/歌手/封面
+    const invite = st.createListenTogetherInvite({
+        characterId, characterName: target.name, track: pick, inviteText: reply.text, direction: "incoming",
+    });
+    const sent = share.sendListenTogetherInviteCard({
+        characterId, characterName: target.name, direction: "incoming", track: pick, text: reply.text, inviteId: invite.id,
+    });
     share.revealListenTogetherOutcome({
         sessionId: sent.sessionId, messageId: sent.messageId, inviteId: invite.id, accept: !refused, peerTexts,
     });
