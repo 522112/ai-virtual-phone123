@@ -10,6 +10,7 @@ import {
     appendListenTogetherMessage,
     cycleTogetherPlayMode,
     deleteListenTogetherMessage,
+    deleteListenTogetherSession,
     endListenTogetherSession,
     formatListenDuration,
     getActiveListenTogetherSession,
@@ -468,13 +469,30 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
             return Date.parse(b.startedAt) - Date.parse(a.startedAt);
         });
     const raw = loadCharacters().find(item => item.id === characterId) || null;
-    const character = raw;
+    const character = raw ? overlayCharacterForDisplay(raw) : null;
+    const [selecting, setSelecting] = useState(false);
+    const [selected, setSelected] = useState<string[]>([]);
+    const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+    const [, force] = useState(0);
+    const toggleSelect = (id: string) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    const confirmDelete = () => {
+        selected.forEach(id => deleteListenTogetherSession(id));
+        onNotice(`已删除${selected.length}条记录`);
+        setSelected([]);
+        setSelecting(false);
+        setShowConfirmDelete(false);
+        force(n => n + 1);
+    };
     return (
         <div className="ltp-sheet-mask" onClick={onClose}>
             <div className="ltp-sheet ltp-sheet-tall" onClick={e => e.stopPropagation()}>
                 <div className="ltp-sheet-head">
                     <span className="ltp-sheet-title">和TA的一起听</span>
-                    <button type="button" className="ltp-x" onClick={onClose} aria-label="关闭">×</button>
+                    {selecting ? (
+                        <button type="button" className="ltp-del" disabled={selected.length === 0} onClick={() => setShowConfirmDelete(true)}>删除{selected.length > 0 ? ` ${selected.length}` : ""}</button>
+                    ) : (
+                        <button type="button" className="ltp-x" onClick={onClose} aria-label="关闭">×</button>
+                    )}
                 </div>
                 <div className="ltp-history-head">
                     <span className="ltp-history-avatar">
@@ -482,11 +500,24 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
                     </span>
                     <div className="ltp-history-meta">
                         <strong>{character?.screenName?.trim() || characterName}</strong>
+                        <button type="button" className="ltp-select-btn" onClick={() => { setSelecting(v => !v); setSelected([]); }}>{selecting ? "取消" : "选择"}</button>
                     </div>
                 </div>
+                {showConfirmDelete && (
+                    <div className="ltp-confirm-mask" onClick={() => setShowConfirmDelete(false)}>
+                        <div className="ltp-confirm-box" onClick={e => e.stopPropagation()}>
+                            <div className="ltp-confirm-title">删除选中的{selected.length}条记录？</div>
+                            <div className="ltp-confirm-desc">会同时删除其中的聊天与歌单，不可恢复</div>
+                            <div className="ltp-confirm-btns">
+                                <button type="button" className="ltp-confirm-cancel" onClick={() => setShowConfirmDelete(false)}>取消</button>
+                                <button type="button" className="ltp-confirm-ok" onClick={confirmDelete}>删除</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {sessions.length === 0 && <div className="ltp-sheet-empty">还没有一起听记录</div>}
                 {sessions.map(item => (
-                    <div key={item.id} className="ltp-history-card">
+                    <div key={item.id} className="ltp-history-card" {...(selecting ? { "data-selecting": "" } : {})} {...(selected.includes(item.id) ? { "data-selected": "" } : {})} onClick={() => { if (selecting && item.status !== "active") toggleSelect(item.id); }}>
                         {item.status === "active" && <span className="ltp-history-live">进行中</span>}
                         <div className="ltp-history-stats">
                             <span>本次一起听了 <b>{item.heardTrackIds?.length || item.tracks.length}首歌曲</b></span>
@@ -494,10 +525,11 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
                         </div>
                         <div className="ltp-history-sub">本会话互发消息{item.messages.length}条</div>
                         <div className="ltp-history-actions">
-                            <button type="button" onClick={() => onOpenRecords(item.id)}>聊天记录</button>
+                            <button type="button" onClick={e => { e.stopPropagation(); onOpenRecords(item.id); }}>聊天记录</button>
                             <button
                                 type="button"
-                                onClick={() => {
+                                onClick={e => {
+                                    e.stopPropagation();
                                     sendListenTogetherReportCard({
                                         characterId: item.characterId,
                                         characterName: item.characterName,

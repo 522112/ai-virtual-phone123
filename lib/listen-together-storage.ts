@@ -224,12 +224,18 @@ const LISTEN_BG_KEY = "ai_phone_listen_bg_v1";
 
 // 删除单条消息（长按删除用）。记忆相关自动清空：
 // 一起听回复 prompt 的最近对话取自 session.messages，删掉即不再进入大模型上下文。
-export function deleteListenTogetherMessage(sessionId: string, messageId: string): ListenTogetherSession | null {
-  const session = getListenTogetherSession(sessionId);
+export function deleteListenTogetherMessage(sessionId: string, messageId: string): ListenTogetherSession | null {  const session = getListenTogetherSession(sessionId);
   if (!session) return null;
   const next = session.messages.filter(item => item.id !== messageId);
   if (next.length === session.messages.length) return session;
   return updateListenTogetherSession(sessionId, { messages: next });
+}
+
+/** 删除整条一起听会话（含其中的聊天消息与歌单），用于历史页删除 */
+export function deleteListenTogetherSession(sessionId: string): void {
+  const current = loadListenTogetherSessions();
+  const next = current.filter(item => item.id !== sessionId);
+  if (next.length !== current.length) saveSessions(next);
 }
 
 /** 记录本次实际听过一首歌（去重计数） */
