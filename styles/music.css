@@ -5411,15 +5411,15 @@
 
 /* ????????????????p1-p6??????????+???????+????+?? */
 .ltp-wrap { display: flex; flex-direction: column; align-items: center; width: 100%; min-height: 0; flex: 1; padding: 6px 18px 0; position: relative; }
-.ltp-float-layer { position: absolute; left: 10px; right: 10px; top: 128px; bottom: 130px; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; z-index: 5; }
-.ltp-float-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; max-width: 72%; }
+.ltp-float-layer { position: absolute; left: 0; right: 0; top: 140px; bottom: 130px; display: flex; justify-content: center; gap: 10px; pointer-events: none; z-index: 5; }
+.ltp-float-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; max-width: 44%; }
 .ltp-float-col[data-side="me"] { align-items: flex-start; }
 .ltp-float-col[data-side="peer"] { align-items: flex-start; }
 .ltp-float-bubble { display: inline-block; width: fit-content; max-width: 100%; font-size: 12px; line-height: 1.45; color: #fff; background: rgba(20,16,24,.72); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 7px 10px; word-break: break-word; backdrop-filter: blur(6px); animation: ltp-float-life 14s ease forwards; }
 .ltp-float-bubble.is-me { background: rgba(232,90,110,.32); border-color: rgba(232,90,110,.4); }
 .ltp-float-col { min-width: 0; }
-.ltp-float-col[data-side="peer"] { margin-right: auto; align-items: flex-start; }
-.ltp-float-col[data-side="me"] { margin-left: auto; align-items: flex-end; }
+.ltp-float-col[data-side="peer"] { align-items: flex-start; }
+.ltp-float-col[data-side="me"] { align-items: flex-end; }
 @keyframes ltp-float-life { 0% { opacity: 0; transform: translateY(8px); } 8% { opacity: 1; transform: none; } 82% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
 .ltp-lyrics-full { width: 100%; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 12px 8px 20px; margin-top: 10px; }
 .ltp-lyric-row { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-radius: 10px; }
