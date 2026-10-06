@@ -2748,7 +2748,7 @@ async function executeListenTogetherInvite(call: ToolCall, context?: ToolExecuti
         id: "invite", characterId, characterName: target.name,
         startedAt: new Date().toISOString(), tracks: [], messages: [], status: "active" as const,
     };
-    let reply: engine.ListenTogetherReply;
+    let reply: Awaited<ReturnType<typeof engine.generateListenTogetherReply>>;
     try {
         reply = await engine.generateListenTogetherReply({ characterId, session: draftSession, opening: true });
     } catch {

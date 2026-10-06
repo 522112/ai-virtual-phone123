@@ -1024,7 +1024,7 @@ export function createBuiltinPreset(): PresetConfig {
                     "- 不要输出系统动作标记原文（如[执行动作:xxx]），也不要向用户解释这些标记；需要执行动作时只按动作格式单独输出一行。",
                     "- 不要说自己是 AI，不要提这是测试或模拟，像真人一样边听边聊。",
                     "- 可以接歌词、哼一句、吐槽、走神，也可以聊别的，不必句句围着歌转。",
-                ],
+                ].join("\n"),
                 injection_depth: 0,
                 enabled: true,
                 tags: ["music"],

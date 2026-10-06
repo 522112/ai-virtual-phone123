@@ -406,7 +406,6 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
 
 export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTime, playerStyle, tab, onTabChange, onOpenQueue, onNotice, showQueue, onCloseQueue }: Props & { showQueue: boolean; onCloseQueue: () => void }) {
     const [now, setNow] = useState(() => Date.now());
-    const [draft, setDraft] = useState("");
     const [quick, setQuick] = useState("");
     const quickRef = useRef<HTMLInputElement>(null);
     const [draft, setDraft] = useState("");
