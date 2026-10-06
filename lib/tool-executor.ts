@@ -2766,6 +2766,23 @@ async function executeListenTogetherInvite(call: ToolCall, context?: ToolExecuti
         const head = bridge?.getState().queue?.find(t => t.title?.trim());
         if (head) pick = { id: head.id, title: head.title, artist: head.artist || "", coverUrl: head.coverUrl };
     }
+    // 还是没歌：让角色当场挑一首（明确要求播放），保证邀请卡必带歌
+    if (!pick && !refused) {
+        try {
+            const choose = await engine.generateListenTogetherReply({
+                characterId,
+                session: draftSession,
+                userText: "挑一首你此刻最想和用户一起听的歌，直接播放，不要反问",
+            });
+            const cq = choose.actions.find(a => a.kind === "play" && (a as { query?: string }).query) as { query?: string } | undefined;
+            if (cq?.query) {
+                const r = await bridge?.resolveByQuery(cq.query).catch(() => null);
+                if (r) pick = { id: r.id, title: r.title, artist: r.artist || "", coverUrl: r.coverUrl };
+            }
+        } catch {
+            // 选歌失败就按无歌走
+        }
+    }
     if (!pick && !refused) {
         const { getCharacterFavorites } = await import("./music-favorites-storage");
         const fav = getCharacterFavorites(characterId, target.name);

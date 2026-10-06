@@ -97,6 +97,8 @@ type Props = {
     onTabChange: (tab: ListenTogetherBodyTab) => void;
     onOpenQueue: () => void;
     onNotice: (text: string) => void;
+    onOpenHistory: () => void;
+    onOpenFrame: () => void;
 };
 
 function formatTogetherElapsed(startedAt: string, now: number): string {
@@ -452,8 +454,8 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
                 {sessions.length === 0 && <div className="ltp-sheet-empty">还没有一起听记录</div>}
                 {sessions.map(item => (
                     <div key={item.id} className="ltp-history-card">
+                        {item.status === "active" && <span className="ltp-history-live">进行中</span>}
                         <div className="ltp-history-stats">
-                            {item.status === "active" && <span className="ltp-history-live">进行中</span>}
                             <span>本次一起听了 <b>{item.heardTrackIds?.length || item.tracks.length}首歌曲</b></span>
                             <span>本次陪伴彼此 <b>{formatListenDuration(item)}</b></span>
                         </div>
@@ -482,7 +484,7 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
     );
 }
 
-export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTime, playerStyle, tab, onTabChange, onOpenQueue, onNotice }: Props) {
+export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTime, playerStyle, tab, onTabChange, onOpenQueue, onNotice, onOpenHistory, onOpenFrame }: Props) {
     const [now, setNow] = useState(() => Date.now());
     const [quick, setQuick] = useState("");
     const quickRef = useRef<HTMLInputElement>(null);
@@ -493,9 +495,6 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
     const [draft, setDraft] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
-    const [showFrameEditor, setShowFrameEditor] = useState(false);
-    const [showHistory, setShowHistory] = useState(false);
-    const [recordsId, setRecordsId] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -638,7 +637,7 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
         endListenTogetherSession(session.id);
         setShowMenu(false);
         onNotice("一起听已结束，可在历史里回看");
-        setShowHistory(true);
+        onOpenHistory();
     };
 
     return (
@@ -716,8 +715,8 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                             </button>
                             {showMenu && (
                                 <span className="ltp-menu">
-                                    <button type="button" onClick={() => { setShowMenu(false); setShowHistory(true); }}>历史听歌记录</button>
-                                    <button type="button" onClick={() => { setShowMenu(false); setShowFrameEditor(true); }}>头像框</button>
+                                    <button type="button" onClick={() => { setShowMenu(false); onOpenHistory(); }}>历史听歌记录</button>
+                                    <button type="button" onClick={() => { setShowMenu(false); onOpenFrame(); }}>头像框</button>
                                     <button type="button" onClick={closeTogether}>关闭一起听</button>
                                 </span>
                             )}
@@ -763,26 +762,6 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                         </button>
                         <button type="button" className="ltp-queue-link" onClick={onOpenQueue}>歌单</button>
                     </div>
-                    {showHistory && (
-                        <ListenTogetherHistorySheet
-                            characterId={session.characterId}
-                            characterName={session.characterName}
-                            onClose={() => setShowHistory(false)}
-                            onOpenRecords={setRecordsId}
-                            onNotice={onNotice}
-                        />
-                    )}
-                    {recordsId && (
-                        <ListenTogetherRecordsSheet sessionId={recordsId} onClose={() => setRecordsId(null)} />
-                    )}
-                    {showFrameEditor && (
-                        <AvatarFrameEditor
-                            characterName={session.characterName}
-                            myAvatar={resolveUserIdentity(session.characterId, "chat")?.avatarUrl}
-                            characterAvatar={loadCharacters().find(c => c.id === session.characterId)?.avatar}
-                            onClose={() => setShowFrameEditor(false)}
-                        />
-                    )}
                 </>
             )}
         </div>

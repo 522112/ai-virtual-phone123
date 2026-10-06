@@ -5518,9 +5518,10 @@
 .ltp-history-head { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .ltp-history-avatar { width: 46px; height: 46px; border-radius: 50%; overflow: hidden; background: #ddd; }
 .ltp-history-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.ltp-history-card { background: linear-gradient(165deg, #fff 0%, #fdf3ef 100%); border: 1px solid #f0ddd4; border-radius: 16px; padding: 14px; margin-top: 10px; box-shadow: 0 4px 16px rgba(200,80,80,.08); }
-.ltp-history-stats { display: flex; justify-content: space-around; font-size: 13px; color: #c33; }
-.ltp-history-stats b { font-size: 16px; }
+.ltp-history-card { position: relative; background: linear-gradient(165deg, #fff 0%, #fdf3ef 100%); border: 1px solid #f0ddd4; border-radius: 16px; padding: 14px; margin-top: 10px; box-shadow: 0 4px 16px rgba(200,80,80,.08); }
+.ltp-history-stats { display: flex; justify-content: space-around; gap: 8px; font-size: 13px; color: #c33; }
+.ltp-history-stats > span { white-space: nowrap; }
+.ltp-history-stats b { font-size: 16px; white-space: nowrap; }
 .ltp-history-sub { text-align: center; font-size: 12px; color: #999; margin-top: 6px; }
 .ltp-history-actions { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
 .ltp-history-actions button { border: 1px solid #e0a0a0; background: #fff; color: #c33; font-size: 13px; border-radius: 16px; padding: 7px 18px; cursor: pointer; }
@@ -5607,7 +5608,7 @@
 .ltp-frame-item[data-active] .ltp-frame-item-use { border-color: #e85a6e; color: #e85a6e; }
 .ltp-frame-item-del { border: 0; background: none; color: #d98; font-size: 12px; cursor: pointer; padding: 0 2px; }
 
-.ltp-history-live { font-size: 10px; font-weight: 700; color: #fff; background: #e8354b; border-radius: 999px; padding: 2px 8px; }
+.ltp-history-live { position: absolute; top: 10px; right: 12px; font-size: 10px; font-weight: 700; color: #e85a6e; border: 1px solid rgba(232,90,110,.5); background: rgba(232,90,110,.08); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
 
 .ltp-frame-sheet { max-height: 92%; background: #221c27; color: #f4efe8; }
 .ltp-frame-sheet .ltp-sheet-title { color: #fff; }

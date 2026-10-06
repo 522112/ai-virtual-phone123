@@ -1149,6 +1149,12 @@ function ListenReportCard({ msg, characterId }: { msg: ChatMessage; characterId?
     const peerAvatar = peer?.avatar || null;
     const myAvatar = resolveUserIdentity(cid || "", "chat")?.avatarUrl || null;
     const avatarStyle: React.CSSProperties = { width: 46, height: 46, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.9)", background: "rgba(255,255,255,0.2)", flexShrink: 0 };
+    const avatarFallbackStyle: React.CSSProperties = { ...avatarStyle, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.25)" };
+    const avatarFallback = (
+        <span style={avatarFallbackStyle}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5" /></svg>
+        </span>
+    );
     return (
         <div style={{ width: "100%", boxSizing: "border-box", background: "linear-gradient(170deg,#ff6a5e,#f43f4e 45%,#e8344a)", color: "#fff", borderRadius: 14, padding: "10px 12px 14px", fontFamily: "-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, opacity: 0.9 }}>
@@ -1156,8 +1162,8 @@ function ListenReportCard({ msg, characterId }: { msg: ChatMessage; characterId?
                 {stats.date ? <span>{stats.date}</span> : null}
             </div>
             <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
-                {myAvatar ? <img src={myAvatar} alt="" style={avatarStyle} /> : null}
-                {peerAvatar ? <img src={peerAvatar} alt="" style={{ ...avatarStyle, marginLeft: -14 }} /> : null}
+                {myAvatar ? <img src={myAvatar} alt="" style={avatarStyle} /> : avatarFallback}
+                {peerAvatar ? <img src={peerAvatar} alt="" style={{ ...avatarStyle, marginLeft: -14 }} /> : <span style={{ marginLeft: -14 }}>{avatarFallback}</span>}
             </div>
             <div style={{ marginTop: 10, background: "#fff", color: "#e8354b", borderRadius: 16, padding: "16px 12px", textAlign: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)" }}>
                 <div style={{ display: "flex" }}>

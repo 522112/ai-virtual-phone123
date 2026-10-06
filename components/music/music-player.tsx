@@ -18,7 +18,10 @@ import {
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
 import { ListenTogetherControls, useActiveListenTogetherSession } from "./listen-together";
-import { ListenTogetherPlayerBody, ListenTogetherQueueSheet, requestPeerForSongs } from "./listen-together-player";
+import { ListenTogetherPlayerBody, ListenTogetherQueueSheet, ListenTogetherHistorySheet, ListenTogetherRecordsSheet, requestPeerForSongs } from "./listen-together-player";
+import { AvatarFrameEditor } from "./avatar-frame";
+import { resolveUserIdentity } from "@/lib/settings-storage";
+import { loadCharacters } from "@/lib/character-storage";
 import { getListenTogetherSession } from "@/lib/listen-together-storage";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
@@ -73,6 +76,9 @@ export default function MusicPlayer() {
     const [showQueue, setShowQueue] = useState(false);
     const [ltBodyTab, setLtBodyTab] = useState<"player" | "chat">("player");
     const [showLtQueue, setShowLtQueue] = useState(false);
+    const [showLtHistory, setShowLtHistory] = useState(false);
+    const [ltRecordsId, setLtRecordsId] = useState<string | null>(null);
+    const [showLtFrame, setShowLtFrame] = useState(false);
     const [showComments, setShowComments] = useState(false);
     const [artistView, setArtistView] = useState<{ id: number; name: string } | null>(null);
     const [palette, setPalette] = useState<CoverPalette>(DEFAULT_COVER_PALETTE);
@@ -552,6 +558,8 @@ export default function MusicPlayer() {
                         onTabChange={setLtBodyTab}
                         onOpenQueue={() => setShowLtQueue(true)}
                         onNotice={showMusicToast}
+                        onOpenHistory={() => setShowLtHistory(true)}
+                        onOpenFrame={() => setShowLtFrame(true)}
                     />
                 ) : view === "lyrics" ? (
                     <div className="mp-lyrics-wrap" onClick={() => setView("cover")}>
@@ -844,6 +852,26 @@ export default function MusicPlayer() {
                 />
             )}
 
+            {showLtHistory && listenTogether && (
+                <ListenTogetherHistorySheet
+                    characterId={listenTogether.characterId}
+                    characterName={listenTogether.characterName}
+                    onClose={() => setShowLtHistory(false)}
+                    onOpenRecords={setLtRecordsId}
+                    onNotice={showMusicToast}
+                />
+            )}
+            {ltRecordsId && (
+                <ListenTogetherRecordsSheet sessionId={ltRecordsId} onClose={() => setLtRecordsId(null)} />
+            )}
+            {showLtFrame && listenTogether && (
+                <AvatarFrameEditor
+                    characterName={listenTogether.characterName}
+                    myAvatar={resolveUserIdentity(listenTogether.characterId, "chat")?.avatarUrl}
+                    characterAvatar={loadCharacters().find(c => c.id === listenTogether.characterId)?.avatar}
+                    onClose={() => setShowLtFrame(false)}
+                />
+            )}
             {showLtQueue && listenTogether && (
                 <ListenTogetherQueueSheet
                     sessionId={listenTogether.id}
