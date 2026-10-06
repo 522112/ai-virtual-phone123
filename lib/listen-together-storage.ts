@@ -5,6 +5,7 @@ import type {
   ListenTogetherPlaylist,
   ListenTogetherSession,
   ListenTogetherTrack,
+  TogetherPlayMode,
 } from "./listen-together-types";
 
 const SESSIONS_KEY = "ai_phone_listen_together_v1";
@@ -371,6 +372,26 @@ function emitAvatarFrameUpdated(): void {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("avatar-frame-updated"));
   }
+}
+
+// ── 一起听歌单播放模式（全局持久） ──
+
+const TOGETHER_PLAY_MODE_KEY = "ai_phone_listen_together_play_mode_v1";
+
+export function getTogetherPlayMode(): TogetherPlayMode {
+  const v = readJson<string>(TOGETHER_PLAY_MODE_KEY, "repeat-one");
+  return v === "sequence" || v === "shuffle" ? v : "repeat-one";
+}
+
+export function setTogetherPlayMode(mode: TogetherPlayMode): void {
+  writeJson(TOGETHER_PLAY_MODE_KEY, mode);
+}
+
+export function cycleTogetherPlayMode(): TogetherPlayMode {
+  const order: TogetherPlayMode[] = ["repeat-one", "sequence", "shuffle"];
+  const next = order[(order.indexOf(getTogetherPlayMode()) + 1) % order.length];
+  setTogetherPlayMode(next);
+  return next;
 }
 
 // 一起听背景：按角色 id 长久保存（dataURL 进 kv，随备份走）

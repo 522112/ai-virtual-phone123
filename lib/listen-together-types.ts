@@ -1,5 +1,8 @@
 export type ListenTogetherAuthor = "user" | "character";
 
+/** 一起听歌单播放模式：单曲循环 / 顺序播放 / 随机播放 */
+export type TogetherPlayMode = "repeat-one" | "sequence" | "shuffle";
+
 export type ListenTogetherTrack = {
   id: string;
   title: string;

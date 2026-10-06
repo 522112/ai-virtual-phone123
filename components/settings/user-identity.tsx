@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ui/modal";
 export type UserIdentity = {
     id: string;
     name: string;
+    screenName?: string;
     avatarUrl?: string;
     bio: string;
     gender: string;
@@ -273,6 +274,16 @@ export function UserIdentitySettings() {
                                                     value={identity.name}
                                                     onChange={(e) => updateIdentity(identity.id, { name: e.target.value })}
                                                     placeholder="您希望AI怎么称呼您..."
+                                                    className="font-medium"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                                <label className="menu-desc ml-1">网名</label>
+                                                <Input
+                                                    type="text"
+                                                    value={identity.screenName || ""}
+                                                    onChange={(e) => updateIdentity(identity.id, { screenName: e.target.value })}
+                                                    placeholder="一起听里显示的名字，不填用本名"
                                                     className="font-medium"
                                                 />
                                             </div>

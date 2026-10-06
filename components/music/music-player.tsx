@@ -197,7 +197,21 @@ export default function MusicPlayer() {
             if (!active || active.status !== "active" || active.tracks.length === 0) return null;
             const cur = currentTrackRef.current;
             const idx = cur ? active.tracks.findIndex(t => t.id === cur.id || t.title === cur.title) : -1;
-            const next = active.tracks[(idx + 1) % active.tracks.length];
+            const mode = m.getTogetherPlayMode();
+            let next: (typeof active.tracks)[number] | undefined;
+            if (mode === "repeat-one") {
+                next = idx >= 0 ? active.tracks[idx] : active.tracks[0];
+            } else if (mode === "sequence") {
+                next = idx + 1 < active.tracks.length ? active.tracks[idx + 1] : undefined;
+            } else {
+                next = active.tracks.length > 1
+                    ? active.tracks[Math.floor(Math.random() * active.tracks.length)]
+                    : active.tracks[0];
+                if (next && active.tracks.length > 1 && idx >= 0 && next.id === active.tracks[idx]?.id) {
+                    next = active.tracks[(idx + 1) % active.tracks.length];
+                }
+            }
+            if (!next) return null;
             try {
                 return await getMusicControlBridge()?.resolveByQuery(`${next.title} ${next.artist || ""}`.trim()) ?? null;
             } catch {
