@@ -5568,3 +5568,5 @@
 .ltp-lyrics-title { font-size: 14px; color: rgba(255,255,255,.7); }
 .ltp-lyrics-back { border: 0; background: none; color: rgba(255,255,255,.6); font-size: 13px; cursor: pointer; }
 .ltp-tab-fixed { margin-top: auto; }
+.ltp-lyrics-full { cursor: pointer; }
+.ltp-lyrics-back { font-size: 12px; color: rgba(255,255,255,.55); }

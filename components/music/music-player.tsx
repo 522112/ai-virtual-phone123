@@ -4,7 +4,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMusicPlayer, type PlayMode } from "@/lib/music-context";
+import { useMusicPlayer, type PlayMode, setTogetherNextResolver } from "@/lib/music-context";
+import { getMusicControlBridge } from "@/lib/music-control-bridge";
 import { scrollElementWithinContainer } from "@/lib/dom-scroll";
 import { kvGet, kvSet } from "@/lib/kv-db";
 import { extractCoverPalette, DEFAULT_COVER_PALETTE, type CoverPalette } from "@/lib/cover-color";
@@ -178,6 +179,26 @@ export default function MusicPlayer() {
             if (active) m.markListenTogetherHeard(active.id, sid);
         });
     }, [player.currentTrack?.id]);
+
+    // 一起听：歌单内循环播放（放完回到第一首）
+    const currentTrackRef = useRef(player.currentTrack);
+    useEffect(() => { currentTrackRef.current = player.currentTrack; }, [player.currentTrack]);
+    useEffect(() => {
+        setTogetherNextResolver(async () => {
+            const m = await import("@/lib/listen-together-storage");
+            const active = m.getActiveListenTogetherSession();
+            if (!active || active.status !== "active" || active.tracks.length === 0) return null;
+            const cur = currentTrackRef.current;
+            const idx = cur ? active.tracks.findIndex(t => t.id === cur.id || t.title === cur.title) : -1;
+            const next = active.tracks[(idx + 1) % active.tracks.length];
+            try {
+                return await getMusicControlBridge()?.resolveByQuery(`${next.title} ${next.artist || ""}`.trim()) ?? null;
+            } catch {
+                return null;
+            }
+        });
+        return () => setTogetherNextResolver(null);
+    }, []);
 
     useEffect(() => () => {
         if (musicToastTimerRef.current) clearTimeout(musicToastTimerRef.current);

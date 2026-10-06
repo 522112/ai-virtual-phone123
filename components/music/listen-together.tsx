@@ -10,7 +10,7 @@ import { COUPLE_AVATARS_UPDATED_EVENT, overlayCharacterForDisplay, overlayUserId
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import { generateListenTogetherReply, splitListenTogetherBubbles, type ListenTogetherAction } from "@/lib/listen-together-engine";
 import { getMusicControlBridge } from "@/lib/music-control-bridge";
-import { buildListenTogetherCardHtml, revealListenTogetherOutcome, sendListenTogetherInviteCard, sendListenTogetherRefuse, sendListenTogetherShare } from "@/lib/listen-together-share";
+import { buildListenTogetherReportHtml, revealListenTogetherOutcome, sendListenTogetherInviteCard, sendListenTogetherRefuse, sendListenTogetherShare } from "@/lib/listen-together-share";
 import { useMusicPlayer } from "@/lib/music-context";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import {
@@ -639,7 +639,6 @@ export function ListenTogetherControls({ track, onNotice, onOpenChat }: ListenTo
         onClick={() => {
           if (session) {
             window.dispatchEvent(new CustomEvent("lt-focus-input"));
-            onOpenChat?.();
           } else {
             setPanel("pick");
           }
@@ -848,7 +847,7 @@ export function ListenTogetherControls({ track, onNotice, onOpenChat }: ListenTo
               <div className="lt-result">
                 <div
                   className="lt-card"
-                  dangerouslySetInnerHTML={{ __html: buildListenTogetherCardHtml(result) }}
+                  dangerouslySetInnerHTML={{ __html: buildListenTogetherReportHtml(result) }}
                 />
                 <div className="lt-result-actions">
                   <button type="button" onClick={() => sendRecord(result)}>发给对方</button>

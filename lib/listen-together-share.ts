@@ -134,17 +134,18 @@ export function sendListenTogetherReportCard(input: {
   addChatContact(input.characterId);
   const chat = createOrGetSession(input.characterId);
   const html = buildListenTogetherReportHtml(input.session);
-  const title = `和${input.session.characterName}的一起听`;
+  const title = `和${input.session.characterName}的一起听报告`;
+  const listened = input.session.heardTrackIds?.length || input.session.tracks.length;
   const message = pushChatMessage({
     sessionId: chat.id,
     role: "user",
-    content: `${title}：${input.session.tracks.length}首，${formatListenDuration(input.session)}`,
+    content: title,
     mediaType: "app_card",
     mediaData: {
       appId: "music",
       appName: "音乐",
       appCardTitle: title,
-      appCardBody: `本次${input.session.tracks.length}首 · ${formatListenDuration(input.session)}`,
+      appCardBody: `本次一起听了${listened}首歌曲 · ${formatListenDuration(input.session)}`,
       appCardSummary: `一起听报告 · 互发消息${input.session.messages.length}条`,
       appCardLayout: {
         appLabel: "一起听",
@@ -192,20 +193,21 @@ export function sendListenTogetherShare(input: {
   session: ListenTogetherSession;
 }): { sessionId: string; messageId: string } {  addChatContact(input.characterId);
   const chat = createOrGetSession(input.characterId);
-  const title = `和${input.session.characterName}的一起听`;
+  const title = `和${input.session.characterName}的一起听报告`;
+  const listened = input.session.heardTrackIds?.length || input.session.tracks.length;
   const history = formatHistory(input.session);
   const html = buildListenTogetherReportHtml(input.session);
   const message = pushChatMessage({
     sessionId: chat.id,
     role: "user",
-    content: history,
+    content: title,
     mediaType: "app_card",
     mediaData: {
       appId: "music",
       appName: "音乐",
       appCardTitle: title,
-      appCardBody: `本次${input.session.tracks.length}首 · ${formatListenDuration(input.session)}`,
-      appCardSummary: `一起听记录 · 互发消息${input.session.messages.length}条`,
+      appCardBody: `本次一起听了${listened}首歌曲 · ${formatListenDuration(input.session)}`,
+      appCardSummary: `一起听报告 · 互发消息${input.session.messages.length}条`,
       appHistoryText: history,
       appCardLayout: {
         appLabel: "一起听",

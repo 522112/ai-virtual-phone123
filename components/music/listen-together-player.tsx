@@ -338,7 +338,7 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
     onNotice: (text: string) => void;
 }) {
     const sessions = loadListenTogetherSessions().filter(s => s.characterId === characterId);
-    const totalTracks = sessions.reduce((sum, s) => sum + s.tracks.length, 0);
+    const totalTracks = sessions.reduce((sum, s) => sum + (s.heardTrackIds?.length || s.tracks.length), 0);
     const totalMessages = sessions.reduce((sum, s) => sum + s.messages.length, 0);
     const raw = loadCharacters().find(item => item.id === characterId) || null;
     const character = raw ? overlayCharacterForDisplay(raw) : null;
@@ -554,10 +554,10 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
     return (
         <div className="ltp-wrap">
             {tab === "player" && coverMode === "lyrics" ? (
-                <div className="ltp-lyrics-full" ref={lyricListRef}>
+                <div className="ltp-lyrics-full" ref={lyricListRef} onClick={() => setCoverMode("art")}>
                     <div className="ltp-lyrics-head">
                         <span className="ltp-lyrics-title">{track.title}</span>
-                        <button type="button" className="ltp-lyrics-back" onClick={() => setCoverMode("art")} aria-label="返回封面">收起</button>
+                        <span className="ltp-lyrics-back">点击返回封面</span>
                     </div>
                     {lyricLines.length === 0 ? (
                         <div className="ltp-lyric-row" data-active=""><span className="ltp-lyric">暂无歌词</span></div>

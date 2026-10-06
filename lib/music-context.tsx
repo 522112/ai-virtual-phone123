@@ -49,6 +49,12 @@ export type MusicControlsValue = Omit<MusicContextValue, "currentTime">;
 const MusicContext = createContext<MusicContextValue | null>(null);
 const MusicControlsContext = createContext<MusicControlsValue | null>(null);
 
+// 一起听会话进行中时，由播放器注入“下一首”解析：在歌单内循环，返回 null 表示走普通逻辑
+let togetherNextResolver: (() => Promise<MusicTrack | null>) | null = null;
+export function setTogetherNextResolver(fn: (() => Promise<MusicTrack | null>) | null): void {
+    togetherNextResolver = fn;
+}
+
 export function useMusicPlayer(): MusicContextValue {
     const ctx = useContext(MusicContext);
     if (!ctx) throw new Error("useMusicPlayer must be used within <MusicProvider>");
@@ -143,38 +149,52 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const handleTrackEnd = useCallback(() => {
-        setCurrentTrack(prev => {
-            setQueueRaw(q => {
-                if (q.length === 0) return q;
-
-                // Find current index
-                const idx = prev ? q.findIndex(t => t.id === prev.id) : -1;
-
-                let nextTrack: MusicTrack | null = null;
-                // Read playMode from DOM to avoid stale closure
-                const mode = playModeRef.current;
-
-                if (mode === "repeat-one") {
-                    nextTrack = prev;
-                } else if (mode === "shuffle") {
-                    const randomIdx = Math.floor(Math.random() * q.length);
-                    nextTrack = q[randomIdx];
-                } else {
-                    // sequence
-                    const nextIdx = idx + 1;
-                    if (nextIdx < q.length) {
-                        nextTrack = q[nextIdx];
+        void (async () => {
+            // 一起听会话进行中：在歌单内循环（放完回到第一首），不自动放别的歌
+            if (togetherNextResolver) {
+                try {
+                    const next = await togetherNextResolver();
+                    if (next) {
+                        setTimeout(() => loadAndPlay(next), 0);
+                        return;
                     }
+                } catch {
+                    // 解析失败就走普通逻辑
                 }
+            }
+            setCurrentTrack(prev => {
+                setQueueRaw(q => {
+                    if (q.length === 0) return q;
 
-                if (nextTrack) {
-                    // Defer to avoid state conflicts
-                    setTimeout(() => loadAndPlay(nextTrack!), 0);
-                }
-                return q;
+                    // Find current index
+                    const idx = prev ? q.findIndex(t => t.id === prev.id) : -1;
+
+                    let nextTrack: MusicTrack | null = null;
+                    // Read playMode from DOM to avoid stale closure
+                    const mode = playModeRef.current;
+
+                    if (mode === "repeat-one") {
+                        nextTrack = prev;
+                    } else if (mode === "shuffle") {
+                        const randomIdx = Math.floor(Math.random() * q.length);
+                        nextTrack = q[randomIdx];
+                    } else {
+                        // sequence
+                        const nextIdx = idx + 1;
+                        if (nextIdx < q.length) {
+                            nextTrack = q[nextIdx];
+                        }
+                    }
+
+                    if (nextTrack) {
+                        // Defer to avoid state conflicts
+                        setTimeout(() => loadAndPlay(nextTrack!), 0);
+                    }
+                    return q;
+                });
+                return prev;
             });
-            return prev;
-        });
+        })();
     }, []);
 
     const playModeRef = useRef(playMode);
