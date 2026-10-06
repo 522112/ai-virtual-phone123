@@ -201,7 +201,6 @@ function FloatLayer({ sessionId }: { sessionId: string }) {
     const mine = pick("user");
     const theirs = pick("character");
     const peerShown = useStaggeredCount(theirs.length, 1600);
-    const mineShown = useStaggeredCount(mine.length, 900);
     if (!session) return null;
     if (mine.length === 0 && theirs.length === 0) return null;
     return (
@@ -212,7 +211,7 @@ function FloatLayer({ sessionId }: { sessionId: string }) {
                 ))}
             </div>
             <div className="ltp-float-col" data-side="me">
-                {mine.slice(0, mineShown).map((m, i) => (
+                {mine.map((m, i) => (
                     <span key={m.id} className="ltp-float-bubble is-me" style={{ animationDelay: `${i * 0.9}s` }}>{m.text}</span>
                 ))}
             </div>
@@ -245,10 +244,24 @@ function ChatBubbles({ sessionId, limit }: { sessionId: string; limit?: number }
     const removeMsg = (id: string) => {
         deleteListenTogetherMessage(sessionId, id);
     };
-    const shown = useStaggeredCount(messages.length, 1500);
+    // 我发的即时显示；角色的逐条浮现（1.5s 一条），并随浮现自动滚到底
+    const charTotal = messages.filter(m => m.author !== "user").length;
+    const charShown = useStaggeredCount(charTotal, 1500);
+    const listRef = useRef<HTMLDivElement>(null);
+    let charSeen = 0;
+    const visible = messages.filter(m => {
+        if (m.author === "user") return true;
+        charSeen += 1;
+        return charSeen <= charShown;
+    });
+    const visibleCount = visible.length;
+    useEffect(() => {
+        const el = listRef.current?.closest(".ltp-chat-list");
+        if (el) el.scrollTop = el.scrollHeight;
+    }, [visibleCount]);
     return (
-        <div className="ltp-bubbles">
-            {messages.slice(0, shown).map(m => (
+        <div className="ltp-bubbles" ref={listRef}>
+            {visible.map(m => (
                 <div
                     key={m.id}
                     className={`ltp-msg${m.author === "user" ? " is-me" : ""}`}
@@ -396,12 +409,19 @@ export function ListenTogetherRecordsSheet({ sessionId, onClose }: { sessionId: 
         ? resolveUserIdentity(session.characterId, "chat")
         : null;
     const messages = session?.messages || [];
-    const shown = useStaggeredCount(messages.length, 1200);
+    const charTotal = messages.filter(m => m.author !== "user").length;
+    const charShown = useStaggeredCount(charTotal, 1200);
     const listRef = useRef<HTMLDivElement>(null);
+    let charSeen = 0;
+    const visible = messages.filter(m => {
+        if (m.author === "user") return true;
+        charSeen += 1;
+        return charSeen <= charShown;
+    });
     useEffect(() => {
         const el = listRef.current;
         if (el) el.scrollTop = el.scrollHeight;
-    }, [shown]);
+    }, [visible.length]);
     return (
         <div className="ltp-sheet-mask" onClick={onClose}>
             <div className="ltp-sheet ltp-sheet-tall" ref={listRef} onClick={e => e.stopPropagation()}>
@@ -410,7 +430,7 @@ export function ListenTogetherRecordsSheet({ sessionId, onClose }: { sessionId: 
                     <button type="button" className="ltp-x" onClick={onClose} aria-label="关闭">×</button>
                 </div>
                 <div className="ltp-bubbles ltp-bubbles-full">
-                    {messages.slice(0, shown).map(m => (
+                    {visible.map(m => (
                         <div key={m.id} className={`ltp-msg${m.author === "user" ? " is-me" : ""}`}>
                             {m.author !== "user" && (
                                 <span className="ltp-msg-avatar">
@@ -741,18 +761,6 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                                     <button type="button" onClick={() => { setShowMenu(false); setShowConfirmClose(true); }}>关闭一起听</button>
                                 </span>
                             )}
-                            {showConfirmClose && (
-                                <span className="ltp-confirm-mask" onClick={() => setShowConfirmClose(false)}>
-                                    <span className="ltp-confirm-box" onClick={e => e.stopPropagation()}>
-                                        <span className="ltp-confirm-title">结束本次一起听？</span>
-                                        <span className="ltp-confirm-desc">结束后下次是全新的一次，记录保留在历史里</span>
-                                        <span className="ltp-confirm-btns">
-                                            <button type="button" className="ltp-confirm-cancel" onClick={() => setShowConfirmClose(false)}>继续听</button>
-                                            <button type="button" className="ltp-confirm-ok" onClick={closeTogether}>结束</button>
-                                        </span>
-                                    </span>
-                                </span>
-                            )}
                         </span>
                     </div>
                     <div className="ltp-chat-list" ref={chatListRef}>
@@ -798,6 +806,18 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                         <button type="button" className="ltp-queue-link" onClick={onOpenQueue}>歌单</button>
                     </div>
                 </>
+            )}
+            {showConfirmClose && (
+                <div className="ltp-confirm-mask" onClick={() => setShowConfirmClose(false)}>
+                    <div className="ltp-confirm-box" onClick={e => e.stopPropagation()}>
+                        <div className="ltp-confirm-title">结束本次一起听？</div>
+                        <div className="ltp-confirm-desc">结束后下次是全新的一次，记录保留在历史里</div>
+                        <div className="ltp-confirm-btns">
+                            <button type="button" className="ltp-confirm-cancel" onClick={() => setShowConfirmClose(false)}>继续听</button>
+                            <button type="button" className="ltp-confirm-ok" onClick={closeTogether}>结束</button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
