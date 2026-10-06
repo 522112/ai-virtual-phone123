@@ -18,7 +18,8 @@ import {
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
 import { ListenTogetherControls, useActiveListenTogetherSession } from "./listen-together";
-import { ListenTogetherPlayerBody } from "./listen-together-player";
+import { ListenTogetherPlayerBody, ListenTogetherQueueSheet, requestPeerForSongs } from "./listen-together-player";
+import { getListenTogetherSession } from "@/lib/listen-together-storage";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
 
@@ -551,8 +552,6 @@ export default function MusicPlayer() {
                         onTabChange={setLtBodyTab}
                         onOpenQueue={() => setShowLtQueue(true)}
                         onNotice={showMusicToast}
-                        showQueue={showLtQueue}
-                        onCloseQueue={() => setShowLtQueue(false)}
                     />
                 ) : view === "lyrics" ? (
                     <div className="mp-lyrics-wrap" onClick={() => setView("cover")}>
@@ -842,6 +841,29 @@ export default function MusicPlayer() {
                     artistId={artistView.id}
                     artistName={artistView.name}
                     onClose={() => setArtistView(null)}
+                />
+            )}
+
+            {showLtQueue && listenTogether && (
+                <ListenTogetherQueueSheet
+                    sessionId={listenTogether.id}
+                    currentTrackId={track.id}
+                    onClose={() => setShowLtQueue(false)}
+                    onNotice={showMusicToast}
+                    onAskPeer={() => {
+                        void requestPeerForSongs(listenTogether.id, {
+                            id: track.id,
+                            title: track.title,
+                            artist: track.artist || "",
+                            coverUrl: track.coverUrl,
+                            lyrics: track.lyrics,
+                        }, showMusicToast);
+                    }}
+                    onPlayTrack={async trackId => {
+                        const bridge = getMusicControlBridge();
+                        const now = getListenTogetherSession(listenTogether.id)?.tracks.find(t => t.id === trackId);
+                        if (now) await bridge?.playByQuery(`${now.title} ${now.artist || ""}`.trim());
+                    }}
                 />
             )}
 

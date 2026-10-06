@@ -3772,7 +3772,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
         };
         if (action === "open") {
             const active = getActiveListenTogetherSession();
-            if (active && active.status === "active" && active.characterId === session.contactId) { openMusicApp(); return; }
+            const invitedTrack = invite?.track ? { title: invite.track.title, artist: invite.track.artist } : null;
+            if (active && active.status === "active" && active.characterId === session.contactId) {
+                // 会话已在进行（比如角色刚邀请完就自动开好了）：同样播起邀请的那首歌
+                openMusicApp(invitedTrack);
+                return;
+            }
             if (invite && invite.status === "accepted") {
                 const running = getActiveListenTogetherSession();
                 if (!running || running.status !== "active" || running.characterId !== session.contactId) {
@@ -3783,7 +3788,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     }
                     startListenTogetherSession({ characterId: session.contactId, characterName: charName, track: invite.track });
                 }
-                openMusicApp(invite.track ? { title: invite.track.title, artist: invite.track.artist } : null); return;
+                openMusicApp(invitedTrack); return;
             }
             showChatToast("还没有可进入的一起听");
             return;

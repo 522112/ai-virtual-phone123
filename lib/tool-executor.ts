@@ -2762,6 +2762,10 @@ async function executeListenTogetherInvite(call: ToolCall, context?: ToolExecuti
         const cur = bridge?.getState().currentTrack;
         if (cur) pick = { id: cur.id, title: cur.title, artist: cur.artist || "", coverUrl: cur.coverUrl };
     }
+    if (!pick) {
+        const head = bridge?.getState().queue?.find(t => t.title?.trim());
+        if (head) pick = { id: head.id, title: head.title, artist: head.artist || "", coverUrl: head.coverUrl };
+    }
     if (!pick && !refused) {
         const { getCharacterFavorites } = await import("./music-favorites-storage");
         const fav = getCharacterFavorites(characterId, target.name);

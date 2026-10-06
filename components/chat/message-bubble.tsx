@@ -1120,7 +1120,7 @@ function PaymentRequestBubble({ msg, charName, userName, onShowDetail }: {
 
 // ── Custom App Card ─────────────────────────────
 
-/** 一起听报告卡：纯原生 JSX（不依赖 HTML 字符串），新老消息都能完整渲染 */
+/** 一起听报告卡：纯原生 JSX + 全内联样式（不受聊天页 CSS 缓存/覆盖影响），新老消息都能完整渲染 */
 function ListenReportCard({ msg, characterId }: { msg: ChatMessage; characterId?: string }) {
     const d = msg.mediaData as Record<string, unknown> | undefined;
     const structured = (d?.reportStats as {
@@ -1148,35 +1148,38 @@ function ListenReportCard({ msg, characterId }: { msg: ChatMessage; characterId?
     const peer = cid ? loadCharacters().find(c => c.id === cid) || null : null;
     const peerAvatar = peer?.avatar || null;
     const myAvatar = resolveUserIdentity(cid || "", "chat")?.avatarUrl || null;
+    const avatarStyle: React.CSSProperties = { width: 46, height: 46, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.9)", background: "rgba(255,255,255,0.2)", flexShrink: 0 };
     return (
-        <div className="chat-lr-card">
-            <div className="chat-lr-head">
-                <span className="chat-lr-brand">网易云音乐 | 一起听</span>
-                {stats.date ? <span className="chat-lr-date">{stats.date}</span> : null}
+        <div style={{ width: "100%", boxSizing: "border-box", background: "linear-gradient(170deg,#ff6a5e,#f43f4e 45%,#e8344a)", color: "#fff", borderRadius: 14, padding: "10px 12px 14px", fontFamily: "-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, opacity: 0.9 }}>
+                <span>网易云音乐 | 一起听</span>
+                {stats.date ? <span>{stats.date}</span> : null}
             </div>
-            <div className="chat-lr-avatars">
-                {myAvatar ? <img src={myAvatar} alt="" /> : <ChatFallbackAvatar />}
-                {peerAvatar ? <img src={peerAvatar} alt="" /> : <ChatFallbackAvatar />}
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 8 }}>
+                {myAvatar ? <img src={myAvatar} alt="" style={avatarStyle} /> : null}
+                {peerAvatar ? <img src={peerAvatar} alt="" style={{ ...avatarStyle, marginLeft: -14 }} /> : null}
             </div>
-            <div className="chat-lr-white">
-                <div className="chat-lr-cols">
-                    <div className="chat-lr-col">
-                        <div className="chat-lr-label">本次一起听了</div>
-                        <div className="chat-lr-num">{stats.listenedCount}首歌曲</div>
+            <div style={{ marginTop: 10, background: "#fff", color: "#e8354b", borderRadius: 16, padding: "16px 12px", textAlign: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.12)" }}>
+                <div style={{ display: "flex" }}>
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 11, color: "#e58aa0" }}>本次一起听了</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, marginTop: 5 }}>{stats.listenedCount}首歌曲</div>
                     </div>
-                    <div className="chat-lr-col">
-                        <div className="chat-lr-label">本次陪伴彼此</div>
-                        <div className="chat-lr-num">{stats.duration}</div>
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 11, color: "#e58aa0" }}>本次陪伴彼此</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, marginTop: 5 }}>{stats.duration}</div>
                     </div>
                 </div>
-                <div className="chat-lr-fav">收藏到歌单</div>
-                <div className="chat-lr-total">累计{stats.cumulativeTracks}首歌曲、{stats.cumulativeDuration}</div>
+                <div style={{ display: "inline-block", marginTop: 14, border: "1px solid #f0c8d2", borderRadius: 16, padding: "6px 16px", fontSize: 12 }}>收藏到歌单</div>
+                <div style={{ marginTop: 12, fontSize: 11, color: "#c98a99" }}>累计{stats.cumulativeTracks}首歌曲、{stats.cumulativeDuration}</div>
             </div>
-            <div className="chat-lr-msgs">互发消息 {stats.messageCount}条</div>
-            <div className="chat-lr-qr">扫码或用云音乐搜索「一起听」</div>
-            <div className="chat-lr-actions">
-                <span className="chat-lr-btn">聊天记录</span>
-                <span className="chat-lr-btn solid">分享报告</span>
+            <div style={{ marginTop: 10, background: "rgba(255,255,255,0.2)", borderRadius: 12, padding: 11, textAlign: "center", fontSize: 12 }}>
+                互发消息 {stats.messageCount}条
+            </div>
+            <div style={{ marginTop: 10, textAlign: "center", fontSize: 10, opacity: 0.85 }}>扫码或用云音乐搜索「一起听」</div>
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                <span style={{ flex: 1, textAlign: "center", border: "1px solid rgba(255,255,255,0.7)", borderRadius: 22, padding: "9px 0", fontSize: 13, fontWeight: 600 }}>聊天记录</span>
+                <span style={{ flex: 1, textAlign: "center", background: "#fff", color: "#e8354b", borderRadius: 22, padding: "9px 0", fontSize: 13, fontWeight: 700 }}>分享报告</span>
             </div>
         </div>
     );

@@ -25,6 +25,68 @@ import { STICKER_PACKS } from "@/lib/sticker-data";
 
 export type ListenTogetherBodyTab = "player" | "chat";
 
+/** 让TA加歌：往会话里追加一句用户请求并触发角色回复（含加歌/播放动作处理），供播放器各入口共用 */
+export async function requestPeerForSongs(
+    sessionId: string,
+    currentTrack: { id: string; title: string; artist: string; coverUrl?: string; lyrics?: string },
+    onNotice: (text: string) => void,
+): Promise<void> {
+    const active = getListenTogetherSession(sessionId);
+    if (!active || active.status !== "active") {
+        onNotice("一起听已结束");
+        return;
+    }
+    const hint = "帮我加几首你喜欢的歌";
+    appendListenTogetherMessage(active.id, { author: "user", text: hint });
+    try {
+        const latest = getListenTogetherSession(active.id) || active;
+        const reply = await generateListenTogetherReply({
+            characterId: active.characterId,
+            session: latest,
+            userText: hint,
+            currentTrack,
+            lyrics: currentTrack.lyrics,
+        });
+        const names = [active.characterName, "我", "用户"];
+        for (const part of splitListenTogetherBubbles(reply.text, names)) {
+            appendListenTogetherMessage(active.id, { author: "character", text: part });
+        }
+        const bridge = getMusicControlBridge();
+        for (const action of reply.actions) {
+            if (action.kind === "play" && action.query) await bridge?.playByQuery(action.query);
+            else if (action.kind === "skip") {
+                if (action.action === "prev") bridge?.prev();
+                else bridge?.next();
+            } else if (action.kind === "playlist_add" && action.queries.length > 0) {
+                const { addManyListenTogetherPlaylistTracks } = await import("@/lib/listen-together-storage");
+                const resolved = await Promise.all(action.queries.map(q => bridge?.resolveByQuery(q).catch(() => null)));
+                const fresh = resolved.filter((item): item is NonNullable<typeof item> => Boolean(item));
+                if (fresh.length > 0) {
+                    addManyListenTogetherPlaylistTracks(active.id, fresh.map(item => ({
+                        id: item.id,
+                        title: item.title,
+                        artist: item.artist || "",
+                        coverUrl: item.coverUrl,
+                    })));
+                    onNotice(`对方加了${fresh.length}首歌`);
+                }
+            } else if (action.kind === "playlist_remove") {
+                const { removeListenTogetherPlaylistTrack } = await import("@/lib/listen-together-storage");
+                const latestNow = getListenTogetherSession(active.id);
+                const hit = latestNow?.tracks.find(item => item.title.includes(action.title) || action.title.includes(item.title));
+                if (hit) removeListenTogetherPlaylistTrack(active.id, hit.id);
+            } else if (action.kind === "emoji" && action.emoji) {
+                appendListenTogetherMessage(active.id, { author: "character", text: action.emoji, kind: "emoji" });
+            } else if (action.kind === "end" || action.kind === "refuse") {
+                endListenTogetherSession(active.id);
+                onNotice("对方结束了一起听");
+            }
+        }
+    } catch {
+        onNotice("对方这次没接上，稍后再试");
+    }
+}
+
 type Props = {
     session: ListenTogetherSession;
     track: { id: string; title: string; artist: string; coverUrl?: string; lyrics?: string };
@@ -35,8 +97,6 @@ type Props = {
     onTabChange: (tab: ListenTogetherBodyTab) => void;
     onOpenQueue: () => void;
     onNotice: (text: string) => void;
-    showQueue: boolean;
-    onCloseQueue: () => void;
 };
 
 function formatTogetherElapsed(startedAt: string, now: number): string {
@@ -422,7 +482,7 @@ export function ListenTogetherHistorySheet({ characterId, characterName, onClose
     );
 }
 
-export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTime, playerStyle, tab, onTabChange, onOpenQueue, onNotice, showQueue, onCloseQueue }: Props & { showQueue: boolean; onCloseQueue: () => void }) {
+export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTime, playerStyle, tab, onTabChange, onOpenQueue, onNotice }: Props) {
     const [now, setNow] = useState(() => Date.now());
     const [quick, setQuick] = useState("");
     const quickRef = useRef<HTMLInputElement>(null);
@@ -574,10 +634,6 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
         appendUserText(emoji);
     };
 
-    const askPeerForSongs = () => {
-        if (appendUserText("帮我加几首你喜欢的歌")) void callPeer("帮我加几首你喜欢的歌");
-    };
-
     const closeTogether = () => {
         endListenTogetherSession(session.id);
         setShowMenu(false);
@@ -714,20 +770,6 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                             onClose={() => setShowHistory(false)}
                             onOpenRecords={setRecordsId}
                             onNotice={onNotice}
-                        />
-                    )}
-                    {showQueue && (
-                        <ListenTogetherQueueSheet
-                            sessionId={session.id}
-                            currentTrackId={track.id}
-                            onClose={onCloseQueue}
-                            onNotice={onNotice}
-                            onAskPeer={askPeerForSongs}
-                            onPlayTrack={async trackId => {
-                                const bridge = getMusicControlBridge();
-                                const now = getListenTogetherSession(session.id)?.tracks.find(t => t.id === trackId);
-                                if (now) await bridge?.playByQuery(`${now.title} ${now.artist || ""}`.trim());
-                            }}
                         />
                     )}
                     {recordsId && (
