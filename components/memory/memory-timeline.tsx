@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { MoreHorizontal, Trash2 } from "lucide-react";
 import type { NativeTimelineEntry } from "@/lib/short-term-assembler";
 import { buildTwoLevelMomentThreads } from "@/lib/moments-comment-threading";
 import { findStickerByName } from "@/lib/sticker-data";
@@ -75,6 +76,7 @@ type TimelineCluster = {
     startTime: string;
     endTime: string;
     entries: ParsedEntry[];
+    nativeEntries: NativeTimelineEntry[];
     tags: string[];
     excerpts: string[];
     entryCount: number;
@@ -266,14 +268,14 @@ function parseEntry(evt: NativeTimelineEntry, userName: string): ParsedEntry | n
 
 const CLUSTER_GAP_MS = 30 * 60 * 1000;
 
-function clusterByTimeGap(entries: ParsedEntry[]): TimelineCluster[] {
-    if (entries.length === 0) return [];
-    const sorted = [...entries].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+function clusterByTimeGap(pairs: Array<{ parsed: ParsedEntry; native: NativeTimelineEntry }>): TimelineCluster[] {
+    if (pairs.length === 0) return [];
+    const sorted = [...pairs].sort((a, b) => a.parsed.timestamp.localeCompare(b.parsed.timestamp));
     const clusters: TimelineCluster[] = [];
-    let buf: ParsedEntry[] = [sorted[0]];
+    let buf: Array<{ parsed: ParsedEntry; native: NativeTimelineEntry }> = [sorted[0]];
 
     for (let i = 1; i < sorted.length; i++) {
-        const gap = new Date(sorted[i].timestamp).getTime() - new Date(sorted[i - 1].timestamp).getTime();
+        const gap = new Date(sorted[i].parsed.timestamp).getTime() - new Date(sorted[i - 1].parsed.timestamp).getTime();
         if (gap > CLUSTER_GAP_MS) {
             clusters.push(buildCluster(buf));
             buf = [sorted[i]];
@@ -285,7 +287,9 @@ function clusterByTimeGap(entries: ParsedEntry[]): TimelineCluster[] {
     return clusters.reverse(); // newest first
 }
 
-function buildCluster(entries: ParsedEntry[]): TimelineCluster {
+function buildCluster(pairs: Array<{ parsed: ParsedEntry; native: NativeTimelineEntry }>): TimelineCluster {
+    const entries = pairs.map(x => x.parsed);
+    const nativeEntries = pairs.map(x => x.native);
     const tagSet = new Set<string>();
     const pool: string[] = [];
 
@@ -320,6 +324,7 @@ function buildCluster(entries: ParsedEntry[]): TimelineCluster {
         startTime: entries[0].timestamp,
         endTime: entries[entries.length - 1].timestamp,
         entries,
+        nativeEntries,
         tags: Array.from(tagSet),
         excerpts,
         entryCount: entries.length,
@@ -598,18 +603,22 @@ function ClusterDetail({ cluster }: { cluster: TimelineCluster }) {
 type Props = {
     events: NativeTimelineEntry[];
     userName: string;
+    onDeleteEntries?: (entries: NativeTimelineEntry[]) => void;
 };
 
 // 每批渲染的簇数：全部一次性渲染会在重数据账号上把 DOM 撑爆
 const CLUSTER_PAGE_SIZE = 30;
 
-export function MemoryTimeline({ events, userName }: Props) {
+export function MemoryTimeline({ events, userName, onDeleteEntries }: Props) {
     const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
     const [visibleCount, setVisibleCount] = useState(CLUSTER_PAGE_SIZE);
+    const [menuClusterId, setMenuClusterId] = useState<string | null>(null);
 
     const clusters = useMemo(() => {
-        const parsed = events.map(e => parseEntry(e, userName)).filter((e): e is ParsedEntry => e !== null);
-        return clusterByTimeGap(parsed);
+        const pairs = events
+            .map(e => ({ native: e, parsed: parseEntry(e, userName) }))
+            .filter((x): x is { native: NativeTimelineEntry; parsed: ParsedEntry } => x.parsed !== null);
+        return clusterByTimeGap(pairs);
     }, [events, userName]);
 
     // 切换角色/标签页时回到首屏
@@ -628,6 +637,13 @@ export function MemoryTimeline({ events, userName }: Props) {
 
     return (
         <>
+            {menuClusterId && (
+                <button
+                    className="mem-entry-menu-backdrop"
+                    aria-label="关闭菜单"
+                    onClick={() => setMenuClusterId(null)}
+                />
+            )}
             <div className="mem-tl mem-tl-cards">
                 {clusters.slice(0, visibleCount).map((cluster) => {
                     const expanded = expandedClusterId === cluster.id;
@@ -635,11 +651,45 @@ export function MemoryTimeline({ events, userName }: Props) {
                         <div
                             key={cluster.id}
                             className={`g-card mem-tl-card${expanded ? " is-expanded" : ""}`}
-                            onClick={() => setExpandedClusterId(expanded ? null : cluster.id)}
+                            onClick={() => {
+                                if (menuClusterId) {
+                                    setMenuClusterId(null);
+                                    return;
+                                }
+                                setExpandedClusterId(expanded ? null : cluster.id);
+                            }}
                         >
                             <span className="ts-10 font-bold uppercase tracking-widest" style={{
-                                color: "var(--c-danger)", opacity: 0.6, position: "absolute", right: 12, top: 12
+                                color: "var(--c-danger)", opacity: 0.6, position: "absolute", right: 44, top: 12
                             }}>REPORT</span>
+                            {onDeleteEntries && (
+                                <div className="mem-entry-menu-wrap" style={{ position: "absolute", right: 8, top: 8, zIndex: 5 }}>
+                                    <button
+                                        className="mem-entry-menu-btn"
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            setMenuClusterId(prev => prev === cluster.id ? null : cluster.id);
+                                        }}
+                                        title="更多"
+                                    >
+                                        <MoreHorizontal size={16} />
+                                    </button>
+                                    {menuClusterId === cluster.id && (
+                                        <div className="mem-entry-menu" onClick={event => event.stopPropagation()}>
+                                            <button
+                                                className="is-danger"
+                                                onClick={() => {
+                                                    setMenuClusterId(null);
+                                                    onDeleteEntries(cluster.nativeEntries);
+                                                }}
+                                            >
+                                                <Trash2 size={13} />
+                                                <span>删除本卡</span>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <div className="flex justify-between items-center pb-2 mb-2" style={{ borderBottom: "1px dashed var(--c-panel-border)" }}>
                                 <span className="ts-11 text-secondary" style={{ letterSpacing: "1px" }}>[ DATE: {formatClusterDate(cluster)} ]</span>
                             </div>

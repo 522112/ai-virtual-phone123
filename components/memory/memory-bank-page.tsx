@@ -23,6 +23,7 @@ import {
 } from "@/lib/memory-storage";
 import { hydrateChatStorage } from "@/lib/chat-storage";
 import { loadNativeTimeline, type NativeTimelineEntry } from "@/lib/short-term-assembler";
+import { deleteNativeTimelineEntries, formatTimelineDeleteResult } from "@/lib/memory-timeline-delete";
 import { runSummarizationPipeline } from "@/lib/memory-summarizer";
 import { runCoreMemoryPipeline } from "@/lib/core-memory-builder";
 import { resolveAuxiliaryApiConfig, resolveUserIdentity } from "@/lib/settings-storage";
@@ -199,6 +200,8 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
     const [editingCorePrompt, setEditingCorePrompt] = useState<string | null>(null);
     const [confirmDeleteEntryId, setConfirmDeleteEntryId] = useState<string | null>(null);
     const [confirmClearAll, setConfirmClearAll] = useState(false);
+    const [tlDeleteEntries, setTlDeleteEntries] = useState<NativeTimelineEntry[] | null>(null);
+    const [tlClearTab, setTlClearTab] = useState<"short" | "shared" | null>(null);
     const [pickedCharId, setPickedCharId] = useState<string | null>(null);
     const [entryMenuId, setEntryMenuId] = useState<string | null>(null);
     const [memoryEditor, setMemoryEditor] = useState<MemoryEditorState | null>(null);
@@ -332,6 +335,31 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
         if (type === "core") setCoreEntries([]);
         else setLongTermEntries([]);
         loadCharacterList();
+    };
+
+    const handleTlDeleteConfirm = () => {
+        if (!selectedCharId || !tlDeleteEntries) return;
+        const result = deleteNativeTimelineEntries(selectedCharId, tlDeleteEntries);
+        setTlDeleteEntries(null);
+        showNotice(formatTimelineDeleteResult(result));
+        loadDetailData(selectedCharId);
+    };
+
+    const handleTlClearConfirm = () => {
+        if (!selectedCharId || !tlClearTab) return;
+        const timeline = loadNativeTimeline(selectedCharId);
+        const targets = tlClearTab === "short"
+            ? timeline.filter(e =>
+                !(e.sourceApp === "moments" && e.postAuthorType === "user")
+                && !(e.sourceApp === "interview_magazine" && e.sourceDetail === "interview_shared_issue"))
+            : timeline.filter(e =>
+                (e.sourceApp === "moments" && e.postAuthorType === "user") ||
+                (e.sourceApp === "chat" && e.sourceDetail === "group") ||
+                (e.sourceApp === "interview_magazine" && e.sourceDetail === "interview_shared_issue"));
+        const result = deleteNativeTimelineEntries(selectedCharId, targets);
+        setTlClearTab(null);
+        showNotice(formatTimelineDeleteResult(result));
+        loadDetailData(selectedCharId);
     };
 
     const showNotice = (msg: string) => {
@@ -683,7 +711,17 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
                             <MemoryTimeline
                                 events={shortTermEvents}
                                 userName={resolveUserIdentity(selectedCharId!)?.name || "用户"}
+                                onDeleteEntries={setTlDeleteEntries}
                             />
+                            {shortTermEvents.length > 0 && (
+                                <button
+                                    type="button"
+                                    className="mem-tl-clear"
+                                    onClick={() => setTlClearTab("short")}
+                                >
+                                    清空短期记忆
+                                </button>
+                            )}
                         </>
                     ) : activeTab === "shared" ? (
                         /* ── Shared events: card view ── */
@@ -692,10 +730,22 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
                                 暂无共享事件。用户发朋友圈或参与群聊后会自动显示。
                             </p>
                         ) : (
-                            <MemoryTimeline
-                                events={sharedEvents}
-                                userName={resolveUserIdentity(selectedCharId!)?.name || "用户"}
-                            />
+                            <>
+                                <MemoryTimeline
+                                    events={sharedEvents}
+                                    userName={resolveUserIdentity(selectedCharId!)?.name || "用户"}
+                                    onDeleteEntries={setTlDeleteEntries}
+                                />
+                                {sharedEvents.length > 0 && (
+                                    <button
+                                        type="button"
+                                        className="mem-tl-clear"
+                                        onClick={() => setTlClearTab("shared")}
+                                    >
+                                        清空共享事件
+                                    </button>
+                                )}
+                            </>
                         )
                     ) : activeTab === "core" ? (
                         renderMemoryEntries("core", coreEntries, "暂无核心记忆。长期记忆累计到设定条数后会自动提炼，也可以手动新增。")
@@ -812,6 +862,32 @@ export function MemoryBankPage({ view, selectedCharId, onSelectChar, onNotice }:
                             setConfirmClearAll(false);
                         }}
                         onCancel={() => setConfirmClearAll(false)}
+                    />
+                )}
+
+                {/* Confirm delete timeline card */}
+                {tlDeleteEntries && (
+                    <ConfirmDialog
+                        title="确认删除？"
+                        message={`将删除这张卡片内的${tlDeleteEntries.length}条记忆源数据（聊天消息/动态），不可恢复。是否继续？`}
+                        icon={AlertCircle}
+                        variant="danger"
+                        confirmLabel="确认删除"
+                        onConfirm={handleTlDeleteConfirm}
+                        onCancel={() => setTlDeleteEntries(null)}
+                    />
+                )}
+
+                {/* Confirm clear timeline tab */}
+                {tlClearTab && (
+                    <ConfirmDialog
+                        title="确认清空？"
+                        message={tlClearTab === "short" ? "将清空该角色的所有短期记忆源数据（聊天消息/动态），不可恢复。是否继续？" : "将清空该角色的所有共享事件源数据，不可恢复。是否继续？"}
+                        icon={AlertCircle}
+                        variant="danger"
+                        confirmLabel="确认清空"
+                        onConfirm={handleTlClearConfirm}
+                        onCancel={() => setTlClearTab(null)}
                     />
                 )}
             </div>

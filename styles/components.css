@@ -5082,6 +5082,7 @@
 
 /* Card */
 .mem-tl-card {
+  position: relative;
   width: 100%;
   min-width: 0;
   cursor: pointer;
@@ -5745,6 +5746,23 @@
   font-weight: 700;
   line-height: 1;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.mem-tl-clear {
+  border: 1px solid rgba(232, 53, 75, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 40px;
+  margin: 12px auto 24px;
+  padding: 0 22px;
+  border-radius: 20px;
+  background: transparent;
+  color: var(--c-danger, #e8354b);
+  font-size: calc(12px*var(--app-text-scale,1));
+  font-weight: 700;
+  line-height: 1;
 }
 
 /* 提示词查看器：组成标签默认收起，点小按钮展开 */
