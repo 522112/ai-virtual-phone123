@@ -5410,7 +5410,27 @@
 .lt-duo-name { font-style: normal; font-size: 12px; color: #f4efe8; opacity: .85; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ????????????????p1-p6??????????+???????+????+?? */
-.ltp-wrap { display: flex; flex-direction: column; align-items: center; width: 100%; min-height: 0; flex: 1; padding: 6px 18px 0; }
+.ltp-wrap { display: flex; flex-direction: column; align-items: center; width: 100%; min-height: 0; flex: 1; padding: 6px 18px 0; position: relative; }
+.ltp-float-layer { position: absolute; left: 8px; right: 8px; top: 150px; bottom: 120px; display: flex; justify-content: space-between; pointer-events: none; z-index: 5; }
+.ltp-float-col { display: flex; flex-direction: column; gap: 6px; max-width: 44%; justify-content: flex-start; padding-top: 12px; }
+.ltp-float-col[data-side="me"] { align-items: flex-end; order: 2; }
+.ltp-float-col[data-side="peer"] { align-items: flex-start; order: 1; }
+.ltp-float-bubble { font-size: 12px; line-height: 1.45; color: #fff; background: rgba(20,16,24,.72); border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 7px 10px; word-break: break-word; backdrop-filter: blur(6px); animation: ltp-float-life 14s ease forwards; }
+.ltp-float-bubble.is-me { background: rgba(232,90,110,.32); border-color: rgba(232,90,110,.4); }
+@keyframes ltp-float-life { 0% { opacity: 0; transform: translateY(8px); } 8% { opacity: 1; transform: none; } 82% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
+.ltp-lyrics-full { width: 100%; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 12px 8px 20px; margin-top: 10px; }
+.ltp-lyric-row { display: flex; align-items: center; gap: 8px; padding: 7px 4px; border-radius: 10px; }
+.ltp-lyric-row[data-active] { background: rgba(255,255,255,.08); }
+.ltp-lyric-row .ltp-lyric { flex: 1; text-align: center; font-size: 14px; color: rgba(255,255,255,.42); }
+.ltp-lyric-row[data-active] .ltp-lyric { font-size: 17px; font-weight: 700; color: #fff; }
+.ltp-lyric-play { flex-shrink: 0; width: 26px; height: 26px; border-radius: 13px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.1); color: #fff; display: grid; place-items: center; cursor: pointer; opacity: 0; }
+.ltp-lyric-row[data-active] .ltp-lyric-play { opacity: 1; }
+.ltp-call { border: 0; border-radius: 14px; background: rgba(255,255,255,.16); color: #fff; font-size: 12px; font-weight: 700; padding: 6px 12px; cursor: pointer; }
+.ltp-call:disabled { opacity: .5; }
+.ltp-sheet-list { margin-top: 10px; display: flex; flex-direction: column; height: 300px; overflow-y: auto; }
+.ltp-import-row { display: flex; gap: 8px; margin-top: 12px; }
+.ltp-import-row button { flex: 1; border: 0; border-radius: 16px; background: #222; color: #fff; font-size: 12px; padding: 9px 4px; cursor: pointer; }
+.ltp-import-row button:disabled { opacity: .5; }
 .ltp-duo { display: flex; align-items: flex-start; justify-content: center; gap: 26px; transition: gap .6s ease; }
 .ltp-duo[data-playing] { gap: 8px; }
 .ltp-duo[data-playing] .ltp-avatar { box-shadow: 0 0 0 2px rgba(232,90,110,.85), 0 0 18px rgba(232,90,110,.55); animation: ltp-embrace 2.6s ease-in-out infinite; }
@@ -5493,9 +5513,9 @@
 .ltp-history-head { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .ltp-history-avatar { width: 46px; height: 46px; border-radius: 50%; overflow: hidden; background: #ddd; }
 .ltp-history-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.ltp-history-card { background: #fff; border-radius: 14px; padding: 12px; margin-top: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+.ltp-history-card { background: linear-gradient(165deg, #fff 0%, #fdf3ef 100%); border: 1px solid #f0ddd4; border-radius: 16px; padding: 14px; margin-top: 10px; box-shadow: 0 4px 16px rgba(200,80,80,.08); }
 .ltp-history-stats { display: flex; justify-content: space-around; font-size: 13px; color: #c33; }
-.ltp-history-stats b { font-size: 15px; }
+.ltp-history-stats b { font-size: 16px; }
 .ltp-history-sub { text-align: center; font-size: 12px; color: #999; margin-top: 6px; }
 .ltp-history-actions { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
 .ltp-history-actions button { border: 1px solid #e0a0a0; background: #fff; color: #c33; font-size: 13px; border-radius: 16px; padding: 7px 18px; cursor: pointer; }

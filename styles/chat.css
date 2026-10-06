@@ -8819,3 +8819,4 @@ button.peer-home-row { cursor: pointer; }
 .chat-lt-btn { border: 0; border-radius: 14px; font-size: 12px; padding: 6px 14px; cursor: pointer; }
 .chat-lt-accept { background: #e8b4b8; color: #2a1e22; font-weight: 700; }
 .chat-lt-decline { background: rgba(255,255,255,.1); color: #f4efe8; }
+.chat-bubble-lt-invite { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }

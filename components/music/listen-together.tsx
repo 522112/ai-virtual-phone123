@@ -199,7 +199,7 @@ const LT_MODAL_CSS = `
 .lt-char-meta{flex:1;display:flex;flex-direction:column;gap:2px}
 .lt-char-meta strong{font-size:14px}
 .lt-char-meta em{font-style:normal;font-size:11px;opacity:0.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
-.lt-char-go{background:linear-gradient(135deg,#ff5f8f,#a855f7);border:none;color:#fff;font-size:12px;font-weight:700;padding:6px 14px;border-radius:999px}
+.lt-char-go{background:linear-gradient(135deg,#f43f4e,#e8354b);border:none;color:#fff;font-size:12px;font-weight:700;padding:6px 14px;border-radius:999px}
 .lt-emoji-row{display:flex;gap:4px;margin-bottom:8px}
 .lt-emoji{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.08);border-radius:999px;font-size:16px;padding:3px 8px}
 .lt-float-layer{position:absolute;left:0;right:0;top:0;bottom:120px;pointer-events:none;overflow:hidden}
@@ -659,7 +659,7 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
           >
             <div className="lt-head">
               <span>
-                {panel === "pick" ? "邀请谁一起听" : panel === "history" ? "一起听记录" : panel === "result" ? "这一次听完了" : panel === "playlist" ? `歌单 · ${session?.playlist?.name || `和${session?.characterName}的一起听`}` : `和${session?.characterName || "对方"}一起听`}
+                {panel === "pick" ? "邀请好友一起听" : panel === "history" ? "一起听记录" : panel === "result" ? "这一次听完了" : panel === "playlist" ? `歌单 · ${session?.playlist?.name || `和${session?.characterName}的一起听`}` : `和${session?.characterName || "对方"}一起听`}
               </span>
               <div className="lt-head-actions">
                 {panel === "chat" && session ? (
@@ -691,9 +691,6 @@ export function ListenTogetherControls({ track, onNotice }: ListenTogetherContro
                   <button type="button" onClick={() => setPanel("playlist")}>歌单</button>
                 ) : null}
                 {panel === "chat" ? (
-                  <button type="button" onClick={() => setPanel("history")}>记录</button>
-                ) : null}
-                {panel === "pick" || panel === "result" ? (
                   <button type="button" onClick={() => setPanel("history")}>记录</button>
                 ) : null}
                 <button type="button" onClick={() => setPanel("closed")}>收起</button>

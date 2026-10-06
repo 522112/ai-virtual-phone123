@@ -78,7 +78,7 @@ export function buildListenTogetherReportHtml(session: ListenTogetherSession, op
   }
   const messageCount = session.messages.length;
   return `
-<section style="width:100%;max-width:230px;box-sizing:border-box;margin:0;padding:0;background:linear-gradient(170deg,#ff6a5e,#f43f4e 45%,#e8344a);color:#fff;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,0.45);overflow:hidden;">
+<section style="width:100%;box-sizing:border-box;margin:0;padding:0;background:linear-gradient(170deg,#ff6a5e,#f43f4e 45%,#e8344a);color:#fff;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,0.45);overflow:hidden;">
   <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;padding:10px 12px 0;opacity:0.9;">
     <span>网易云音乐 | 一起听</span>
     <span>${escapeHtml(date)}</span>
@@ -133,14 +133,13 @@ export function sendListenTogetherReportCard(input: {
         subtitle: formatListenDuration(input.session),
         body: input.session.tracks.map(item => item.title).join("、"),
         html,
-        height: 330,
         background: "#e8344a",
         accentColor: "#ffffff",
       },
     },
   });
+  // 分享报告只留记录给角色可知，不直接触发 API 回复，用户自行调用
   if (typeof window !== "undefined") {
-    kvSet(PENDING_REPLY_PREFIX + chat.id, "1");
     window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: chat.id } }));
   }
   return { sessionId: chat.id, messageId: message.id };
@@ -177,7 +176,6 @@ export function sendListenTogetherShare(input: {
   const title = `和${input.session.characterName}的一起听`;
   const history = formatHistory(input.session);
   const html = buildListenTogetherReportHtml(input.session);
-  const height = 330;
   const message = pushChatMessage({
     sessionId: chat.id,
     role: "user",
@@ -196,14 +194,13 @@ export function sendListenTogetherShare(input: {
         subtitle: formatListenDuration(input.session),
         body: input.session.tracks.map(item => item.title).join("、"),
         html,
-        height,
         background: "#e8344a",
         accentColor: "#ffffff",
       },
     },
   });
+  // 分享报告只留记录给角色可知，不直接触发 API 回复，用户自行调用
   if (typeof window !== "undefined") {
-    kvSet(PENDING_REPLY_PREFIX + chat.id, "1");
     window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: chat.id } }));
   }
   return { sessionId: chat.id, messageId: message.id };

@@ -119,7 +119,7 @@ import {
     materializeRelationshipSpacePart,
     applyCharacterSpaceCover,
 } from "@/lib/relationship-storage";
-import { createListenTogetherInvite, decideListenTogetherInvite, getActiveListenTogetherSession, getListenTogetherInvite, getPendingListenInvite, loadListenTogetherSessions, startListenTogetherSession } from "@/lib/listen-together-storage";
+import { appendListenTogetherTrack, createListenTogetherInvite, decideListenTogetherInvite, getActiveListenTogetherSession, getListenTogetherInvite, getPendingListenInvite, loadListenTogetherSessions, startListenTogetherSession } from "@/lib/listen-together-storage";
 import { generateListenTogetherReply, splitListenTogetherBubbles } from "@/lib/listen-together-engine";
 import { sendListenTogetherInviteCard, sendListenTogetherRefuse } from "@/lib/listen-together-share";
 import type { RelationshipSpaceCard } from "@/lib/relationship-storage";
@@ -3793,7 +3793,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             markCard("accepted");
             const running = getActiveListenTogetherSession();
             if (!running || running.status !== "active" || running.characterId !== session.contactId) {
-                startListenTogetherSession({ characterId: session.contactId, characterName: charName, track: invite?.track });
+                const started = startListenTogetherSession({ characterId: session.contactId, characterName: charName, track: invite?.track });
+                // 角色没带歌：把当前在播的歌收进一起听，播放页不空转
+                if (!invite?.track) {
+                    const now = getMusicControlBridge()?.getState().currentTrack;
+                    if (now) appendListenTogetherTrack(started.id, { id: now.id, title: now.title, artist: now.artist || "", coverUrl: now.coverUrl });
+                }
             }
             pushChoice("我进入了一起听");
             openMusicApp();
@@ -6703,7 +6708,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                 },
                                                 onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); openMessageContextMenu(msg.id, { x: e.clientX, y: e.clientY }); },
                                             } : {})}
-                                            className={`chat-bubble-role-${msg.role} ${isMediaBubble ? "chat-bubble-media" : ""} ${isStandaloneHtmlPreview ? "chat-bubble-html-preview" : ""} ${renderMsg.mediaType === "music_share" ? "chat-bubble-music-share" : ""} ${isForwardCard ? "chat-bubble-forward" : ""} ${renderMsg.mediaType === "gift" || renderMsg.mediaType === "image" || isStandaloneHtmlPreview || isForwardCard ? "rounded-none" : "rounded-md"} break-words relative cursor-pointer select-none`}
+                                            className={`chat-bubble-role-${msg.role} ${isMediaBubble ? "chat-bubble-media" : ""} ${isStandaloneHtmlPreview ? "chat-bubble-html-preview" : ""} ${renderMsg.mediaType === "music_share" ? "chat-bubble-music-share" : ""} ${renderMsg.mediaType === "listen_invite" ? "chat-bubble-lt-invite" : ""} ${isForwardCard ? "chat-bubble-forward" : ""} ${renderMsg.mediaType === "gift" || renderMsg.mediaType === "image" || isStandaloneHtmlPreview || isForwardCard ? "rounded-none" : "rounded-md"} break-words relative cursor-pointer select-none`}
                                             style={isStandaloneHtmlPreview ? STANDALONE_CARD_BUBBLE_STYLE : undefined}
                                             data-ui={msg.role === "user" ? "bubble-user" : "bubble-bot"}
                                             data-msg-id={msg.id}

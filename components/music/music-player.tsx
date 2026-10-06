@@ -17,7 +17,7 @@ import {
 import MusicCommentsPage from "./music-comments";
 import MusicArtistPage from "./music-artist";
 import { ListenTogetherControls, useActiveListenTogetherSession } from "./listen-together";
-import { ListenTogetherPlayerBody, ListenTogetherQueueSheet } from "./listen-together-player";
+import { ListenTogetherPlayerBody } from "./listen-together-player";
 import { usePhoneBack } from "@/lib/phone-navigation";
 import { loadMusicBg, playerBgStyle, MUSIC_BG_EVENT, type MusicBgConfig } from "@/lib/music-bg";
 
@@ -515,10 +515,14 @@ export default function MusicPlayer() {
                         }}
                         isPlaying={player.isPlaying}
                         currentTime={player.currentTime}
+                        playerStyle={playerStyle === "vinyl" ? "vinyl" : "modern"}
                         tab={ltBodyTab}
                         onTabChange={setLtBodyTab}
                         onOpenQueue={() => setShowLtQueue(true)}
+                        onSeek={time => player.seek(time)}
                         onNotice={showMusicToast}
+                        showQueue={showLtQueue}
+                        onCloseQueue={() => setShowLtQueue(false)}
                     />
                 ) : view === "lyrics" ? (
                     <div className="mp-lyrics-wrap" onClick={() => setView("cover")}>
@@ -704,13 +708,6 @@ export default function MusicPlayer() {
                     onNotice={showMusicToast}
                 />
             </div>
-            {listenTogether && showLtQueue && (
-                <ListenTogetherQueueSheet
-                    sessionId={listenTogether.id}
-                    onClose={() => setShowLtQueue(false)}
-                    onNotice={showMusicToast}
-                />
-            )}
 
             {/* Queue drawer */}
             {showQueue && (
