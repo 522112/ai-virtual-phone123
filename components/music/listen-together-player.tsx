@@ -621,7 +621,13 @@ export function ListenTogetherPlayerBody({ session, track, isPlaying, currentTim
                         {draft.trim() && (
                             <button type="button" className="ltp-send" onClick={() => appendUserText(draft)}>发送</button>
                         )}
-                        <button type="button" className="ltp-call" disabled={sending} onClick={() => void callPeer()} title="让对方回复">调用</button>
+                        {(() => {
+                            const latest = getListenTogetherSession(session.id);
+                            const last = latest?.messages[latest.messages.length - 1];
+                            return last?.author === "user" && !sending ? (
+                                <button type="button" className="ltp-call" onClick={() => void callPeer()} title="让对方回复">调用</button>
+                            ) : null;
+                        })()}
                     </div>
                     {showEmoji && <EmojiPanel onPick={pickEmoji} />}
                 </div>
