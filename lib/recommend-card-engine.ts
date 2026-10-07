@@ -68,6 +68,8 @@ export async function recommendCardToCharacter(
     sessionId,
     role: "user",
     content: `[向你推荐了一张好友名片：${guest.name}]`,
+    mediaType: "contact_card",
+    mediaData: { contactCardName: guest.name, label: guest.name },
     status: "sent",
   });
 
@@ -105,6 +107,12 @@ export async function recommendCardToCharacter(
     window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId } }));
   }
   if (accept) {
+    try {
+      // 角色互聊：人设决定谁先开口，落专属会话+双方记忆，用户会话里留系统消息入口
+      const { generateRoleRoleDialog, pushRoleChatEntry } = await import("./role-chat");
+      const dialog = await generateRoleRoleDialog(hostCharacterId, guestCharacterId, topic);
+      pushRoleChatEntry(sessionId, dialog.sessionId, dialog.title, hostCharacterId, guestCharacterId);
+    } catch { /* 互聊生成失败不影响加好友结果 */ }
     try {
       await generateGodViewDialog(hostCharacterId, guestCharacterId, topic);
     } catch { /* 上帝视角生成失败不影响加好友结果 */ }
