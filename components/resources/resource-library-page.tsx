@@ -3,12 +3,14 @@
 import { useMemo, useRef, useState } from "react";
 import { loadCharacters } from "@/lib/character-storage";
 import { ChatFallbackAvatar } from "@/components/chat/chat-fallback-avatar";
+import { describeResourceImage } from "@/lib/resource-describe";
 import {
   RESOURCE_CATEGORIES,
   RESOURCE_LIBRARY_SHARED_SCOPE,
   addResource,
   deleteResource,
   listResources,
+  resourceDisplayUrl,
   updateResource,
   type ResourceItem,
   type ResourceKind,
@@ -99,10 +101,26 @@ function BackBtn({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function ResourceLibraryPage({ onNotice }: { onNotice?: (msg: string) => void }) {
+export function ResourceLibraryPage({ onNotice, scope: scopeProp, category: categoryProp, onScopeChange, onCategoryChange }: {
+  onNotice?: (msg: string) => void;
+  scope?: string | null;
+  category?: string | null;
+  onScopeChange?: (scope: string | null) => void;
+  onCategoryChange?: (category: string | null) => void;
+}) {
   const characters = useMemo(() => loadCharacters(), []);
-  const [scope, setScope] = useState<string | null>(null);
-  const [category, setCategory] = useState<string | null>(null);
+  const [innerScope, setInnerScope] = useState<string | null>(null);
+  const [innerCategory, setInnerCategory] = useState<string | null>(null);
+  const scope = scopeProp !== undefined ? scopeProp : innerScope;
+  const category = categoryProp !== undefined ? categoryProp : innerCategory;
+  const setScope = (value: string | null) => {
+    if (onScopeChange) onScopeChange(value);
+    else setInnerScope(value);
+  };
+  const setCategory = (value: string | null) => {
+    if (onCategoryChange) onCategoryChange(value);
+    else setInnerCategory(value);
+  };
   const [tick, setTick] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -155,7 +173,26 @@ export function ResourceLibraryPage({ onNotice }: { onNotice?: (msg: string) => 
         }
         let dataUrl = await readFileAsDataUrl(file);
         if (kind === "image") dataUrl = await compressImage(dataUrl);
-        addResource({ scope: targetScope, kind, dataUrl, category: targetCategory || "其他" });
+        // 图片优先上传云端拿链接，失败则保留本地
+        let url: string | undefined;
+        if (kind === "image") {
+          try {
+            const form = new FormData();
+            form.append("file", file);
+            const res = await fetch("/api/resources/upload", { method: "POST", body: form });
+            const data = await res.json().catch(() => null) as { ok?: boolean; url?: string; error?: string } | null;
+            if (data?.ok && data.url) url = data.url;
+          } catch {
+            /* 保留本地 */
+          }
+        }
+        addResource({
+          scope: targetScope,
+          kind,
+          dataUrl: url ? "" : dataUrl,
+          url,
+          category: targetCategory || "其他",
+        });
       }
       setTick(n => n + 1);
       notice("已加入资源库，记得写备注");
@@ -199,7 +236,7 @@ export function ResourceLibraryPage({ onNotice }: { onNotice?: (msg: string) => 
               type="button"
               className="g-card"
               onClick={() => { setScope(c.id); setCategory(null); }}
-              style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", cursor: "pointer", width: "100%" }}
+              style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 12, textAlign: "left", cursor: "pointer", width: "100%" }}
             >
               <span style={{ width: 46, height: 46, borderRadius: "50%", overflow: "hidden", flexShrink: 0, background: "rgba(0,0,0,.06)", display: "grid", placeItems: "center" }}>
                 {c.avatar ? <img src={c.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ChatFallbackAvatar />}
@@ -215,7 +252,7 @@ export function ResourceLibraryPage({ onNotice }: { onNotice?: (msg: string) => 
             type="button"
             className="g-card"
             onClick={() => { setScope(RESOURCE_LIBRARY_SHARED_SCOPE); setCategory(null); }}
-            style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", cursor: "pointer", width: "100%", background: "linear-gradient(135deg, rgba(94,211,179,.14), rgba(47,160,140,.06))" }}
+            style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 12, textAlign: "left", cursor: "pointer", width: "100%", background: "linear-gradient(135deg, rgba(94,211,179,.14), rgba(47,160,140,.06))" }}
           >
             <span style={{ width: 46, height: 46, borderRadius: 14, overflow: "hidden", flexShrink: 0, display: "grid", placeItems: "center", background: "rgba(255,255,255,.6)" }}>
               <FolderGlyph />
@@ -231,8 +268,7 @@ export function ResourceLibraryPage({ onNotice }: { onNotice?: (msg: string) => 
 
       {scope !== null && category === null && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <BackBtn onClick={() => setScope(null)} />
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <strong style={{ fontSize: 16, color: "var(--c-text-title)" }}>{scopeName(scope)}</strong>
             <span className="menu-desc">{listResources(scope).length} 项</span>
           </div>
@@ -251,7 +287,7 @@ export function ResourceLibraryPage({ onNotice }: { onNotice?: (msg: string) => 
                 type="button"
                 className="g-card"
                 onClick={() => setCategory(cat)}
-                style={{ display: "flex", alignItems: "center", gap: 10, textAlign: "left", cursor: "pointer", padding: "14px 12px" }}
+                style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 10, textAlign: "left", cursor: "pointer", padding: "14px 12px" }}
               >
                 <FolderGlyph />
                 <span style={{ flex: 1, minWidth: 0 }}>
@@ -266,8 +302,7 @@ export function ResourceLibraryPage({ onNotice }: { onNotice?: (msg: string) => 
 
       {scope !== null && category !== null && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <BackBtn onClick={() => setCategory(null)} />
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <strong style={{ fontSize: 16, color: "var(--c-text-title)" }}>{category}</strong>
             <span className="menu-desc">{items.length} 项 · {scopeName(scope)}</span>
           </div>
@@ -311,25 +346,53 @@ function ResourceTile({ item, confirming, onSaveMeta, onAskDelete, onCancelDelet
 }) {
   const [note, setNote] = useState(item.note);
   const [category, setCategory] = useState(item.category);
+  const [describing, setDescribing] = useState(false);
+  const src = resourceDisplayUrl(item);
+  const handleDescribe = async () => {
+    if (describing || item.kind !== "image" || !src) return;
+    setDescribing(true);
+    try {
+      const text = await describeResourceImage(src);
+      setNote(text);
+      onSaveMeta(item, { note: text });
+    } catch (error) {
+      onSaveMeta(item, { note });
+    } finally {
+      setDescribing(false);
+    }
+  };
   return (
     <div className="g-card" style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, overflow: "hidden" }}>
       <div style={{ width: "100%", aspectRatio: "1", borderRadius: 10, overflow: "hidden", background: "linear-gradient(135deg, rgba(0,0,0,.05), rgba(0,0,0,.02))", display: "grid", placeItems: "center" }}>
-        {item.kind === "image" && <img src={item.dataUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-        {item.kind === "video" && <video src={item.dataUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} playsInline muted preload="metadata" />}
+        {item.kind === "image" && <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+        {item.kind === "video" && <video src={src} style={{ width: "100%", height: "100%", objectFit: "cover" }} playsInline muted preload="metadata" />}
         {item.kind === "audio" && <AudioGlyph />}
       </div>
       {item.kind !== "image" && (
         <span className="menu-desc">{item.kind === "video" ? "视频" : "语音"}</span>
       )}
-      <textarea
-        value={note}
-        onChange={e => setNote(e.target.value)}
-        onBlur={() => { if (note !== item.note) onSaveMeta(item, { note }); }}
-        placeholder="备注：这是什么、何时用…"
-        rows={2}
-        className="ui-textarea"
-        style={{ fontSize: 12 }}
-      />
+      {item.url ? <span className="menu-desc" style={{ wordBreak: "break-all" }}>云端链接已保存</span> : null}
+      <div style={{ display: "flex", gap: 6 }}>
+        <textarea
+          value={note}
+          onChange={e => setNote(e.target.value)}
+          onBlur={() => { if (note !== item.note) onSaveMeta(item, { note }); }}
+          placeholder="备注：这是什么、何时用…"
+          rows={2}
+          className="ui-textarea"
+          style={{ fontSize: 12, flex: 1, minWidth: 0 }}
+        />
+        {item.kind === "image" ? (
+          <button
+            type="button"
+            disabled={describing}
+            onClick={() => void handleDescribe()}
+            style={{ border: "1px solid var(--c-panel-border)", background: "none", color: "var(--c-text-title)", fontSize: 12, borderRadius: 10, padding: "0 10px", cursor: "pointer", alignSelf: "stretch", opacity: describing ? 0.5 : 1 }}
+          >
+            {describing ? "识别中" : "识别"}
+          </button>
+        ) : null}
+      </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <select
           value={RESOURCE_CATEGORIES.includes(item.category as never) ? category : "其他"}

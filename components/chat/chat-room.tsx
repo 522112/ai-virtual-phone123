@@ -1176,6 +1176,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [activeCustomChatPlus, setActiveCustomChatPlus] = useState<ActiveCustomChatPlus | null>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [showBusinessCard, setShowBusinessCard] = useState(false);
+    // 单击进名片 / 双击拍一拍：单击延迟 260ms，防双击误触
+    const avatarTapTimer = useRef<number | null>(null);
     // 对方个人主页浮层：单击消息区对方头像打开（微信式主页+仅 TA 朋友圈）
     const [peerHomeCharId, setPeerHomeCharId] = useState<string | null>(null);
     const [showVoiceCall, setShowVoiceCall] = useState(false);
@@ -6175,7 +6177,6 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     <button className="page-back-btn" type="button" onClick={onBack} aria-label="返回">
                         <ChevronLeft size={24} strokeWidth={1.5} />
                     </button>
-                    <button type="button" className="page-back-btn" onClick={() => setShowBusinessCard(true)} aria-label="card" style={{ marginRight: 2 }}>{character?.avatar ? <img src={character.avatar} alt="" style={{ width: 26, height: 26, borderRadius: 13, objectFit: "cover" }} /> : <ChatFallbackAvatar />}</button>
                     </span>
                     <span className="page-title" style={{ position: 'relative' }}>
                         {offlineMode ? "线下 · " : ""}
@@ -6202,7 +6203,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             />
 
             {showBusinessCard && !session.isGroup && (
-                <CharacterBusinessCard characterId={session.contactId} sessionId={session.id} onClose={() => setShowBusinessCard(false)} />
+                <CharacterBusinessCard characterId={session.contactId} sessionId={session.id} onClose={() => setShowBusinessCard(false)} onOpenHomepage={setPeerHomeCharId} />
             )}
             {peerHomeCharId && (
                 <PeerHomepage characterId={peerHomeCharId} onClose={() => setPeerHomeCharId(null)} />
@@ -6727,11 +6728,16 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                             <>
                                                     <div onClick={() => {
                                                         if (msg.role === "user") return;
-                                                        const homeCharId = session.isGroup && msg.senderCharacterId
-                                                            ? msg.senderCharacterId
-                                                            : session.contactId;
-                                                        if (homeCharId) setPeerHomeCharId(homeCharId);
+                                                        if (avatarTapTimer.current) window.clearTimeout(avatarTapTimer.current);
+                                                        avatarTapTimer.current = window.setTimeout(() => {
+                                                            avatarTapTimer.current = null;
+                                                            if (!session.isGroup) setShowBusinessCard(true);
+                                                        }, 260);
                                                     }} onDoubleClick={() => {
+                                                        if (avatarTapTimer.current) {
+                                                            window.clearTimeout(avatarTapTimer.current);
+                                                            avatarTapTimer.current = null;
+                                                        }
                                                         const targetChar = session.isGroup && msg.senderCharacterId
                                                             ? groupCharMap.get(msg.senderCharacterId) || character
                                                             : character;

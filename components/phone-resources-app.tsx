@@ -42,6 +42,8 @@ const RESOURCE_MENU: Omit<FeaturedCardItem, "onClick">[] = [
 
 export function PhoneResourcesApp({ onClose, onNotice, initialPage }: { onClose: () => void; onNotice?: (msg: string) => void; initialPage?: ResourceSubPage }) {
     const [currentPage, setCurrentPage] = useState<ResourceSubPage>(initialPage ?? "main");
+    const [resourceScope, setResourceScope] = useState<string | null>(null);
+    const [resourceCategory, setResourceCategory] = useState<string | null>(null);
     const [memoryView, setMemoryView] = useState<MemoryView>("list");
     const [prevMemoryView, setPrevMemoryView] = useState<MemoryView>("list");
     const [memoryCharId, setMemoryCharId] = useState<string>("");
@@ -63,8 +65,12 @@ export function PhoneResourcesApp({ onClose, onNotice, initialPage }: { onClose:
                 setMemoryCharId("");
                 setMemoryCharName("");
             }
-        } else if (currentPage === "vn_assets" || currentPage === "resource_library") {
+        } else if (currentPage === "vn_assets") {
             setCurrentPage("main");
+        } else if (currentPage === "resource_library") {
+            if (resourceCategory) setResourceCategory(null);
+            else if (resourceScope) setResourceScope(null);
+            else setCurrentPage("main");
         } else if (currentPage !== "main") {
             setCurrentPage("main");
         } else {
@@ -137,7 +143,13 @@ export function PhoneResourcesApp({ onClose, onNotice, initialPage }: { onClose:
                 )}
 
                 {currentPage === "resource_library" && (
-                    <ResourceLibraryPage onNotice={onNotice} />
+                    <ResourceLibraryPage
+                        onNotice={onNotice}
+                        scope={resourceScope}
+                        category={resourceCategory}
+                        onScopeChange={setResourceScope}
+                        onCategoryChange={setResourceCategory}
+                    />
                 )}
 
                 {currentPage === "memory" && (

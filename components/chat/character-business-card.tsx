@@ -44,9 +44,10 @@ type Props = {
   characterId: string;
   sessionId?: string;
   onClose: () => void;
+  onOpenHomepage?: (characterId: string) => void;
 };
 
-export function CharacterBusinessCard({ characterId, sessionId, onClose }: Props) {
+export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenHomepage }: Props) {
   const [character, setCharacter] = useState<Character | null>(() => loadCharacters().find(c => c.id === characterId) || null);
   const [alias, setAlias] = useState("");
   const [draft, setDraft] = useState("");
@@ -133,7 +134,15 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose }: Props
           </div>
         </div>
         <div className="char-card-moments">
-          <div className="char-card-moments-title">{L.recentMoments}</div>
+          <button
+            type="button"
+            className="char-card-moments-title"
+            style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "space-between", background: "none", border: 0, cursor: onOpenHomepage ? "pointer" : "default", padding: 0 }}
+            onClick={() => { if (onOpenHomepage) { onOpenHomepage(characterId); onClose(); } }}
+          >
+            <span>{L.recentMoments}</span>
+            {onOpenHomepage ? <span>›</span> : null}
+          </button>
           {moments.length === 0 ? (
             <div className="char-card-moments-empty">{L.noMoments}</div>
           ) : (

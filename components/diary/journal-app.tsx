@@ -9,7 +9,7 @@ import { JournalDoodleSheet, JournalEditRail, JournalFlipPreview, JournalOpenBoo
 import { loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
 import { collectJournalClips } from "@/lib/journal-clips";
-import { RESOURCE_LIBRARY_SHARED_SCOPE, listResources } from "@/lib/resource-library";
+import { RESOURCE_LIBRARY_SHARED_SCOPE, listResources, resourceDisplayUrl } from "@/lib/resource-library";
 import {
   generateJournalAnnotation,
   generateJournalCharacterPage,
@@ -103,7 +103,7 @@ function JournalResourcePicker({
       for (const item of listResources(scope)) {
         if (item.kind !== "image" || seen.has(item.id)) continue;
         seen.add(item.id);
-        result.push({ dataUrl: item.dataUrl, note: item.note || item.category, id: item.id });
+        result.push({ dataUrl: resourceDisplayUrl(item), note: item.note || item.category, id: item.id });
       }
     }
     return result;

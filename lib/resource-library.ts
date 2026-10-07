@@ -9,8 +9,10 @@ export type ResourceItem = {
   /** 角色 id，或 "shared"（共享分区） */
   scope: string;
   kind: ResourceKind;
-  /** dataURL（图片上传时已压缩） */
+  /** dataURL（图片上传时已压缩）；有云端链接时可为空 */
   dataUrl: string;
+  /** 云端链接（图片上传云端后自动使用） */
+  url?: string;
   /** 用户备注：内容说明 / 用途 */
   note: string;
   /** 分类：头像 / 情侣头像 / 聊天图片 / 视频 / 语音 / 歌单封面 / NPC头像 / 其他 */
@@ -84,6 +86,7 @@ export function addResource(input: {
   scope: string;
   kind: ResourceKind;
   dataUrl: string;
+  url?: string;
   note?: string;
   category?: string;
 }): ResourceItem {
@@ -92,12 +95,18 @@ export function addResource(input: {
     scope: input.scope,
     kind: input.kind,
     dataUrl: input.dataUrl,
+    url: input.url,
     note: input.note?.trim() || "",
     category: input.category?.trim() || "其他",
     createdAt: new Date().toISOString(),
   };
   writeAll([item, ...readAll()]);
   return item;
+}
+
+/** 显示用地址：优先云端链接，回退本地 dataURL */
+export function resourceDisplayUrl(item: Pick<ResourceItem, "url" | "dataUrl">): string {
+  return item.url || item.dataUrl;
 }
 
 export function updateResource(
@@ -152,5 +161,5 @@ export function pickAvatarResource(scope: string, category = "NPC头像"): strin
     || listResourcesByCategory(RESOURCE_LIBRARY_SHARED_SCOPE, category)[0]
     || listResourcesByCategory(scope, "头像")[0]
     || listResourcesByCategory(RESOURCE_LIBRARY_SHARED_SCOPE, "头像")[0];
-  return hit?.dataUrl || null;
+  return hit ? resourceDisplayUrl(hit) : null;
 }
