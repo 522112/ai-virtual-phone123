@@ -289,6 +289,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                 onSelect={maskId => {
                     kvSet("active_mask_id", maskId);
                     kvSet("active_sub_id", "");
+                    window.dispatchEvent(new CustomEvent("active-mask-changed", { detail: { maskId } }));
                     window.dispatchEvent(new CustomEvent("chat-messages-updated"));
                     window.dispatchEvent(new CustomEvent("weixin-messages-updated"));
                     setShowMaskSheet(false);

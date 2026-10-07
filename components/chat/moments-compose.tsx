@@ -6,6 +6,7 @@ import { loadChatContacts } from "@/lib/chat-storage";
 import { addMomentPost } from "@/lib/moments-storage";
 import { onUserPost } from "@/lib/moments-engine";
 import { resolveUserIdentity } from "@/lib/settings-storage";
+import { getActiveSubId } from "./sub-account-sheet";
 import { saveChatImageToIndexedDB, getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 
@@ -171,6 +172,7 @@ export function MomentsCompose({ onClose, onPublished }: Props) {
             authorType: "user",
             authorId: "user",
             maskId: resolveUserIdentity(undefined, "chat")?.id,
+            subId: getActiveSubId() || undefined,
             content,
             photoUrl: photoLink.trim() || (photoAssetId ? `asset://${photoAssetId}` : undefined),
             photoDescription: photoDesc.trim() || undefined,

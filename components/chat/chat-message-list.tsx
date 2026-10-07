@@ -6,7 +6,7 @@ import { loadChatSessions, loadChatContacts, ChatSession, createOrGetSession, cr
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { Character } from "@/lib/character-types";
 import { COUPLE_AVATARS_UPDATED_EVENT, overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
-import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
+import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT, loadUserIdentities } from "@/lib/settings-storage";
 import type { UserIdentity } from "@/components/settings/user-identity";
 import { PENDING_REPLY_PREFIX } from "@/lib/friend-request-engine";
 import { clearRequestsForCharacter, dispatchFriendRequestUpdated } from "@/lib/friend-request-storage";
@@ -24,7 +24,7 @@ import {
 } from "@/lib/chat-session-merge";
 import { kvGet, kvSet, registerKvMigration } from "@/lib/kv-db";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
-import { SubAccountSheet } from "./sub-account-sheet";
+import { SubAccountSheet, ACTIVE_SUB_CHANGED_EVENT } from "./sub-account-sheet";
 import { GodViewSheet } from "./god-view-sheet";
 import { UserBusinessCard } from "./user-business-card";
 import { getUserSubAccount, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
@@ -130,6 +130,39 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
     const [activeSubId, setActiveSubId] = useState<string | null>(() => kvGet("active_sub_id") || null);
     const longPressTimer = React.useRef<number | null>(null);
     const suppressAvatarClick = React.useRef(false);
+
+    // 头像=面具头像：切面具后主页头像跟着变；小号不影响头像显示
+    const refreshMaskIdentity = () => {
+        try {
+            const maskId = kvGet("active_mask_id") || "";
+            setActiveMaskId(maskId);
+            const list = loadUserIdentities();
+            const mask = (maskId && list.find(i => i.id === maskId)) || null;
+            setIdentity(mask || resolveUserIdentity());
+        } catch {
+            setIdentity(resolveUserIdentity());
+        }
+    };
+
+    useEffect(() => {
+        refreshMaskIdentity();
+        const onMaskChanged = () => {
+            refreshMaskIdentity();
+            setSessions(loadChatSessions());
+        };
+        const onSubChanged = () => {
+            try {
+                setActiveSubId(kvGet("active_sub_id") || null);
+            } catch { /* ignore */ }
+            setSessions(loadChatSessions());
+        };
+        window.addEventListener("active-mask-changed", onMaskChanged);
+        window.addEventListener(ACTIVE_SUB_CHANGED_EVENT, onSubChanged);
+        return () => {
+            window.removeEventListener("active-mask-changed", onMaskChanged);
+            window.removeEventListener(ACTIVE_SUB_CHANGED_EVENT, onSubChanged);
+        };
+    }, []);
     useEffect(() => {
         if (!activeMaskId) {
             const first = resolveUserIdentity();
@@ -374,6 +407,12 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                             .filter(s => {
                                 if (!(s.isGroup || contactIds.has(s.contactId))) return false;
                                 if (!hasSessionListContent(s.id)) return false;
+                                // 小号=新号：小号模式只看该小号的会话；主号模式只看主号会话
+                                if (activeSubId) {
+                                    if (s.isGroup || s.subId !== activeSubId) return false;
+                                } else {
+                                    if (s.subId) return false;
+                                }
                                 if (listTab === "private" && s.isGroup) return false;
                                 if (listTab === "group" && !s.isGroup) return false;
                                 // 面具隔离：只显示当前面具的角色（绑定跟身份走，不同世界观互不串）
@@ -755,8 +794,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                 <SubAccountSheet
                     activeMaskId={activeMaskId}
                     activeSubId={activeSubId}
-                    onSelectMask={maskId => { setActiveMaskId(maskId); kvSet("active_mask_id", maskId); setIdentity(resolveUserIdentity()); }}
-                    onSelectSub={subId => { setActiveSubId(subId); kvSet("active_sub_id", subId || ""); }}
+                    onSelectSub={subId => { setActiveSubId(subId); kvSet("active_sub_id", subId || ""); setSessions(loadChatSessions()); }}
                     onClose={() => setShowSubSheet(false)}
                 />
             )}

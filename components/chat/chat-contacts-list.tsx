@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useSyncExternalStore } from "react";
-import { loadChatContacts, ChatContact, createOrGetSession, ChatSession, addChatContact, pushChatMessage, loadChatMessages } from "@/lib/chat-storage";
+import { loadChatContacts, loadChatSessions, ChatContact, createOrGetSession, ChatSession, addChatContact, pushChatMessage, loadChatMessages } from "@/lib/chat-storage";
+import { getActiveSubId } from "./sub-account-sheet";
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import { PENDING_REPLY_PREFIX } from "@/lib/friend-request-engine";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
@@ -108,7 +109,18 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
         setChars(latestChars);
         setIdentity(resolveUserIdentity());
         const rawContacts = loadChatContacts();
-        const enriched = rawContacts.map(c => ({
+        const subId = getActiveSubId();
+        // 小号=新号：小号模式联系人只显示该小号加过的人
+        let scoped = rawContacts;
+        if (subId) {
+            try {
+                const subSessionChars = new Set(
+                    loadChatSessions().filter(s => s.subId === subId && !s.isGroup).map(s => s.contactId),
+                );
+                scoped = rawContacts.filter(c => subSessionChars.has(c.characterId));
+            } catch { /* ignore */ }
+        }
+        const enriched = scoped.map(c => ({
             ...c,
             char: latestChars.find(ch => ch.id === c.characterId)
         })).filter(c => c.char);

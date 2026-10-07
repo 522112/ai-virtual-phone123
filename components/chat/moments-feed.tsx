@@ -14,6 +14,7 @@ import { AlertCircle } from "lucide-react";
 import { kvGet, kvSet, registerKvMigration } from "@/lib/kv-db";
 import { onUserComment, MOMENT_PHOTO_GENERATION_FAILED_EVENT } from "@/lib/moments-engine";
 import { isCharacterInActiveMask } from "@/lib/mask-scope";
+import { getActiveSubId } from "./sub-account-sheet";
 import { GeneratedImageErrorDialog } from "./generated-image-error-dialog";
 
 const COVER_ASSET_KEY = "moments_cover_asset_id";
@@ -111,8 +112,12 @@ export function MomentsFeed({ onCloseApp }: MomentsFeedProps) {
     const refreshPosts = useCallback(() => {
         const contactIds = new Set(loadChatContacts().map(c => c.characterId));
         const maskId = currentMaskId();
+        const subId = getActiveSubId();
         const all = getAllPosts().filter(p => {
             if (p.authorType === "user") {
+                // 小号=新号：小号只看自己的动态；主号看本面具主号动态（老无戳动态归主号）
+                if (subId) return p.subId === subId;
+                if (p.subId) return false;
                 return !p.maskId || !maskId || p.maskId === maskId;
             }
             // 角色动态也按面具过滤：只看当前面具的角色

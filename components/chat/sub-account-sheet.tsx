@@ -3,34 +3,42 @@ import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import {
   createUserSubAccount,
   deleteUserSubAccount,
+  getUserSubAccount,
   loadUserSubAccounts,
   updateUserSubAccount,
   SUB_ACCOUNTS_UPDATED_EVENT,
   type UserSubAccount,
 } from "@/lib/sub-accounts";
 import { loadUserIdentities } from "@/lib/settings-storage";
-import type { UserIdentity } from "@/components/settings/user-identity";
+import { kvGet } from "@/lib/kv-db";
+
+export const ACTIVE_SUB_CHANGED_EVENT = "active-sub-changed";
 
 type Props = {
   activeMaskId: string;
   activeSubId: string | null;
-  onSelectMask: (maskId: string) => void;
   onSelectSub: (subId: string | null) => void;
   onClose: () => void;
   onNotice?: (msg: string) => void;
 };
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
+function readFileAsDataUrl(file: File): Promise<string | null> {
+  return new Promise(resolve => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("读取失败"));
+    reader.onerror = () => resolve(null);
     reader.readAsDataURL(file);
   });
 }
 
-export function SubAccountSheet({ activeMaskId, activeSubId, onSelectMask, onSelectSub, onClose, onNotice }: Props) {
-  const [identities, setIdentities] = useState<UserIdentity[]>([]);
+function dispatchSubChanged(subId: string | null): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(ACTIVE_SUB_CHANGED_EVENT, { detail: { subId } }));
+}
+
+/** 聊天主页长按：只切当前面具的小号（+新增）。面具切换去“我的”页面长按头像。 */
+export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClose, onNotice }: Props) {
+  const [maskName, setMaskName] = useState("");
   const [subs, setSubs] = useState<UserSubAccount[]>([]);
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const [name, setName] = useState("");
@@ -43,7 +51,8 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectMask, onSel
   const [friendResult, setFriendResult] = useState("");
 
   const refresh = () => {
-    setIdentities(loadUserIdentities());
+    const mask = loadUserIdentities().find(i => i.id === activeMaskId);
+    setMaskName(mask?.name || "当前面具");
     setSubs(loadUserSubAccounts(activeMaskId));
   };
 
@@ -53,6 +62,12 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectMask, onSel
     window.addEventListener(SUB_ACCOUNTS_UPDATED_EVENT, onUpdate);
     return () => window.removeEventListener(SUB_ACCOUNTS_UPDATED_EVENT, onUpdate);
   }, [activeMaskId]);
+
+  const pick = (subId: string | null) => {
+    onSelectSub(subId);
+    dispatchSubChanged(subId);
+    onClose();
+  };
 
   const openEditor = (sub: UserSubAccount | null) => {
     setEditingId(sub ? sub.id : "new");
@@ -68,7 +83,7 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectMask, onSel
     }
     if (editingId === "new") {
       const created = createUserSubAccount({ maskId: activeMaskId, name, avatar, persona });
-      onNotice?.(`小号「${created.name}」已创建，角色不知道这是你`);
+      onNotice?.(`小号「${created.name}」已创建，相当于一个新号：聊天/好友/朋友圈都从零开始`);
     } else if (editingId) {
       updateUserSubAccount(editingId, { name, avatar, persona });
       onNotice?.("小号已更新");
@@ -102,27 +117,14 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectMask, onSel
   return (
     <div className="journal-sheet-overlay" onClick={onClose}>
       <div className="journal-sheet" onClick={e => e.stopPropagation()}>
-        <div className="journal-sheet-title">面具 · 小号</div>
+        <div className="journal-sheet-title">小号 · {maskName}</div>
         <div className="journal-clip-list">
-          <small className="menu-desc">当前面具</small>
-          {identities.map(identity => (
-            <button
-              key={identity.id}
-              type="button"
-              className="journal-clip-row"
-              style={identity.id === activeMaskId ? { border: "1px solid var(--c-accent)" } : undefined}
-              onClick={() => { onSelectMask(identity.id); }}
-            >
-              <small>{identity.id === activeMaskId ? "使用中" : "切换"}</small>
-              <span>{identity.name}</span>
-            </button>
-          ))}
-          <small className="menu-desc">小号（角色眼里是陌生人，不知道是你）</small>
+          <small className="menu-desc">切到小号就是一个新号：聊天/好友/朋友圈从零开始，角色只认识这个号</small>
           <button
             type="button"
             className="journal-clip-row"
             style={!activeSubId ? { border: "1px solid var(--c-accent)" } : undefined}
-            onClick={() => { onSelectSub(null); onClose(); }}
+            onClick={() => pick(null)}
           >
             <small>主号</small>
             <span>用本面具身份聊天</span>
@@ -133,19 +135,19 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectMask, onSel
                 <button
                   type="button"
                   style={{ flex: 1, display: "flex", gap: 8, alignItems: "center", background: "none", border: 0, cursor: "pointer", textAlign: "left", padding: 0 }}
-                  onClick={() => { onSelectSub(sub.id); onClose(); }}
+                  onClick={() => pick(sub.id)}
                 >
                   <span style={{ width: 30, height: 30, borderRadius: 15, overflow: "hidden", flexShrink: 0, background: "rgba(0,0,0,.06)", display: "grid", placeItems: "center" }}>
                     {sub.avatar ? <img src={sub.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ChatFallbackAvatar />}
                   </span>
                   <span style={{ flex: 1 }}>
                     <strong style={{ display: "block", fontSize: 13 }}>{sub.name}</strong>
-                    <small className="menu-desc">{sub.persona ? sub.persona.slice(0, 24) : "未写人设"}</small>
+                    <small className="menu-desc">{sub.persona ? sub.persona.slice(0, 24) : "没设人设：对方在聊天中认识你"}</small>
                   </span>
                 </button>
                 <button type="button" onClick={() => { setFriendingId(friendingId === sub.id ? null : sub.id); setFriendResult(""); }} style={{ border: 0, background: "none", color: "var(--c-text-secondary)", fontSize: 12, cursor: "pointer" }}>加好友</button>
                 <button type="button" onClick={() => openEditor(sub)} style={{ border: 0, background: "none", color: "var(--c-text-secondary)", fontSize: 12, cursor: "pointer" }}>编辑</button>
-                <button type="button" onClick={() => { deleteUserSubAccount(sub.id); if (activeSubId === sub.id) onSelectSub(null); }} style={{ border: 0, background: "none", color: "#e8354b", fontSize: 12, cursor: "pointer" }}>删除</button>
+                <button type="button" onClick={() => { deleteUserSubAccount(sub.id); if (activeSubId === sub.id) pick(null); }} style={{ border: 0, background: "none", color: "#e8354b", fontSize: 12, cursor: "pointer" }}>删除</button>
               </div>
               {friendingId === sub.id ? (
                 <div className="g-card" style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
@@ -164,8 +166,8 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectMask, onSel
           ))}
           {editingId !== null ? (
             <div className="g-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <input value={name} maxLength={30} onChange={e => setName(e.target.value)} placeholder="网名（角色看到的名字）" className="ui-input" />
-              <textarea value={persona} rows={3} onChange={e => setPersona(e.target.value)} placeholder="人设（角色看到的你是谁，不知道是你本人）" className="ui-textarea" />
+              <input value={name} maxLength={30} onChange={e => setName(e.target.value)} placeholder="网名（对方看到的名字）" className="ui-input" />
+              <textarea value={persona} rows={3} onChange={e => setPersona(e.target.value)} placeholder="人设（可选，不填对方就在聊天中认识你；绝不会暴露你是大号）" className="ui-textarea" />
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <label style={{ border: "1px solid var(--c-panel-border)", borderRadius: 10, padding: "7px 10px", fontSize: 12, cursor: "pointer" }}>
                   {avatar ? "换头像" : "传头像"}
@@ -175,7 +177,7 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectMask, onSel
                     style={{ display: "none" }}
                     onChange={async e => {
                       const file = e.target.files?.[0];
-                      if (file) setAvatar(await readFileAsDataUrl(file).catch(() => null));
+                      if (file) setAvatar(await readFileAsDataUrl(file));
                       e.target.value = "";
                     }}
                   />
@@ -191,13 +193,9 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectMask, onSel
               </div>
             </div>
           ) : (
-            <button
-              type="button"
-              className="journal-clip-row"
-              onClick={() => openEditor(null)}
-            >
+            <button type="button" className="journal-clip-row" onClick={() => openEditor(null)}>
               <small>＋</small>
-              <span>创建小号</span>
+              <span>开个新小号（像 QQ 新号）</span>
             </button>
           )}
         </div>
@@ -205,4 +203,18 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectMask, onSel
       </div>
     </div>
   );
+}
+
+export function getActiveSubId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return kvGet("active_sub_id") || null;
+  } catch {
+    return null;
+  }
+}
+
+export function getActiveSub(): ReturnType<typeof getUserSubAccount> {
+  const id = getActiveSubId();
+  return id ? getUserSubAccount(id) : null;
 }

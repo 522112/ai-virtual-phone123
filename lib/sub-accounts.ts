@@ -142,14 +142,17 @@ export function resolveSessionUserIdentity(
   try {
     const sub = getUserSubAccount(session.subId);
     if (!sub || !base) return base;
+    // 空人设：对方在聊天中认识你。绝不能回退大号设定（那会让 AI 全知）。
+    const neutralPersona = sub.persona.trim()
+      ? sub.persona
+      : "一个普通的网友。关于 TA 的一切只能从聊天内容里了解，不要臆测，不要假装早就认识。";
     return {
       ...base,
       name: sub.name,
       screenName: sub.name,
       avatarUrl: sub.avatar || undefined,
-      // 小号人设整体替换面具自定义设定，防止主号信息泄露给角色
-      customSettings: sub.persona || base.customSettings,
-      bio: sub.persona || base.bio,
+      customSettings: neutralPersona,
+      bio: neutralPersona,
     };
   } catch {
     return base;

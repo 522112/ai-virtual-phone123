@@ -7,6 +7,8 @@ export type MomentPost = {
     authorId: string;               // characterId or "user"
     /** 用户面具 id：不同面具有不同的主页和朋友圈；角色帖为空 */
     maskId?: string;
+    /** 小号 id：小号的朋友圈独立记录；主号帖为空 */
+    subId?: string;
     /** 用户置顶自己的动态 */
     pinned?: boolean;
     content: string;
