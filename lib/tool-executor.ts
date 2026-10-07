@@ -23,11 +23,12 @@ import {
 } from "./tool-storage";
 import { executeCustomAppToolCall } from "./custom-app-tool-runtime";
 import { characterWorkspace, agentComputerRequest, isAgentComputerConfigured } from "./agent-computer";
-import { AGENT_COMPUTER_CAPABILITY_ID, CALENDAR_MANAGEMENT_CAPABILITY_ID, FORWARD_CHAT_CAPABILITY_ID, LISTEN_TOGETHER_CAPABILITY_ID, LOCAL_DATA_LIBRARY_CAPABILITY_ID, MEMORY_WRITE_CAPABILITY_ID, MUSIC_CONTROL_CAPABILITY_ID, NOTE_WALL_CAPABILITY_ID, REALITY_BRIDGE_CAPABILITY_ID, REVERSE_WATCH_CAPABILITY_ID, SEND_FILE_CAPABILITY_ID, TIMED_WAKE_CAPABILITY_ID, TOOLBOX_MANAGEMENT_CAPABILITY_ID, getInternalCapability } from "./internal-capability-storage";
+import { AGENT_COMPUTER_CAPABILITY_ID, CALENDAR_MANAGEMENT_CAPABILITY_ID, FORWARD_CHAT_CAPABILITY_ID, LISTEN_TOGETHER_CAPABILITY_ID, LOCAL_DATA_LIBRARY_CAPABILITY_ID, MEMORY_WRITE_CAPABILITY_ID, MUSIC_CONTROL_CAPABILITY_ID, NOTE_WALL_CAPABILITY_ID, REALITY_BRIDGE_CAPABILITY_ID, REVERSE_WATCH_CAPABILITY_ID, ROLE_SIDE_CHAT_CAPABILITY_ID, SEND_FILE_CAPABILITY_ID, TIMED_WAKE_CAPABILITY_ID, TOOLBOX_MANAGEMENT_CAPABILITY_ID, getInternalCapability } from "./internal-capability-storage";
 import { bridgeConnection, loadBridgeDataItems, loadBridgeShortcutActions, readAllBridgeStateSnapshots, readBridgeStateSnapshot } from "./reality-bridge/storage";
 import { createShortcutCommand, deliverShortcutCommand, waitForShortcutCommand } from "./shortcut-command-client";
 import { loadMemoryEntriesByType, saveMemoryEntry } from "./memory-storage";
 import type { MemoryEntry } from "./memory-types";
+import { generateSideChat, pushRoleChatEntry } from "./role-chat";
 import {
     buildForwardedChatTitle,
     buildForwardedRecordPreview,
@@ -807,6 +808,7 @@ async function executeInternalTool(call: ToolCall, context?: ToolExecutionContex
     if (isRealityBridgeToolName(call.name)) return executeRealityBridgeTool(call, context);
     if (call.name === "稍后主动联系" || call.name === "设置定时醒来") return executeTimedWakeTool(call, context);
     if (call.name === "转发聊天记录") return executeForwardChatTool(call, context);
+    if (call.name === "发起私聊") return executeRoleSideChatTool(call, context);
 
     if (call.name !== "写入记忆") return null;
 
@@ -2382,6 +2384,74 @@ function inferMediaAttachmentType(url: string, title: string): MediaAttachment["
     if (/\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(source)) return "audio";
     if (/\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(source)) return "video";
     return "file";
+}
+
+/**
+ * 角色发起私聊/群聊：跟 NPC 或其他角色聊一段，用户会话里留记录卡进上帝视角。
+ * 真角色写共享记忆保持连贯；NPC 只参与不留档。
+ */
+async function executeRoleSideChatTool(call: ToolCall, context?: ToolExecutionContext): Promise<ToolResult> {
+    const fail = (error: string): ToolResult => ({
+        name: call.name, success: false, error, continueConversation: true,
+    });
+    const capability = getInternalCapability(ROLE_SIDE_CHAT_CAPABILITY_ID);
+    if (!capability || !capability.enabled || capability.mode === "off") {
+        return fail("角色私聊能力未启用");
+    }
+    const args = call.args || {};
+    const rawParticipants = typeof args.participants === "string" ? args.participants : "";
+    const topic = typeof args.topic === "string" ? args.topic.trim().slice(0, 200) : "";
+    if (!rawParticipants.trim() || !topic) return fail("缺少参与人或话题");
+    const names = rawParticipants.split(/[,，、;；]/).map(s => s.trim()).filter(Boolean).slice(0, 5);
+    if (names.length === 0) return fail("缺少参与人");
+    const npcPersonas = typeof args.npcPersonas === "string"
+        ? args.npcPersonas.split(/[;；]/).map(s => s.trim())
+        : [];
+
+    const sourceSessionId = context?.sessionId || "";
+    if (!sourceSessionId) return fail("当前没有可用的会话");
+    const source = loadChatSessions().find(s => s.id === sourceSessionId);
+    if (!source || source.isGroup) return fail("只能从单聊里发起私聊");
+
+    const meId = context?.characterId || source.contactId;
+    const allChars = loadCharacters();
+    const me = allChars.find(c => c.id === meId);
+    const participants: { id?: string; name: string; persona: string; avatar?: string | null }[] = [];
+    if (me) participants.push({ id: me.id, name: me.name, persona: me.persona || "", avatar: me.avatar || null });
+    names.forEach((n, i) => {
+        const lowered = n.toLowerCase();
+        if (me && (me.id.toLowerCase() === lowered || (me.name || "").toLowerCase() === lowered)) return;
+        if (participants.some(p => p.name.toLowerCase() === lowered)) return;
+        const hit = allChars.find(c =>
+            c.id.toLowerCase() === lowered
+            || (c.name || "").toLowerCase() === lowered
+            || ((c.wechatID || "").trim().toLowerCase() === lowered && lowered.length > 0),
+        );
+        if (hit) {
+            participants.push({ id: hit.id, name: hit.name, persona: hit.persona || "", avatar: hit.avatar || null });
+        } else {
+            participants.push({ name: n.slice(0, 12), persona: npcPersonas[i] || "普通路人" });
+        }
+    });
+    if (participants.length < 2) return fail("至少需要两个人（你+对方）才能聊起来");
+
+    try {
+        const dialog = await generateSideChat(participants, topic, 2);
+        pushRoleChatEntry(
+            sourceSessionId, dialog.sessionId, dialog.title,
+            participants[0].id, participants[1].id,
+            participants.map(p => p.name),
+        );
+        return {
+            name: call.name,
+            success: true,
+            data: `已生成与${participants.slice(1).map(p => p.name).join("、")}的私聊，用户点记录卡可围观`,
+            continueConversation: true,
+            persistToHistory: false,
+        };
+    } catch (error) {
+        return fail(error instanceof Error ? error.message : "私聊生成失败");
+    }
 }
 
 /**

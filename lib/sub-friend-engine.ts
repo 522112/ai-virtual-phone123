@@ -84,6 +84,7 @@ export async function requestSubFriend(
   addChatContact(character.id);
   const sessions = loadChatSessions();
   let session = sessions.find(s => s.contactId === character.id && s.subId === sub.id && !s.isGroup);
+  let isNew = false;
   if (!session) {
     session = {
       id: `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -95,19 +96,18 @@ export async function requestSubFriend(
     } as ChatSession;
     sessions.unshift(session);
     saveChatSessions(sessions);
+    isNew = true;
   }
-  pushChatMessage({
-    sessionId: session.id,
-    role: "system",
-    content: `[${sub.name} 通过微信号添加了你，验证消息：「${verifyMessage.slice(0, 100)}」]`,
-    status: "sent",
-  });
-  pushChatMessage({
-    sessionId: session.id,
-    role: "assistant",
-    content: reply,
-    status: "sent",
-  });
+  // 新号新窗口：全新会话只留一句系统提示，不带任何历史（跟大号加完一样干净）；
+  // 已有会话直接进，不再追加。
+  if (isNew) {
+    pushChatMessage({
+      sessionId: session.id,
+      role: "system",
+      content: `你已添加了${character.name}，现在可以开始聊天了。`,
+      status: "sent",
+    });
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: session.id } }));
     window.dispatchEvent(new CustomEvent("weixin-messages-updated"));
