@@ -22,16 +22,8 @@ import { simpleLLMCall } from "./api-helpers";
 import { maybeRunCoreMemoryPipeline } from "./core-memory-builder";
 import { loadChatSessions } from "./chat-storage";
 
-/** 汇总事件若全部来自同一个小号会话，打上身份戳，实现记忆隔离 */
-function resolveSummaryCounterpart(sessionIds: string[]): string | undefined {
-  if (sessionIds.length === 0) return undefined;
-  try {
-    const sessions = loadChatSessions();
-    const subIds = new Set(
-      sessionIds.map(id => sessions.find(s => s.id === id)?.subId).filter((v): v is string => Boolean(v)),
-    );
-    if (subIds.size === 1) return [...subIds][0];
-  } catch { /* ignore */ }
+/** 小号沿用角色记忆：汇总一律不打身份戳，记忆全身份共享 */
+function resolveSummaryCounterpart(_sessionIds: string[]): string | undefined {
   return undefined;
 }
 
