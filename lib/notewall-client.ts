@@ -7,6 +7,7 @@ import type {
   NoteWallNote,
   NoteWallNoteInput,
   NoteWallNotePatch,
+  NoteWallStyle,
 } from "./notewall-types";
 import { deleteNoteWallProjectionEventForComment, deleteNoteWallProjectionEventsForNote } from "./notewall-memory";
 
@@ -134,8 +135,40 @@ export async function deleteNoteWallComment(id: string, actorId?: string): Promi
   deleteNoteWallProjectionEventForComment(id);
 }
 
-function getRealtimeConfig(): { url: string; anonKey: string } | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+type NoteWallStylesResponse = {
+  ok: boolean;
+  styles?: NoteWallStyle[];
+  error?: string;
+};
+
+type NoteWallStyleMutationResponse = {
+  ok: boolean;
+  style?: NoteWallStyle;
+  error?: string;
+};
+
+export async function fetchNoteWallStyles(): Promise<NoteWallStyle[]> {
+  const data = await fetchJson<NoteWallStylesResponse>("/api/notewall/styles", { cache: "no-store" });
+  return data.styles ?? [];
+}
+
+export async function createNoteWallStyle(input: { name: string; note?: string; css: string; paper?: string }): Promise<NoteWallStyle> {
+  const data = await fetchJson<NoteWallStyleMutationResponse>("/api/notewall/styles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!data.style) throw new Error(data.error || "样式创建失败");
+  return data.style;
+}
+
+export async function deleteNoteWallStyle(id: string): Promise<void> {
+  await fetchJson<NoteWallStyleMutationResponse>(`/api/notewall/styles?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+function getRealtimeConfig(): { url: string; anonKey: string } | null {  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !anonKey) return null;
   return { url, anonKey };

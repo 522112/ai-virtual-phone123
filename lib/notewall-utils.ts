@@ -10,6 +10,7 @@ import {
   type NoteWallNoteInput,
   type NoteWallNotePatch,
   type NoteWallSize,
+  type NoteWallStyle,
 } from "./notewall-types";
 
 const SAFE_CSS_PROPERTIES = new Set([
@@ -373,7 +374,24 @@ export type ParsedNoteWallAction = {
   font: string;
   rawCss: string;
   isAnonymous: boolean;
+  styleName: string;
 };
+
+export function normalizeNoteWallStyle(record: unknown): NoteWallStyle | null {
+  if (!record || typeof record !== "object") return null;
+  const item = record as Record<string, unknown>;
+  if (typeof item.id !== "string" || !item.id) return null;
+  return {
+    id: item.id,
+    name: cleanText(item.name, 80) || "未命名样式",
+    note: cleanText(item.note ?? "", 500),
+    css: String(item.css ?? ""),
+    paper: cleanText(item.paper ?? "", 32),
+    createdBy: typeof item.created_by === "string" ? item.created_by : undefined,
+    createdAt: typeof item.created_at === "string" ? item.created_at : new Date().toISOString(),
+    updatedAt: typeof item.updated_at === "string" ? item.updated_at : new Date().toISOString(),
+  };
+}
 
 function normalizeAnonymousChoice(value: unknown): boolean {
   if (typeof value === "boolean") return value;
@@ -441,6 +459,7 @@ export function parseNoteWallActionContent(content: string): ParsedNoteWallActio
       font: "default",
       rawCss: "",
       isAnonymous: false,
+      styleName: "",
     };
   }
 
@@ -457,6 +476,7 @@ export function parseNoteWallActionContent(content: string): ParsedNoteWallActio
     font: normalizeNoteWallFont(record.font),
     rawCss: "",
     isAnonymous: normalizeAnonymousChoice(record.isAnonymous ?? record.is_anonymous ?? record.anonymous),
+    styleName: cleanText(record.styleName ?? record.style_name ?? record.style ?? record.样式, 80),
   };
 }
 

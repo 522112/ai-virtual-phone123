@@ -10,11 +10,14 @@ import { useAccount } from "@/lib/account-context";
 import {
   createNoteWallComment,
   createNoteWallNote,
+  createNoteWallStyle,
   deleteNoteWallComment,
   deleteNoteWallNote,
+  deleteNoteWallStyle,
   fetchMyNoteWallComments,
   fetchNoteWall,
   fetchNoteWallComments,
+  fetchNoteWallStyles,
   subscribeNoteWallChanges,
   updateNoteWallNote,
 } from "@/lib/notewall-client";
@@ -33,6 +36,7 @@ import {
   type NoteWallNote,
   type NoteWallSize,
   type NoteWallTimerSettings,
+  type NoteWallStyle,
 } from "@/lib/notewall-types";
 import { characterWallName, findNoteWallPlacement, sanitizeNoteWallCss } from "@/lib/notewall-utils";
 import { resolveUserIdentity } from "@/lib/settings-storage";
@@ -475,6 +479,7 @@ export function NoteWallApp({ onBack, onNotice }: NoteWallAppProps) {
       setActiveNote(null);
       setDeleteCandidateNote(null);
       notify("便签已删除。");
+      void refresh();
     } catch (err) {
       notify(err instanceof Error ? err.message : "删除失败。");
     } finally {
@@ -1598,6 +1603,44 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
   const [confirmingPosts, setConfirmingPosts] = useState(false);
   const [confirmingComments, setConfirmingComments] = useState(false);
   const busy = Boolean(generatingCharacterIds.length || replyingCharacterIds.length || confirmingPosts || confirmingComments);
+  const [styles, setStyles] = useState<NoteWallStyle[]>([]);
+  const [styleName, setStyleName] = useState("");
+  const [styleNote, setStyleNote] = useState("");
+  const [styleCss, setStyleCss] = useState("");
+  const [styleBusy, setStyleBusy] = useState(false);
+
+  const loadStyles = useCallback(async () => {
+    try {
+      setStyles(await fetchNoteWallStyles());
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => { void loadStyles(); }, [loadStyles]);
+
+  const handleCreateStyle = async () => {
+    if (!styleName.trim() || !styleCss.trim() || styleBusy) return;
+    setStyleBusy(true);
+    try {
+      const created = await createNoteWallStyle({ name: styleName.trim(), note: styleNote.trim(), css: styleCss.trim() });
+      setStyles(prev => [...prev, created]);
+      setStyleName(""); setStyleNote(""); setStyleCss("");
+    } catch {
+      /* ignore */
+    } finally {
+      setStyleBusy(false);
+    }
+  };
+
+  const handleDeleteStyle = async (id: string) => {
+    try {
+      await deleteNoteWallStyle(id);
+      setStyles(prev => prev.filter(style => style.id !== id));
+    } catch {
+      /* ignore */
+    }
+  };
 
   useEffect(() => {
     if (openAction !== "post") setSelectedPostCharacterIds([]);
@@ -1685,9 +1728,33 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
           {characters.length === 0 ? <p className="nw-empty">暂无角色。</p> : null}
           {characters.map(character => {
             const per = settings.perCharacter[character.id];
-            const autoEnabled = per ? per.enabled : settings.enabled && (settings.characterIds.length === 0 || settings.characterIds.includes(character.id));
-            const autoInterval = per ? per.intervalMinutes : settings.intervalMinutes;
-            const stamp = settings.lastRunAtByCharacter[character.id];
+            const postEnabled = per ? per.postEnabled : settings.enabled && (settings.characterIds.length === 0 || settings.characterIds.includes(character.id));
+            const postInterval = per ? per.postIntervalMinutes : settings.intervalMinutes;
+            const replyEnabled = per ? per.replyEnabled : settings.enabled && (settings.characterIds.length === 0 || settings.characterIds.includes(character.id));
+            const replyInterval = per ? per.replyIntervalMinutes : settings.intervalMinutes;
+            const lastPost = settings.lastPostAtByCharacter[character.id] || settings.lastRunAtByCharacter[character.id];
+            const lastReply = settings.lastReplyAtByCharacter[character.id] || settings.lastRunAtByCharacter[character.id];
+            const setPer = (patch: Partial<{ postEnabled: boolean; postIntervalMinutes: number; replyEnabled: boolean; replyIntervalMinutes: number }>) => {
+              const current = settings.perCharacter[character.id] || {
+                enabled: postEnabled, intervalMinutes: postInterval,
+                postEnabled, postIntervalMinutes: postInterval,
+                replyEnabled, replyIntervalMinutes: replyInterval,
+              };
+              onChange({
+                ...settings,
+                perCharacter: {
+                  ...settings.perCharacter,
+                  [character.id]: {
+                    enabled: patch.postEnabled ?? current.postEnabled ?? true,
+                    intervalMinutes: patch.postIntervalMinutes ?? current.postIntervalMinutes ?? 360,
+                    postEnabled: patch.postEnabled ?? current.postEnabled,
+                    postIntervalMinutes: patch.postIntervalMinutes ?? current.postIntervalMinutes,
+                    replyEnabled: patch.replyEnabled ?? current.replyEnabled,
+                    replyIntervalMinutes: patch.replyIntervalMinutes ?? current.replyIntervalMinutes,
+                  },
+                },
+              });
+            };
             return (
               <div key={character.id} className="nw-perchar-row">
                 <div className="nw-perchar-line">
@@ -1696,41 +1763,8 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
                   </span>
                   <span className="nw-perchar-meta">
                     <strong>{characterWallName(character)}</strong>
-                    <em>{stamp ? `上次 ${formatTime(stamp)}` : "未运行"}</em>
+                    <em>{lastPost ? `上次发帖 ${formatTime(lastPost)}` : "未发过帖"}{lastReply ? ` · 上次回帖 ${formatTime(lastReply)}` : ""}</em>
                   </span>
-                  <input
-                    type="checkbox"
-                    checked={autoEnabled}
-                    aria-label={`${characterWallName(character)}自动`}
-                    onChange={event => onChange({
-                      ...settings,
-                      perCharacter: {
-                        ...settings.perCharacter,
-                        [character.id]: { enabled: event.target.checked, intervalMinutes: autoInterval },
-                      },
-                    })}
-                  />
-                </div>
-                <div className="nw-perchar-line">
-                  <label className="nw-field nw-interval-field">
-                    <span>固定时间（分钟）</span>
-                    <input
-                      type="number"
-                      min={5}
-                      max={10080}
-                      value={autoInterval}
-                      onChange={event => onChange({
-                        ...settings,
-                        perCharacter: {
-                          ...settings.perCharacter,
-                          [character.id]: {
-                            enabled: autoEnabled,
-                            intervalMinutes: Math.max(5, Math.min(10080, Number(event.target.value) || 360)),
-                          },
-                        },
-                      })}
-                    />
-                  </label>
                   <button
                     type="button"
                     className="nw-now-btn"
@@ -1740,9 +1774,67 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
                     现在就发
                   </button>
                 </div>
+                <div className="nw-perchar-line">
+                  <label className="nw-mini-check">
+                    <input
+                      type="checkbox"
+                      checked={postEnabled}
+                      onChange={event => setPer({ postEnabled: event.target.checked })}
+                    />
+                    <span>发帖</span>
+                  </label>
+                  <label className="nw-field nw-interval-field">
+                    <span>分钟</span>
+                    <input
+                      type="number"
+                      min={5}
+                      max={10080}
+                      value={postInterval}
+                      onChange={event => setPer({ postIntervalMinutes: Math.max(5, Math.min(10080, Number(event.target.value) || 360)) })}
+                    />
+                  </label>
+                  <label className="nw-mini-check">
+                    <input
+                      type="checkbox"
+                      checked={replyEnabled}
+                      onChange={event => setPer({ replyEnabled: event.target.checked })}
+                    />
+                    <span>回帖</span>
+                  </label>
+                  <label className="nw-field nw-interval-field">
+                    <span>分钟</span>
+                    <input
+                      type="number"
+                      min={5}
+                      max={10080}
+                      value={replyInterval}
+                      onChange={event => setPer({ replyIntervalMinutes: Math.max(5, Math.min(10080, Number(event.target.value) || 360)) })}
+                    />
+                  </label>
+                </div>
               </div>
             );
           })}
+        </div>
+        <div className="nw-style-panel">
+          <p className="nw-timer-hint">云端美化库：上传样式（命名 + 备注 + CSS），角色的便签会按备注自选套用</p>
+          <div className="nw-style-form">
+            <input value={styleName} onChange={e => setStyleName(e.target.value)} placeholder="样式名，如 复古胶片" className="ui-input" />
+            <input value={styleNote} onChange={e => setStyleNote(e.target.value)} placeholder="备注：什么场合用、什么风格（角色会读）" className="ui-input" />
+            <textarea value={styleCss} onChange={e => setStyleCss(e.target.value)} placeholder="CSS，如 background:#fff; color:#333; border-radius:12px; box-shadow:0 6px 18px rgba(0,0,0,.15);" rows={3} className="ui-textarea" />
+            <button type="button" className="nw-now-btn" disabled={styleBusy || !styleName.trim() || !styleCss.trim()} onClick={() => void handleCreateStyle()}>
+              {styleBusy ? "上传中…" : "上传样式"}
+            </button>
+          </div>
+          {styles.map(style => (
+            <div key={style.id} className="nw-style-item">
+              <span className="nw-style-meta">
+                <strong>{style.name}</strong>
+                <em>{style.note || "（无备注）"}</em>
+              </span>
+              <button type="button" className="nw-style-del" onClick={() => void handleDeleteStyle(style.id)}>删除</button>
+            </div>
+          ))}
         </div>
         <div className="nw-character-action-panel">
           <div className="nw-character-action-buttons">

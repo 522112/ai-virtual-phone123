@@ -9,7 +9,8 @@ import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memo
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
 import { prepareShortTermContext } from "./short-term-assembler";
 import { parseNoteWallActionContent, parseNoteWallReplyContent, type ParsedNoteWallAction, type ParsedNoteWallReply } from "./notewall-utils";
-import type { NoteWallComment, NoteWallNote } from "./notewall-types";
+import { fetchNoteWallStyles } from "./notewall-client";
+import type { NoteWallComment, NoteWallNote, NoteWallStyle } from "./notewall-types";
 
 type ResolvedNoteWallGeneration = {
   character: Character;
@@ -171,6 +172,11 @@ export async function generateNoteWallCharacterNote(
     formatNoteWallContext(notes, { characterId }),
   );
 
+  const styles = await fetchNoteWallStyles().catch(() => [] as NoteWallStyle[]);
+  const styleCatalog = styles.length > 0
+    ? styles.map(style => `- 样式名「${style.name}」${style.note ? `（${style.note}）` : ""}`).join("\n")
+    : "";
+
   resolved.messages.push({
     role: "system",
     content: [
@@ -181,6 +187,7 @@ export async function generateNoteWallCharacterNote(
       `现在是${formatNoteWallTime(new Date().toISOString())}，按这个时间点写（深夜就别写大中午的太阳）。`,
       "署名用你的网名。",
       "墙上有匿名的便签和评论：你认不出匿名的是谁，不许猜测身份、不许点破、不许拿现实细节去对号入座。",
+      styleCatalog ? `【可用便签样式库】你可以挑一个合适风格的样式，在返回里加 "styleName" 字段写样式名：\n${styleCatalog}` : "",
       extraContext ? `此刻的由头：${extraContext}` : "",
     ].filter(Boolean).join("\n"),
   });
@@ -194,7 +201,20 @@ export async function generateNoteWallCharacterNote(
     { appId: "diary", appTags: ["diary", "notewall"] },
   );
 
-  return parseNoteWallActionContent(raw);
+  const parsed = parseNoteWallActionContent(raw);
+  // 命中样式库就套用用户上传的 CSS 和纸色
+  if (parsed.styleName && styles.length > 0) {
+    const matched = styles.find(style => style.name === parsed.styleName)
+      ?? styles.find(style => style.name.includes(parsed.styleName) || parsed.styleName.includes(style.name));
+    if (matched) {
+      return {
+        ...parsed,
+        rawCss: matched.css ? `\n${matched.css}` : parsed.rawCss,
+        paper: matched.paper || parsed.paper,
+      };
+    }
+  }
+  return parsed;
 }
 
 export async function generateNoteWallCharacterReplies(

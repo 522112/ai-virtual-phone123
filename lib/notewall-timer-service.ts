@@ -17,7 +17,7 @@ import {
 } from "./notewall-local";
 import { recordNoteWallCommentEvent, recordNoteWallNoteEvent } from "./notewall-memory";
 import { characterWallName, findNoteWallPlacement } from "./notewall-utils";
-import type { NoteWallNote } from "./notewall-types";
+import type { NoteWallBoard, NoteWallNote } from "./notewall-types";
 
 const CHECK_INTERVAL_MS = 60_000;
 
@@ -40,15 +40,24 @@ function isDue(last: string | undefined, intervalMinutes: number): boolean {
   return Date.now() - lastTime >= Math.max(5, intervalMinutes) * 60 * 1000;
 }
 
-function resolveTargets(characters: Character[]): Character[] {
-  const settings = loadNoteWallTimerSettings();
-  return characters.filter(character => {
-    const per = settings.perCharacter[character.id];
-    if (per) return per.enabled && isDue(settings.lastRunAtByCharacter[character.id], per.intervalMinutes);
-    if (!settings.enabled) return false;
-    if (settings.characterIds.length > 0 && !settings.characterIds.includes(character.id)) return false;
-    return isDue(settings.lastRunAtByCharacter[character.id], settings.intervalMinutes);
-  });
+function resolvePostConfig(settings: ReturnType<typeof loadNoteWallTimerSettings>, characterId: string): { enabled: boolean; intervalMinutes: number } {
+  const per = settings.perCharacter[characterId];
+  if (per) return { enabled: per.postEnabled, intervalMinutes: per.postIntervalMinutes };
+  if (!settings.enabled) return { enabled: false, intervalMinutes: settings.intervalMinutes };
+  if (settings.characterIds.length > 0 && !settings.characterIds.includes(characterId)) {
+    return { enabled: false, intervalMinutes: settings.intervalMinutes };
+  }
+  return { enabled: true, intervalMinutes: settings.intervalMinutes };
+}
+
+function resolveReplyConfig(settings: ReturnType<typeof loadNoteWallTimerSettings>, characterId: string): { enabled: boolean; intervalMinutes: number } {
+  const per = settings.perCharacter[characterId];
+  if (per) return { enabled: per.replyEnabled, intervalMinutes: per.replyIntervalMinutes };
+  if (!settings.enabled) return { enabled: false, intervalMinutes: settings.intervalMinutes };
+  if (settings.characterIds.length > 0 && !settings.characterIds.includes(characterId)) {
+    return { enabled: false, intervalMinutes: settings.intervalMinutes };
+  }
+  return { enabled: true, intervalMinutes: settings.intervalMinutes };
 }
 
 function selectReplyCandidates(notes: NoteWallNote[]): NoteWallNote[] {
@@ -61,14 +70,24 @@ function selectReplyCandidates(notes: NoteWallNote[]): NoteWallNote[] {
   return [...userNotes, ...remaining].slice(0, 30);
 }
 
-async function postForCharacter(character: Character, actorId: string): Promise<"posted" | "capped" | "failed"> {
-  const latest = await fetchNoteWall().catch(() => null);
-  if (!latest) return "failed";
-  const hourAgo = Date.now() - 3600 * 1000;
+async function postForCharacter(
+  character: Character,
+  actorId: string,
+  latest: { board: NoteWallBoard; notes: NoteWallNote[] },
+  postIntervalMinutes: number,
+): Promise<"posted" | "capped" | "failed"> {
+  const now = Date.now();
+  const hourAgo = now - 3600 * 1000;
   const ownRecent = latest.notes.filter(note =>
     !note.deletedAt && note.authorId === character.id && Date.parse(note.createdAt) >= hourAgo,
   ).length;
   if (ownRecent >= 3) return "capped";
+  // 云端排重：另一台设备刚发过就不再发
+  const intervalAgo = now - Math.max(5, postIntervalMinutes) * 60 * 1000;
+  const ownWithinInterval = latest.notes.some(note =>
+    !note.deletedAt && note.authorId === character.id && Date.parse(note.createdAt) >= intervalAgo,
+  );
+  if (ownWithinInterval) return "capped";
   let generated;
   try {
     generated = await generateNoteWallCharacterNote(character.id, latest.notes, "timer");
@@ -100,18 +119,34 @@ async function postForCharacter(character: Character, actorId: string): Promise<
   }
 }
 
-async function replyForCharacter(character: Character, actorId: string): Promise<number> {
-  const latest = await fetchNoteWall().catch(() => null);
-  if (!latest) return 0;
-  const candidateNotes = selectReplyCandidates(latest.notes);
+async function replyForCharacter(
+  character: Character,
+  actorId: string,
+  notes: NoteWallNote[],
+  replyIntervalMinutes: number,
+): Promise<number> {
+  const candidateNotes = selectReplyCandidates(notes);
   if (candidateNotes.length === 0) return 0;
   const candidates = await Promise.all(candidateNotes.map(async note => ({
     note,
     comments: await fetchNoteWallComments(note.id).catch(() => []),
   })));
+  // 只回没回过的：过滤掉自己已评论的帖子
+  const unreplied = candidates.filter(item =>
+    !item.comments.some(comment => !comment.deletedAt && comment.authorId === character.id),
+  );
+  if (unreplied.length === 0) return 0;
+  // 云端排重：这个间隔内自己已回过就不再回
+  const intervalAgo = Date.now() - Math.max(5, replyIntervalMinutes) * 60 * 1000;
+  const repliedWithinInterval = candidates.some(item =>
+    item.comments.some(comment =>
+      !comment.deletedAt && comment.authorId === character.id && Date.parse(comment.createdAt) >= intervalAgo,
+    ),
+  );
+  if (repliedWithinInterval) return 0;
   let replies;
   try {
-    replies = await generateNoteWallCharacterReplies(character.id, candidates);
+    replies = await generateNoteWallCharacterReplies(character.id, unreplied);
   } catch {
     return 0;
   }
@@ -138,7 +173,12 @@ async function tick(): Promise<void> {
   if (running || typeof window === "undefined") return;
   const characters = loadCharacters();
   if (characters.length === 0) return;
-  const targets = resolveTargets(characters);
+  const settings = loadNoteWallTimerSettings();
+  const targets = characters.filter(character => {
+    const post = resolvePostConfig(settings, character.id);
+    const reply = resolveReplyConfig(settings, character.id);
+    return post.enabled || reply.enabled;
+  });
   if (targets.length === 0) return;
   running = true;
   const actorId = getNoteWallLocalUserId();
@@ -147,27 +187,44 @@ async function tick(): Promise<void> {
   try {
     for (const character of targets) {
       try {
-        const postResult = await postForCharacter(character, actorId);
-        let outputCount = postResult === "posted" ? 1 : 0;
-        outputCount += await replyForCharacter(character, actorId);
-        if (outputCount === 0 && postResult !== "capped") {
-          outputCount += await replyForCharacter(character, actorId);
+        const latest = await fetchNoteWall().catch(() => null);
+        if (!latest) { failedCount += 1; continue; }
+        const live = loadNoteWallTimerSettings();
+        const post = resolvePostConfig(live, character.id);
+        const reply = resolveReplyConfig(live, character.id);
+        let outputCount = 0;
+        if (post.enabled && isDue(live.lastPostAtByCharacter[character.id] ?? live.lastRunAtByCharacter[character.id], post.intervalMinutes)) {
+          const result = await postForCharacter(character, actorId, latest, post.intervalMinutes);
+          if (result === "posted") outputCount += 1;
+          else if (result === "failed") failedCount += 1;
+          stampRun(character.id, "post");
         }
-        if (outputCount > 0) createdCount += outputCount;
-        else failedCount += 1;
+        if (reply.enabled && isDue(live.lastReplyAtByCharacter[character.id] ?? live.lastRunAtByCharacter[character.id], reply.intervalMinutes)) {
+          const count = await replyForCharacter(character, actorId, latest.notes, reply.intervalMinutes);
+          outputCount += count;
+          stampRun(character.id, "reply");
+        }
+        createdCount += outputCount;
       } catch {
         failedCount += 1;
       }
-      const settings = loadNoteWallTimerSettings();
-      saveNoteWallTimerSettings({
-        ...settings,
-        lastRunAtByCharacter: { ...settings.lastRunAtByCharacter, [character.id]: new Date().toISOString() },
-      });
     }
   } finally {
     running = false;
   }
   dispatchUpdated(createdCount, failedCount);
+}
+
+function stampRun(characterId: string, kind: "post" | "reply"): void {
+  const settings = loadNoteWallTimerSettings();
+  const stamp = new Date().toISOString();
+  saveNoteWallTimerSettings({
+    ...settings,
+    lastRunAtByCharacter: { ...settings.lastRunAtByCharacter, [characterId]: stamp },
+    ...(kind === "post"
+      ? { lastPostAtByCharacter: { ...settings.lastPostAtByCharacter, [characterId]: stamp } }
+      : { lastReplyAtByCharacter: { ...settings.lastReplyAtByCharacter, [characterId]: stamp } }),
+  });
 }
 
 /**

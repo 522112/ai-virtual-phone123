@@ -93,13 +93,41 @@ export type NoteWallCommentInput = {
   actorId?: string;
 };
 
+export type NoteWallStyle = {
+  id: string;
+  name: string;
+  note: string;
+  css: string;
+  paper: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NoteWallStyleInput = {
+  name: string;
+  note?: string;
+  css: string;
+  paper?: string;
+  actorId?: string;
+};
+
 export type NoteWallTimerSettings = {
   enabled: boolean;
   intervalMinutes: number;
   characterIds: string[];
   lastRunAtByCharacter: Record<string, string>;
-  /** 按角色独立配置（新）：开关 + 间隔分钟；缺省走全局 enabled/intervalMinutes */
-  perCharacter: Record<string, { enabled: boolean; intervalMinutes: number }>;
+  /** 按角色独立配置（新）：发帖/回帖各自开关 + 间隔分钟；缺省走全局 enabled/intervalMinutes */
+  perCharacter: Record<string, {
+    enabled: boolean;
+    intervalMinutes: number;
+    postEnabled: boolean;
+    postIntervalMinutes: number;
+    replyEnabled: boolean;
+    replyIntervalMinutes: number;
+  }>;
+  lastPostAtByCharacter: Record<string, string>;
+  lastReplyAtByCharacter: Record<string, string>;
 };
 
 export const NOTE_WALL_SIZE_PRESETS: Record<NoteWallSize, { width: number; height: number }> = {
