@@ -1725,6 +1725,14 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
                     },
                   })}
                 />
+                <button
+                  type="button"
+                  className="nw-now-btn"
+                  disabled={busy}
+                  onClick={() => { void onGenerateMany([character.id], "manual"); void onReplyMany([character.id]); }}
+                >
+                  现在就发
+                </button>
               </div>
             );
           })}

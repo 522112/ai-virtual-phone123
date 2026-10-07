@@ -55,6 +55,11 @@ function cleanText(value: unknown, maxLength: number): string {
     .slice(0, maxLength);
 }
 
+function generateNoteWallId(prefix: string): string {
+  const rand = Math.random().toString(36).slice(2, 10);
+  return `${prefix}_${Date.now().toString(36)}_${rand}`;
+}
+
 function cleanMultilineText(value: unknown, maxLength: number): string {
   return cleanText(value, maxLength)
     .replace(/\r\n?/g, "\n")
@@ -229,6 +234,7 @@ export function buildNoteWallInsertPayload(input: NoteWallNoteInput): Record<str
   const summary = cleanText(input.summary, 180);
   const body = cleanText(input.body, 5000);
   return {
+    id: generateNoteWallId("nw"),
     board_id: cleanText(input.boardId ?? NOTE_WALL_BOARD_ID, 80) || NOTE_WALL_BOARD_ID,
     author_type: input.authorType === "character" ? "character" : "user",
     author_id: cleanText(input.authorId, 120) || "unknown",
@@ -301,6 +307,7 @@ export function normalizeNoteWallComment(raw: unknown): NoteWallComment | null {
 
 export function buildNoteWallCommentInsertPayload(input: NoteWallCommentInput): Record<string, unknown> {
   return {
+    id: generateNoteWallId("nwc"),
     note_id: cleanText(input.noteId, 80),
     author_id: cleanText(input.authorId, 120) || "unknown",
     author_name: cleanText(input.authorName, 80) || "匿名",

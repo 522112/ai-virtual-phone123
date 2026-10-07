@@ -5240,3 +5240,8 @@
 .nw-perchar-meta strong { font-size: 13px; color: var(--c-text-title); }
 .nw-perchar-meta em { font-style: normal; font-size: 11px; color: var(--c-text-secondary); }
 .nw-perchar-row .nw-interval-field input { width: 64px; }
+
+.nw-character-picker { max-height: 38vh; overflow-y: auto; }
+.nw-perchar-panel { max-height: 38vh; overflow-y: auto; }
+.nw-now-btn { border: 1px solid rgba(67,54,35,.2); background: #34271d; color: #fffdf7; font-size: 12px; border-radius: 10px; padding: 6px 10px; cursor: pointer; flex-shrink: 0; }
+.nw-now-btn:disabled { opacity: .45; cursor: default; }
