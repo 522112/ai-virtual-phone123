@@ -10,6 +10,7 @@ import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
 import { prepareShortTermContext } from "./short-term-assembler";
 import { parseNoteWallActionContent, parseNoteWallReplyContent, type ParsedNoteWallAction, type ParsedNoteWallReply } from "./notewall-utils";
 import { fetchNoteWallStyles } from "./notewall-client";
+import { builtinStylesAsLibrary } from "./notewall-style-presets";
 import type { NoteWallComment, NoteWallNote, NoteWallStyle } from "./notewall-types";
 
 type ResolvedNoteWallGeneration = {
@@ -173,8 +174,9 @@ export async function generateNoteWallCharacterNote(
   );
 
   const styles = await fetchNoteWallStyles().catch(() => [] as NoteWallStyle[]);
-  const styleCatalog = styles.length > 0
-    ? styles.map(style => `- 样式名「${style.name}」${style.note ? `（${style.note}）` : ""}`).join("\n")
+  const catalog = [...builtinStylesAsLibrary(), ...styles.filter(style => style.createdBy !== "builtin")];
+  const styleCatalog = catalog.length > 0
+    ? catalog.map(style => `- 样式名「${style.name}」${style.note ? `（${style.note}）` : ""}`).join("\n")
     : "";
 
   resolved.messages.push({
@@ -202,10 +204,10 @@ export async function generateNoteWallCharacterNote(
   );
 
   const parsed = parseNoteWallActionContent(raw);
-  // 命中样式库就套用用户上传的 CSS 和纸色
-  if (parsed.styleName && styles.length > 0) {
-    const matched = styles.find(style => style.name === parsed.styleName)
-      ?? styles.find(style => style.name.includes(parsed.styleName) || parsed.styleName.includes(style.name));
+  // 命中样式库就套用 CSS 和纸色（内置 + 用户上传）
+  if (parsed.styleName && catalog.length > 0) {
+    const matched = catalog.find(style => style.name === parsed.styleName)
+      ?? catalog.find(style => style.name.includes(parsed.styleName) || parsed.styleName.includes(style.name));
     if (matched) {
       return {
         ...parsed,

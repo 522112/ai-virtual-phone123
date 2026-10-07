@@ -5262,3 +5262,9 @@
 .nw-style-meta strong { font-size: 13px; color: var(--c-text-title); }
 .nw-style-meta em { font-style: normal; font-size: 11px; color: var(--c-text-secondary); }
 .nw-style-del { border: none; background: none; color: #e8354b; font-size: 12px; cursor: pointer; }
+
+.nw-timer-panel { overflow-y: auto; }
+.nw-timer-panel header { position: sticky; top: 0; z-index: 2; background: #fffdf7; }
+.nw-perchar-head { width: 100%; border: none; background: none; cursor: pointer; text-align: left; padding: 0; }
+.nw-perchar-caret { font-size: 20px; color: var(--c-text-secondary); transition: transform .15s; }
+.nw-perchar-caret.is-open { transform: rotate(90deg); }

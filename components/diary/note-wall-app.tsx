@@ -39,6 +39,7 @@ import {
   type NoteWallStyle,
 } from "@/lib/notewall-types";
 import { characterWallName, findNoteWallPlacement, sanitizeNoteWallCss } from "@/lib/notewall-utils";
+import { builtinStylesAsLibrary } from "@/lib/notewall-style-presets";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 
 type NoteWallAppProps = {
@@ -1343,6 +1344,25 @@ function NoteComposer({ draft, userName, submitting, onChange, onClose, onSubmit
   const previewStyle = styleFromSafeStyle(sanitizeNoteWallCss(draft.rawCss));
   const previewAuthorName = draft.isAnonymous ? "匿名" : draft.signature.trim() || userName;
   const previewDate = formatCardDate(new Date().toISOString());
+  const [libraryStyles, setLibraryStyles] = useState<Array<{ name: string; css: string; paper: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      Promise.resolve(builtinStylesAsLibrary()),
+      fetchNoteWallStyles().catch(() => [] as NoteWallStyle[]),
+    ]).then(([builtin, cloud]) => {
+      if (cancelled) return;
+      const seen = new Set<string>();
+      const merged: Array<{ name: string; css: string; paper: string }> = [];
+      for (const style of [...builtin, ...cloud]) {
+        if (seen.has(style.name)) continue;
+        seen.add(style.name);
+        merged.push({ name: style.name, css: style.css, paper: style.paper });
+      }
+      setLibraryStyles(merged);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="nw-modal-backdrop" role="dialog" aria-modal="true">
@@ -1405,6 +1425,23 @@ function NoteComposer({ draft, userName, submitting, onChange, onClose, onSubmit
             <SegmentedOptions label="纸张" value={draft.paper} options={PAPER_OPTIONS} labels={PAPER_LABELS} onChange={value => onChange({ ...draft, paper: value })} />
             <SegmentedOptions label="胶带" value={draft.tape} options={TAPE_OPTIONS} labels={TAPE_LABELS} onChange={value => onChange({ ...draft, tape: value })} />
             <SegmentedOptions label="字体" value={draft.font} options={FONT_OPTIONS} labels={FONT_LABELS} onChange={value => onChange({ ...draft, font: value })} />
+            <label className="nw-field">
+              <span>美化库样式</span>
+              <select
+                className="ui-select"
+                value=""
+                onChange={event => {
+                  const picked = libraryStyles.find(style => style.name === event.target.value);
+                  if (!picked) return;
+                  onChange({ ...draft, rawCss: picked.css, paper: picked.paper || draft.paper });
+                }}
+              >
+                <option value="">不使用（保持自定义 CSS）</option>
+                {libraryStyles.map(style => (
+                  <option key={style.name} value={style.name}>{style.name}</option>
+                ))}
+              </select>
+            </label>
             <label className="nw-field nw-text-field">
               <span>自定义 CSS</span>
               <AutoResizeTextarea
@@ -1530,7 +1567,7 @@ function NoteDetail({ note, actorId, userName, userAuthorId, onNotice, onClose }
           <button type="button" className="nw-detail-close-btn" onClick={onClose}>关闭</button>
         </header>
         <div className="nw-detail-content">
-          <section className="nw-letter-paper" style={fontStyle(note.font)}>
+          <section className="nw-letter-paper" style={{ ...styleFromSafeStyle(note.safeStyle), ...fontStyle(note.font) }}>
             <h3>{note.summary}</h3>
             <p className="nw-letter-body" style={fontStyle(note.font)}>
               {note.body || note.summary}
@@ -1541,7 +1578,7 @@ function NoteDetail({ note, actorId, userName, userAuthorId, onNotice, onClose }
             </footer>
           </section>
 
-          <section className={`nw-comments ${hasComments ? "has-comments" : "is-empty"}`} aria-label="评论">
+          <section className={`nw-comments ${hasComments ? "has-comments" : "is-empty"}`} style={styleFromSafeStyle(note.safeStyle)} aria-label="评论">
             {hasComments ? (
               <>
                 <div className="nw-comments-header">
@@ -1603,6 +1640,7 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
   const [confirmingPosts, setConfirmingPosts] = useState(false);
   const [confirmingComments, setConfirmingComments] = useState(false);
   const busy = Boolean(generatingCharacterIds.length || replyingCharacterIds.length || confirmingPosts || confirmingComments);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [styles, setStyles] = useState<NoteWallStyle[]>([]);
   const [styleName, setStyleName] = useState("");
   const [styleNote, setStyleNote] = useState("");
@@ -1757,7 +1795,12 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
             };
             return (
               <div key={character.id} className="nw-perchar-row">
-                <div className="nw-perchar-line">
+                <button
+                  type="button"
+                  className="nw-perchar-line nw-perchar-head"
+                  onClick={() => setExpandedId(prev => prev === character.id ? null : character.id)}
+                  aria-expanded={expandedId === character.id}
+                >
                   <span className="nw-character-avatar">
                     {character.avatar ? <img src={character.avatar} alt="" /> : <Bot size={18} />}
                   </span>
@@ -1765,6 +1808,10 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
                     <strong>{characterWallName(character)}</strong>
                     <em>{lastPost ? `上次发帖 ${formatTime(lastPost)}` : "未发过帖"}{lastReply ? ` · 上次回帖 ${formatTime(lastReply)}` : ""}</em>
                   </span>
+                  <span className={`nw-perchar-caret${expandedId === character.id ? " is-open" : ""}`}>›</span>
+                </button>
+                {expandedId === character.id ? (
+                <div className="nw-perchar-line">
                   <button
                     type="button"
                     className="nw-now-btn"
@@ -1774,6 +1821,8 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
                     现在就发
                   </button>
                 </div>
+                ) : null}
+                {expandedId === character.id ? (
                 <div className="nw-perchar-line">
                   <label className="nw-mini-check">
                     <input
@@ -1812,6 +1861,7 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
                     />
                   </label>
                 </div>
+                ) : null}
               </div>
             );
           })}
