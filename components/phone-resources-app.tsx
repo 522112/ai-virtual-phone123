@@ -36,7 +36,7 @@ const RESOURCE_MENU: Omit<FeaturedCardItem, "onClick">[] = [
         label: "资源库",
         desc: "图片视频语音，备注分类给AI用",
         iconColor: CONTENT_APP_ACCENTS.vn,
-        glassIcon: "vn-assets",
+        glassIcon: "resource-library",
     },
 ];
 
