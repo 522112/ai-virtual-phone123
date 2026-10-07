@@ -141,7 +141,7 @@ export async function POST(request: Request) {
     const payload = buildNoteWallCommentInsertPayload({
       ...record,
       actorId: account.id,
-      ...(authorType ? {} : { authorId: account.id, authorName: account.displayName }),
+      ...(authorType ? {} : { authorId: account.id }),
     } as Parameters<typeof buildNoteWallCommentInsertPayload>[0]);
     if (!payload.note_id || !payload.body) {
       return NextResponse.json({ ok: false, error: "missing_comment_body" }, { status: 400 });

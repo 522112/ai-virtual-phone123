@@ -200,7 +200,7 @@ export async function POST(request: Request) {
       ...record,
       boardId: board.id,
       actorId: account.id,
-      ...(authorType ? {} : { authorId: account.id, authorName: account.displayName }),
+      ...(authorType ? {} : { authorId: account.id }),
     } as Parameters<typeof buildNoteWallInsertPayload>[0]);
     const result = await supabaseFetch<unknown[]>(
       `note_wall_notes?${REST_SELECT_NOTES}`,

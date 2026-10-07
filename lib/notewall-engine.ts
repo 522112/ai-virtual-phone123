@@ -68,8 +68,9 @@ function formatNoteWallContext(notes: NoteWallNote[], options: NoteWallContextOp
     `authorName: ${formatNoteWallNoteAuthor(note, options)}`,
     `createdAt: ${formatNoteWallTime(note.createdAt)}`,
     `title: ${clipNoteWallText(note.summary, 120)}`,
-    `body: ${clipNoteWallText(note.body || note.summary, 360)}`,
-  ].join("\n")).join("\n\n");
+    `body: ${clipNoteWallText(note.body || note.summary, 600)}`,
+    note.commentCount > 0 ? `replies: 已有${note.commentCount}条回复，热度不错` : "",
+  ].filter(Boolean).join("\n")).join("\n\n");
 }
 
 function formatNoteWallReplyContext(candidates: NoteWallReplyCandidate[], options: NoteWallContextOptions = {}): string {
@@ -79,19 +80,19 @@ function formatNoteWallReplyContext(candidates: NoteWallReplyCandidate[], option
     const note = candidate.note;
     const visibleComments = candidate.comments
       .filter(comment => !comment.deletedAt)
-      .slice(-8);
+      .slice(-10);
     const lines = [
       `#${index + 1}`,
       `noteId: ${note.id}`,
       `authorName: ${formatNoteWallNoteAuthor(note, options)}`,
       `createdAt: ${formatNoteWallTime(note.createdAt)}`,
       `title: ${clipNoteWallText(note.summary, 120)}`,
-      `body: ${clipNoteWallText(note.body || note.summary, 420)}`,
+      `body: ${clipNoteWallText(note.body || note.summary, 600)}`,
     ];
     if (visibleComments.length > 0) {
       lines.push("comments:");
       for (const comment of visibleComments) {
-        lines.push(`- ${formatNoteWallCommentAuthor(comment, options)} (${formatNoteWallTime(comment.createdAt)}): ${clipNoteWallText(comment.body, 160)}`);
+        lines.push(`- ${formatNoteWallCommentAuthor(comment, options)} (${formatNoteWallTime(comment.createdAt)}): ${clipNoteWallText(comment.body, 200)}`);
       }
     }
     return lines.join("\n");
@@ -173,8 +174,11 @@ export async function generateNoteWallCharacterNote(
   resolved.messages.push({
     role: "system",
     content: [
-      "你是便签墙上的一个真人用户，不是 AI 助手。按你的人设写便签：提问、吐槽、求助、教学、分享、感慨都可以，类型越杂越像真人。",
-      "可以引用你的长期记忆和核心记忆里的事，别写成客服腔；字数随意，长短都行。",
+      "你是便签墙上的一个真人用户，不是 AI 助手。先读墙：看看大家在聊什么，再决定你写什么，别自说自话。",
+      "按你的人设写便签，类型越杂越像真人：提问求助、吐槽发泄、经验教学、日常分享、深夜感慨、晒单炫耀都可以轮着来，别每次都一个味。",
+      "写真事不写空话：带具体细节（时间、地点、数字、名字），有情绪起伏，允许小瑕疵和口语，长短随意，别写成小作文模板。",
+      "翻翻你的长期记忆和核心记忆，有相关的事就拿来写，写出连续剧感，别每次都从零开始报到。",
+      `现在是${formatNoteWallTime(new Date().toISOString())}，按这个时间点写（深夜就别写大中午的太阳）。`,
       "署名用你的网名。",
       "墙上有匿名的便签和评论：你认不出匿名的是谁，不许猜测身份、不许点破、不许拿现实细节去对号入座。",
       extraContext ? `此刻的由头：${extraContext}` : "",
@@ -207,8 +211,9 @@ export async function generateNoteWallCharacterReplies(
   resolved.messages.push({
     role: "system",
     content: [
-      "你是便签墙上的真人用户，按人设回帖：至少回一条，感兴趣的多回几条也行；只回你真的会有话说的帖子。",
-      "可以引用你的记忆；署名用你的网名。",
+      "你是便签墙上的真人用户，按人设回帖：至少回一条，只回你真的会有话说的帖子，感兴趣的多回几条也行。",
+      "回帖要接住对方的具体细节（复述+回应+追问/支招），别写放之四海皆准的片汤话；可以翻你的记忆找共鸣。",
+      "语气按你的人设来，熟人多损两句也行，别端着；署名用你的网名。",
       "匿名的帖子和评论你认不出是谁，不许猜测身份、不许点破。",
     ].join("\n"),
   });
