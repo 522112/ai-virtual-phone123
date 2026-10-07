@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useSyncExternalStore } from "react";
 import { loadChatContacts, loadChatSessions, ChatContact, createOrGetSession, ChatSession, addChatContact, pushChatMessage, loadChatMessages } from "@/lib/chat-storage";
 import { getActiveSubId } from "./sub-account-sheet";
+import { ensureSubSession } from "@/lib/sub-friend-engine";
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import { PENDING_REPLY_PREFIX } from "@/lib/friend-request-engine";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
@@ -305,15 +306,11 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                                                 const subId = getActiveSubId();
                                                 if (subId) {
                                                     // 小号模式：只进该小号的独立会话
-                                                    void import("@/lib/sub-friend-engine").then(m => {
-                                                        try {
-                                                            onSelectSession(m.ensureSubSession(char.id, subId));
-                                                        } catch (error) {
-                                                            console.warn("[Contacts] Open sub session failed:", error);
-                                                        }
-                                                    }).catch(error => {
+                                                    try {
+                                                        onSelectSession(ensureSubSession(char.id, subId));
+                                                    } catch (error) {
                                                         console.warn("[Contacts] Open sub session failed:", error);
-                                                    });
+                                                    }
                                                     return;
                                                 }
                                                 const sess = createOrGetSession(char.id);

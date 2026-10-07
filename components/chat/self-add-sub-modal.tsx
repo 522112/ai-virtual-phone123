@@ -2,6 +2,7 @@ import { useState } from "react";
 import { kvGet } from "@/lib/kv-db";
 import { pushChatMessage } from "@/lib/chat-storage";
 import { getUserSubAccount } from "@/lib/sub-accounts";
+import { ensureSubSession } from "@/lib/sub-friend-engine";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { SubAccountSheet } from "./sub-account-sheet";
 
@@ -29,9 +30,9 @@ export function SelfAddSubModal({ characterId, characterName, characterAvatar, o
     }
     setBusy(true);
     setResult("");
-    void import("@/lib/sub-friend-engine").then(m => {
+    (async () => {
       try {
-        const session = m.ensureSubSession(characterId, pickedSubId);
+        const session = ensureSubSession(characterId, pickedSubId);
         pushChatMessage({
           sessionId: session.id,
           role: "system",
@@ -49,10 +50,7 @@ export function SelfAddSubModal({ characterId, characterName, characterAvatar, o
       } finally {
         setBusy(false);
       }
-    }).catch(error => {
-      setResult(error instanceof Error ? error.message : "加上失败，再试一次");
-      setBusy(false);
-    });
+    })();
   };
 
   return (

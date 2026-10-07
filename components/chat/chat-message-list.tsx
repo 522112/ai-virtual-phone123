@@ -29,6 +29,7 @@ import { SubAccountSheet, ACTIVE_SUB_CHANGED_EVENT } from "./sub-account-sheet";
 import { GodViewSheet } from "./god-view-sheet";
 import { UserBusinessCard } from "./user-business-card";
 import { getUserSubAccount, loadUserSubAccounts, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
+import { ensureSubSession, requestSubFriend } from "@/lib/sub-friend-engine";
 import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import {
     getMascotLastPreview,
@@ -657,11 +658,11 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                             }
                                             setSubAddBusy(true);
                                             setSubAddResult("");
-                                            void import("@/lib/sub-friend-engine").then(async m => {
+                                            (async () => {
                                                 try {
-                                                    const result = await m.requestSubFriend(activeSubId, target.wechatID || target.id, verify);
+                                                    const result = await requestSubFriend(activeSubId, target.wechatID || target.id, verify);
                                                     if (result.accepted) {
-                                                        const session = m.ensureSubSession(target.id, activeSubId);
+                                                        const session = ensureSubSession(target.id, activeSubId);
                                                         setSessions(loadChatSessions());
                                                         setIsSearchModalOpen(false);
                                                         setSearchQuery("");
@@ -673,11 +674,11 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                                         setSubAddResult(`对方拒绝了：${result.reply}`);
                                                     }
                                                 } catch (error) {
-                                                    setSubAddResult(error instanceof Error ? error.message : "发送失败");
+                                                    setSubAddResult(error instanceof Error ? error.message : "发送失败，点发送再试一次");
                                                 } finally {
                                                     setSubAddBusy(false);
                                                 }
-                                            });
+                                            })();
                                             return;
                                         }
                                         // 1. Add to contacts
