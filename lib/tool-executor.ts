@@ -2453,12 +2453,6 @@ async function executeRoleSideChatTool(call: ToolCall, context?: ToolExecutionCo
         return fail(error instanceof Error ? error.message : "私聊生成失败");
     }
 }
-    const source = `${title} ${url.split(/[?#]/)[0]}`.toLowerCase();
-    if (/\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(source)) return "image";
-    if (/\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(source)) return "audio";
-    if (/\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(source)) return "video";
-    return "file";
-}
 
 /**
  * 角色转发聊天记录：把当前会话最近 N 条打包发给另一个角色（用户多选转发同款）。
