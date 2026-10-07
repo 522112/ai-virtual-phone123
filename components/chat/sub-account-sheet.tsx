@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import {
   createUserSubAccount,
@@ -39,20 +39,19 @@ function dispatchSubChanged(subId: string | null): void {
 /** 聊天主页长按：只切当前面具的小号（+新增）。面具切换去“我的”页面长按头像。 */
 export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClose, onNotice }: Props) {
   const [maskName, setMaskName] = useState("");
+  const [maskAvatar, setMaskAvatar] = useState<string | null>(null);
+  const [maskBio, setMaskBio] = useState("");
   const [subs, setSubs] = useState<UserSubAccount[]>([]);
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const [name, setName] = useState("");
   const [persona, setPersona] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
-  const [friendingId, setFriendingId] = useState<string | null>(null);
-  const [targetWechat, setTargetWechat] = useState("");
-  const [verifyMsg, setVerifyMsg] = useState("");
-  const [friendBusy, setFriendBusy] = useState(false);
-  const [friendResult, setFriendResult] = useState("");
 
   const refresh = () => {
     const mask = loadUserIdentities().find(i => i.id === activeMaskId);
     setMaskName(mask?.name || "当前面具");
+    setMaskAvatar(mask?.avatarUrl || null);
+    setMaskBio(mask?.bio || "");
     setSubs(loadUserSubAccounts(activeMaskId));
   };
 
@@ -114,54 +113,64 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
     }
   };
 
+  const cardStyle = (active: boolean): React.CSSProperties => ({
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
+    width: "100%",
+    textAlign: "left",
+    background: "var(--c-card, #fff)",
+    border: active ? "2px solid #07c160" : "1px solid rgba(0,0,0,0.08)",
+    borderRadius: 16,
+    padding: "14px 14px",
+    cursor: "pointer",
+    boxShadow: active ? "0 4px 16px rgba(7,193,96,0.18)" : "0 2px 8px rgba(0,0,0,0.06)",
+  });
+  const avatarStyle: React.CSSProperties = {
+    width: 52, height: 52, borderRadius: 12, overflow: "hidden", flexShrink: 0,
+    background: "rgba(0,0,0,.06)", display: "grid", placeItems: "center",
+  };
+
   return (
     <div className="journal-sheet-overlay" onClick={onClose}>
-      <div className="journal-sheet" onClick={e => e.stopPropagation()}>
-        <div className="journal-sheet-title">小号 · {maskName}</div>
-        <div className="journal-clip-list">
-          <small className="menu-desc">切到小号就是一个新号：聊天/好友/朋友圈从零开始，角色只认识这个号</small>
-          <button
-            type="button"
-            className="journal-clip-row"
-            style={!activeSubId ? { border: "1px solid var(--c-accent)" } : undefined}
-            onClick={() => pick(null)}
-          >
-            <small>主号</small>
-            <span>用本面具身份聊天</span>
+      <div className="journal-sheet" onClick={e => e.stopPropagation()} style={{ maxHeight: "82vh", overflowY: "auto" }}>
+        <div className="journal-sheet-title">切换身份 · {maskName}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <small className="menu-desc">小号就是一个新号：聊天/好友/朋友圈从零开始，对方只认识这个号</small>
+          <button type="button" style={cardStyle(!activeSubId)} onClick={() => pick(null)}>
+            <span style={avatarStyle}>
+              {maskAvatar ? <img src={maskAvatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ChatFallbackAvatar />}
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <strong style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 15 }}>
+                {maskName}
+                {!activeSubId ? <em style={{ fontStyle: "normal", fontSize: 10, color: "#fff", background: "#07c160", borderRadius: 8, padding: "1px 7px" }}>使用中</em> : null}
+              </strong>
+              <small className="menu-desc" style={{ display: "block", marginTop: 2 }}>主号 · {maskBio || "用本面具身份聊天"}</small>
+            </span>
           </button>
           {subs.map(sub => (
-            <div key={sub.id}>
-              <div className="journal-clip-row" style={sub.id === activeSubId ? { border: "1px solid var(--c-accent)" } : undefined}>
-                <button
-                  type="button"
-                  style={{ flex: 1, display: "flex", gap: 8, alignItems: "center", background: "none", border: 0, cursor: "pointer", textAlign: "left", padding: 0 }}
-                  onClick={() => pick(sub.id)}
-                >
-                  <span style={{ width: 30, height: 30, borderRadius: 15, overflow: "hidden", flexShrink: 0, background: "rgba(0,0,0,.06)", display: "grid", placeItems: "center" }}>
+            <div key={sub.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+                <button type="button" style={{ ...cardStyle(sub.id === activeSubId), flex: 1 }} onClick={() => pick(sub.id)}>
+                  <span style={avatarStyle}>
                     {sub.avatar ? <img src={sub.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ChatFallbackAvatar />}
                   </span>
-                  <span style={{ flex: 1 }}>
-                    <strong style={{ display: "block", fontSize: 13 }}>{sub.name}</strong>
-                    <small className="menu-desc">{sub.persona ? sub.persona.slice(0, 24) : "没设人设：对方在聊天中认识你"}</small>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <strong style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 15 }}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub.name}</span>
+                      {sub.id === activeSubId ? <em style={{ fontStyle: "normal", fontSize: 10, color: "#fff", background: "#07c160", borderRadius: 8, padding: "1px 7px", flexShrink: 0 }}>使用中</em> : null}
+                    </strong>
+                    <small className="menu-desc" style={{ display: "block", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {sub.persona ? sub.persona.slice(0, 30) : "没设人设：对方在聊天中认识你"}
+                    </small>
                   </span>
                 </button>
-                <button type="button" onClick={() => { setFriendingId(friendingId === sub.id ? null : sub.id); setFriendResult(""); }} style={{ border: 0, background: "none", color: "var(--c-text-secondary)", fontSize: 12, cursor: "pointer" }}>加好友</button>
-                <button type="button" onClick={() => openEditor(sub)} style={{ border: 0, background: "none", color: "var(--c-text-secondary)", fontSize: 12, cursor: "pointer" }}>编辑</button>
-                <button type="button" onClick={() => { deleteUserSubAccount(sub.id); if (activeSubId === sub.id) pick(null); }} style={{ border: 0, background: "none", color: "#e8354b", fontSize: 12, cursor: "pointer" }}>删除</button>
+                <span style={{ display: "flex", flexDirection: "column", gap: 4, justifyContent: "center" }}>
+                  <button type="button" onClick={() => openEditor(sub)} style={{ border: "1px solid rgba(0,0,0,0.1)", background: "var(--c-card, #fff)", borderRadius: 10, fontSize: 11, padding: "6px 8px", cursor: "pointer" }}>编辑</button>
+                  <button type="button" onClick={() => { deleteUserSubAccount(sub.id); if (activeSubId === sub.id) pick(null); }} style={{ border: 0, background: "none", color: "#e8354b", fontSize: 11, cursor: "pointer" }}>删除</button>
+                </span>
               </div>
-              {friendingId === sub.id ? (
-                <div className="g-card" style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
-                  <input value={targetWechat} onChange={e => setTargetWechat(e.target.value)} placeholder="对方微信号" className="ui-input" />
-                  <input value={verifyMsg} maxLength={60} onChange={e => setVerifyMsg(e.target.value)} placeholder="验证消息（对方按人设决定过不过）" className="ui-input" />
-                  {friendResult ? <small className="menu-desc">{friendResult}</small> : null}
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button type="button" disabled={friendBusy} onClick={() => void sendFriendRequest(sub.id)} className="ui-btn ui-btn-success">
-                      {friendBusy ? "等待对方决定…" : "发送好友申请"}
-                    </button>
-                    <button type="button" onClick={() => setFriendingId(null)} style={{ border: 0, background: "none", fontSize: 12, cursor: "pointer" }}>取消</button>
-                  </div>
-                </div>
-              ) : null}
             </div>
           ))}
           {editingId !== null ? (
@@ -183,7 +192,7 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
                   />
                 </label>
                 {avatar ? (
-                  <span style={{ width: 30, height: 30, borderRadius: 15, overflow: "hidden" }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 8, overflow: "hidden" }}>
                     <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   </span>
                 ) : null}
@@ -193,9 +202,8 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
               </div>
             </div>
           ) : (
-            <button type="button" className="journal-clip-row" onClick={() => openEditor(null)}>
-              <small>＋</small>
-              <span>开个新小号（像 QQ 新号）</span>
+            <button type="button" style={{ ...cardStyle(false), borderStyle: "dashed", justifyContent: "center", color: "var(--c-text-secondary)" }} onClick={() => openEditor(null)}>
+              ＋ 开个新小号（像 QQ 新号）
             </button>
           )}
         </div>

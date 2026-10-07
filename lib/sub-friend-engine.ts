@@ -11,6 +11,27 @@ import { getUserSubAccount } from "./sub-accounts";
 import { loadApiConfigs } from "./settings-storage";
 
 /**
+ * 小号打开某角色聊天：只找该小号的会话，没有就新建——绝不复用主号会话。
+ */
+export function ensureSubSession(characterId: string, subId: string): ChatSession {
+  addChatContact(characterId);
+  const sessions = loadChatSessions();
+  const existing = sessions.find(s => s.contactId === characterId && s.subId === subId && !s.isGroup);
+  if (existing) return existing;
+  const created: ChatSession = {
+    id: `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    contactId: characterId,
+    subId,
+    unreadCount: 0,
+    updatedAt: new Date().toISOString(),
+    isPinned: false,
+  } as ChatSession;
+  sessions.unshift(created);
+  saveChatSessions(sessions);
+  return created;
+}
+
+/**
  * 小号加角色微信：按微信号找到角色，角色按人设+验证消息决定是否通过。
  * 角色只看到小号资料，绝不知道是用户本人。
  */

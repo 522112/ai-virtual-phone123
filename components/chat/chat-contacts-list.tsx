@@ -302,6 +302,14 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                                         <div
                                             key={c.id}
                                             onClick={() => {
+                                                const subId = getActiveSubId();
+                                                if (subId) {
+                                                    // 小号模式：只进该小号的独立会话
+                                                    void import("@/lib/sub-friend-engine").then(m => {
+                                                        onSelectSession(m.ensureSubSession(char.id, subId));
+                                                    });
+                                                    return;
+                                                }
                                                 const sess = createOrGetSession(char.id);
                                                 onSelectSession(sess);
                                             }}

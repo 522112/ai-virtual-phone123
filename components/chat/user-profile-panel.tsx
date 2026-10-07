@@ -7,7 +7,9 @@ import {
     saveFollowUpConfig,
     getDefaultFollowUpConfig,
     resolveUserIdentity,
+    loadUserIdentities,
 } from "@/lib/settings-storage";
+import { kvGet } from "@/lib/kv-db";
 import { loadChatAppSettings, saveChatAppSettings } from "@/lib/chat-storage";
 import type { UserIdentity } from "@/components/settings/user-identity";
 import { getApiLogs, clearApiLogs, type DebugInfo } from "@/lib/chat-engine";
@@ -176,7 +178,17 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     });
 
     useEffect(() => {
-        setIdentity(resolveUserIdentity());
+        const refresh = () => {
+            try {
+                const maskId = kvGet("active_mask_id") || "";
+                const list = loadUserIdentities();
+                const mask = (maskId && list.find(i => i.id === maskId)) || null;
+                setIdentity(mask || resolveUserIdentity());
+            } catch {
+                setIdentity(resolveUserIdentity());
+            }
+        };
+        refresh();
         const settings = loadChatAppSettings();
         const browserGranted = isBrowserNotificationGranted();
         setNotifEnabled(settings.browserNotificationsEnabled === true && browserGranted);
@@ -201,6 +213,8 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                 visitors: 1234 + contactsCount * 17 + userPostsCount * 43 // simple deterministic mock equation
             });
         } catch (e) { }
+        window.addEventListener("active-mask-changed", refresh);
+        return () => window.removeEventListener("active-mask-changed", refresh);
     }, []);
 
     useEffect(() => {
