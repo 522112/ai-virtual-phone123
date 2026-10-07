@@ -7,7 +7,9 @@ import { loadApiConfigs } from "./settings-storage";
  */
 export async function describeResourceImage(dataUrl: string): Promise<string> {
   const configs = loadApiConfigs();
-  const config = configs.find(c => !c.disabled) || configs[0];
+  const config = configs.find(c => c.enableImageRecognition && c.apiKey)
+    || configs.find(c => c.apiKey)
+    || configs[0];
   if (!config) throw new Error("还没有可用的 API 配置，先去设置里配一个");
   const raw = await sendLLMRequest(
     config,
