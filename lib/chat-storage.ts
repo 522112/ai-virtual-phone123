@@ -1221,7 +1221,6 @@ export function createGroupSession(groupName: string, participantIds: string[], 
     const sessions = loadChatSessions();
     const isSpectator = options?.isSpectator === true;
     const maskId = options?.maskId || undefined;
-    const maskId = options?.maskId || (typeof window !== "undefined" ? (localStorage.getItem("active_mask_id") || "") : "") || undefined;
     const newSession: ChatSession = {
         id: `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         contactId: `group_${Date.now()}`, // synthetic contactId for group
