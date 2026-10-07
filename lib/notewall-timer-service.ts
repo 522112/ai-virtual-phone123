@@ -193,7 +193,8 @@ async function tick(): Promise<void> {
         const post = resolvePostConfig(live, character.id);
         const reply = resolveReplyConfig(live, character.id);
         let outputCount = 0;
-        if (post.enabled && isDue(live.lastPostAtByCharacter[character.id] ?? live.lastRunAtByCharacter[character.id], post.intervalMinutes)) {
+        // 兴趣门控：发帖不是必须的，约六成概率才写；回帖看模型自己有没有话说
+        if (post.enabled && Math.random() < 0.6 && isDue(live.lastPostAtByCharacter[character.id] ?? live.lastRunAtByCharacter[character.id], post.intervalMinutes)) {
           const result = await postForCharacter(character, actorId, latest, post.intervalMinutes);
           if (result === "posted") outputCount += 1;
           else if (result === "failed") failedCount += 1;

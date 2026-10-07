@@ -147,6 +147,62 @@ type NoteWallStyleMutationResponse = {
   error?: string;
 };
 
+export type NoteWallFontAssetInput = {
+  id: string;
+  name: string;
+  note: string;
+  url: string;
+  format: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function fetchNoteWallFonts(): Promise<NoteWallFontAssetInput[]> {
+  const data = await fetchJson<{ ok: boolean; fonts?: NoteWallFontAssetInput[]; error?: string }>(
+    "/api/notewall/fonts",
+    { cache: "no-store" },
+  );
+  return (data.fonts ?? []).filter(item => item && typeof item.id === "string" && typeof item.url === "string");
+}
+
+export async function createNoteWallFont(form: FormData): Promise<NoteWallFontAssetInput> {
+  const data = await fetchJson<{ ok: boolean; font?: NoteWallFontAssetInput; error?: string }>(
+    "/api/notewall/fonts",
+    { method: "POST", body: form },
+  );
+  if (!data.font) throw new Error(data.error || "字体上传失败");
+  return data.font;
+}
+
+export async function deleteNoteWallFont(id: string): Promise<void> {
+  await fetchJson<{ ok: boolean; error?: string }>(
+    `/api/notewall/fonts?id=${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+}
+
+const injectedNoteWallFontIds = new Set<string>();
+
+/** 全 App 注入云端字体（去重），便签/评论/写帖都能用 */
+export function ensureNoteWallFonts(
+  fonts: Array<{ id: string; url: string; format: string }>,
+): void {
+  if (typeof document === "undefined") return;
+  const fresh = fonts.filter(font => font?.id && font?.url && !injectedNoteWallFontIds.has(font.id));
+  if (fresh.length === 0) return;
+  const css = fresh.map(font => {
+    const family = `NoteWallCustom-${font.id}`;
+    const format = font.format === "ttf" ? "truetype" : font.format === "otf" ? "opentype" : font.format;
+    return `@font-face{font-family:"${family}";src:url("${font.url}") format("${format}");font-display:swap;}`;
+  }).join("\n");
+  const el = document.createElement("style");
+  el.setAttribute("data-notewall-fonts", "1");
+  el.textContent = css;
+  document.head.appendChild(el);
+  for (const font of fresh) injectedNoteWallFontIds.add(font.id);
+}
+
 export async function fetchNoteWallStyles(): Promise<NoteWallStyle[]> {
   const data = await fetchJson<NoteWallStylesResponse>("/api/notewall/styles", { cache: "no-store" });
   return data.styles ?? [];

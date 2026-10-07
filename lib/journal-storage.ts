@@ -640,12 +640,12 @@ function doodleBySubject(subject: string, color: string, skill: JournalDrawingSk
 }
 
 export function createCharacterDoodleStrokes(
-  stamp: JournalStampKind,
+  stamp: JournalStampKind | undefined,
   options?: { color?: string; skill?: JournalDrawingSkill; seed?: string; hint?: string } | string,
 ): JournalStroke[] {
   const color = typeof options === "string" ? options : (options?.color || "#8a5a4a");
   const skill = typeof options === "string" ? "ok" : (options?.skill || "ok");
-  const seed = typeof options === "string" ? stamp : (options?.seed || stamp);
+  const seed = typeof options === "string" ? (stamp || "doodle") : (options?.seed || stamp || "doodle");
   const hint = typeof options === "string" ? "" : (options?.hint || "");
   let strokes: JournalStroke[];
   if (hint.trim()) {

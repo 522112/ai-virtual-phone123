@@ -167,9 +167,64 @@ export function normalizeNoteWallSize(size: unknown): NoteWallSize {
 }
 
 export function normalizeNoteWallFont(font: unknown): string {
-  const value = cleanText(font ?? "default", 32) || "default";
+  const value = cleanText(font ?? "default", 64) || "default";
   if (NOTE_WALL_FONT_IDS.has(value)) return value;
+  // 用户上传字体：custom-<id> 原样通过（只允许安全字符）
+  if (/^custom-[A-Za-z0-9_-]{1,48}$/.test(value)) return value;
   return LEGACY_FONT_MAP[value] ?? "default";
+}
+
+export function noteWallFontFamilyName(fontId: string): string {
+  return `NoteWallCustom-${fontId.replace(/^custom-/, "")}`;
+}
+
+/** 字体 id → 便签 font 字段值 */
+export function noteWallFontFieldValue(fontAssetId: string): string {
+  return `custom-${fontAssetId}`;
+}
+
+const NOTE_WALL_FONT_EXTENSIONS: Record<string, string> = {
+  woff2: "font/woff2",
+  woff: "font/woff",
+  ttf: "font/ttf",
+  otf: "font/otf",
+};
+
+/** 校验上传的字体文件，返回扩展名与 MIME */
+export function normalizeNoteWallFontFile(file: { name?: string; type?: string }): { ext: string; mime: string } | null {
+  const lowerName = String(file?.name ?? "").toLowerCase();
+  const ext = lowerName.includes(".") ? lowerName.split(".").pop() ?? "" : "";
+  const mime = NOTE_WALL_FONT_EXTENSIONS[ext];
+  if (!mime) return null;
+  return { ext, mime };
+}
+
+export type NoteWallFontAsset = {
+  id: string;
+  name: string;
+  note: string;
+  url: string;
+  format: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function normalizeNoteWallFontAsset(record: unknown): NoteWallFontAsset | null {
+  if (!record || typeof record !== "object") return null;
+  const item = record as Record<string, unknown>;
+  if (typeof item.id !== "string" || !item.id) return null;
+  if (typeof item.url !== "string" || !/^https?:\/\//.test(item.url)) return null;
+  return {
+    id: item.id,
+    name: cleanText(item.name, 40) || "未命名字体",
+    note: cleanText(item.note ?? "", 500),
+    url: item.url,
+    format: cleanText(item.format ?? "", 12),
+    createdBy: typeof item.created_by === "string" ? item.created_by : undefined,
+    createdAt: typeof item.created_at === "string" ? item.created_at : new Date().toISOString(),
+    updatedAt: typeof item.updated_at === "string" ? item.updated_at : new Date().toISOString(),
+  };
 }
 
 export function normalizeNoteWallPaper(paper: unknown): string {

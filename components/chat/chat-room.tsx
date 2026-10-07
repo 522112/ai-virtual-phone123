@@ -3239,17 +3239,25 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             throwIfGenerationStopped(options);
         }
         // 聊天有感：小概率让角色把此刻的感受写成一张便签（只给开了便签自动的角色，一小时最多三条）
+        // 极小概率让角色主动开一页手账并邀请用户一起完成（只给有手账册子的角色）
         try {
-            if (Math.random() < 0.2 && character?.id && !session.isGroup) {
+            if (!session.isGroup && character?.id) {
+                const roll = Math.random();
                 const excerpt = messageDrafts
                     .map(item => item.draft.content)
                     .filter(text => text && !text.trim().startsWith("["))
                     .join("\n")
                     .slice(0, 300);
                 if (excerpt.trim()) {
-                    void import("@/lib/notewall-timer-service")
-                        .then(m => m.maybePostChatMomentNote(character.id, excerpt))
-                        .catch(() => {});
+                    if (roll < 0.2) {
+                        void import("@/lib/notewall-timer-service")
+                            .then(m => m.maybePostChatMomentNote(character.id, excerpt))
+                            .catch(() => {});
+                    } else if (roll < 0.28) {
+                        void import("@/lib/journal-engine")
+                            .then(m => m.maybeInviteJournalTogether(character.id, excerpt))
+                            .catch(() => {});
+                    }
                 }
             }
         } catch { /* ignore */ }

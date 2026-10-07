@@ -20,10 +20,14 @@ import { JOURNAL_STAMPS, type JournalAnnotation, type JournalBlock, type Journal
 import type { JournalBook, JournalPage, JournalSide } from "./journal-types";
 import {
   addJournalAnnotation,
+  createJournalBlockId,
+  createJournalPage,
   formatJournalBookPlainText,
   formatJournalPagePlainText,
   formatJournalSidePlainText,
   inferJournalDrawingSkill,
+  loadJournalBooks,
+  updateJournalPage,
 } from "./journal-storage";
 
 type ResolvedJournalGeneration = {
@@ -118,6 +122,9 @@ function drawingSkillHint(skill: JournalDrawingSkill): string {
 export type JournalCharacterPageDraft = {
   text?: string;
   fontSize?: number;
+  textX?: number;
+  textY?: number;
+  textRotation?: number;
   stamp?: JournalStampKind;
   stampNote?: string;
   stampX?: number;
@@ -135,10 +142,16 @@ function parseCharacterPageDraft(raw: string, skill: JournalDrawingSkill): Journ
   const fontSize = Number(parsed.fontSize);
   const stampX = Number(parsed.stampX);
   const stampY = Number(parsed.stampY);
+  const textX = Number(parsed.textX);
+  const textY = Number(parsed.textY);
+  const textRotation = Number(parsed.textRotation ?? parsed.rotation);
   const doodleHint = String(parsed.doodleHint ?? parsed.subject ?? "").trim();
   return {
     text: text ? text.slice(0, 180) : undefined,
     fontSize: Number.isFinite(fontSize) ? Math.min(28, Math.max(11, fontSize)) : undefined,
+    textX: Number.isFinite(textX) ? Math.min(88, Math.max(0, textX)) : undefined,
+    textY: Number.isFinite(textY) ? Math.min(88, Math.max(0, textY)) : undefined,
+    textRotation: Number.isFinite(textRotation) ? Math.min(30, Math.max(-30, textRotation)) : undefined,
     stamp,
     stampNote: String(parsed.stampNote ?? "").trim().slice(0, 16) || undefined,
     stampX: Number.isFinite(stampX) ? Math.min(80, Math.max(0, stampX)) : undefined,
@@ -275,7 +288,8 @@ export async function generateJournalCharacterPage(input: {
       "画画时请联想具体事物，尽量画得像一点，而不是随便两笔符号。",
       drawingSkillHint(skill),
       modeHint,
-      "只输出 JSON：{\"text\":\"这一页放得下的几句，也可空\",\"fontSize\":12|14|17,\"stamp\":\"heart|star|flower|arrow|underline|tape|none\",\"stampNote\":\"不超过16字\",\"doodle\":true|false,\"doodleHint\":\"你想画的东西，一两个词，如麻辣烫、雨天、小猫\"}",
+      "排版你自己定：文字放哪、歪一点多少度、印章贴哪，别每次都堆在左上角。画什么、写什么、用什么词都按你的人设和心情来，别套模板。",
+      "只输出 JSON：{\"text\":\"这一页放得下的几句，也可空\",\"fontSize\":12|14|17,\"textX\":0-88,\"textY\":0-88,\"textRotation\":-30到30,\"stamp\":\"heart|star|flower|arrow|underline|tape|none\",\"stampNote\":\"不超过16字\",\"stampX\":0-80,\"stampY\":0-80,\"doodle\":true|false,\"doodleHint\":\"你想画的东西，一两个词，如麻辣烫、雨天、小猫\"}",
       "",
       "这一页现有的内容：",
       formatJournalPagePlainText(input.page, input.annotations),
@@ -297,8 +311,6 @@ export async function generateJournalCharacterPage(input: {
   if (!draft.text && !draft.stamp && !draft.doodle) {
     throw new ChatEngineError("角色没有写下内容。");
   }
-  if (mode === "doodle" && !draft.stamp) draft.stamp = "heart";
-  if (mode === "doodle") draft.doodle = true;
   return draft;
 }
 
@@ -310,6 +322,72 @@ export async function generateJournalCharacterWrite(input: {
   const draft = await generateJournalCharacterPage({ ...input, mode: "together" });
   if (draft.text) return draft.text;
   throw new ChatEngineError("角色没有写下内容。");
+}
+
+/**
+ * 角色主动开手账：挑最近一本和 TA 有关的册子，另起一页写下此刻感受，
+ * 然后发全局通知邀请用户一起完成。没有册子就跳过（不擅自建册）。
+ */
+export async function maybeInviteJournalTogether(
+  characterId: string,
+  chatExcerpt: string,
+): Promise<boolean> {
+  try {
+    if (!characterId) return false;
+    void chatExcerpt;
+    const books = loadJournalBooks().filter(book => book.characterId === characterId);
+    if (books.length === 0) return false;
+    const book = books[0];
+    const page = createJournalPage(book.id);
+    if (!page) return false;
+    const draft = await generateJournalCharacterPage({
+      characterId,
+      book,
+      page,
+      mode: "together",
+    });
+    const blocks: JournalBlock[] = [];
+    if (draft.text?.trim()) {
+      blocks.push({
+        id: createJournalBlockId(),
+        type: "text",
+        text: draft.text.trim(),
+        author: "character",
+        characterId,
+        side: "left",
+        fontSize: draft.fontSize,
+        fontFamily: "hand",
+        x: draft.textX ?? 10,
+        y: draft.textY ?? 14,
+        rotation: draft.textRotation,
+        boxW: 72,
+        boxH: 24,
+      });
+    }
+    if (draft.stamp) {
+      blocks.push({
+        id: createJournalBlockId(),
+        type: "stamp",
+        stamp: draft.stamp,
+        note: draft.stampNote,
+        author: "character",
+        characterId,
+        side: "left",
+        x: draft.stampX ?? 62,
+        y: draft.stampY ?? 10,
+      });
+    }
+    if (blocks.length === 0) return false;
+    updateJournalPage(book.id, page.id, { blocks });
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("global-notice", {
+        detail: `TA 在「${book.title}」里开了新的一页，邀请你一起完成手账`,
+      }));
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function generateJournalCharacterStamp(input: {

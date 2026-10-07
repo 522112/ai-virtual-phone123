@@ -208,7 +208,10 @@ export function JournalBlockView({
         top: `${block.y}%`,
         width: boxW ? `${boxW}%` : undefined,
         height: boxH ? `${boxH}%` : undefined,
-        transform: block.type === "text" || block.type === "clip" ? undefined : `scale(${scale})`,
+        transform: [
+          block.type === "text" || block.type === "clip" ? "" : `scale(${scale})`,
+          typeof block.rotation === "number" && block.rotation !== 0 ? `rotate(${block.rotation}deg)` : "",
+        ].filter(Boolean).join(" ") || undefined,
         fontFamily: journalFontCss(block.fontFamily),
       } : { fontFamily: journalFontCss(block.fontFamily) }}
       onPointerDown={beginDrag}
@@ -582,6 +585,7 @@ export function JournalEditRail({
   onToggle,
   onAddText,
   onAddImage,
+  onAddResourceImage,
   onAddDoodle,
   onDrawOnPage,
   onAddStamp,
@@ -605,6 +609,7 @@ export function JournalEditRail({
   onToggle: () => void;
   onAddText: () => void;
   onAddImage: () => void;
+  onAddResourceImage?: () => void;
   onAddDoodle: () => void;
   onDrawOnPage: () => void;
   onAddStamp: (stamp: JournalStampKind) => void;
@@ -634,6 +639,7 @@ export function JournalEditRail({
             <small>写在这一页</small>
             <button type="button" onClick={onAddText}>文字</button>
             <button type="button" onClick={onAddImage}>图片</button>
+            <button type="button" onClick={onAddResourceImage}>资源图</button>
             <button type="button" onClick={onAddDoodle}>涂鸦</button>
             <button type="button" onClick={onDrawOnPage}>页上画</button>
           </div>

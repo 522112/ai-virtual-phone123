@@ -9,6 +9,7 @@ import { JournalDoodleSheet, JournalEditRail, JournalFlipPreview, JournalOpenBoo
 import { loadCharacters } from "@/lib/character-storage";
 import type { Character } from "@/lib/character-types";
 import { collectJournalClips } from "@/lib/journal-clips";
+import { RESOURCE_LIBRARY_SHARED_SCOPE, listResources } from "@/lib/resource-library";
 import {
   generateJournalAnnotation,
   generateJournalCharacterPage,
@@ -85,8 +86,47 @@ function CharacterPicker({
   );
 }
 
-export function JournalApp({ onBack, onNotice }: JournalAppProps) {
-  const [view, setView] = useState<JournalView>({ name: "home" });
+function JournalResourcePicker({
+  characterId,
+  onPick,
+  onClose,
+}: {
+  characterId?: string;
+  onPick: (item: { dataUrl: string; note: string }) => void;
+  onClose: () => void;
+}) {
+  const images = useMemo(() => {
+    const scopes = [RESOURCE_LIBRARY_SHARED_SCOPE, ...(characterId ? [characterId] : [])];
+    const seen = new Set<string>();
+    const result: Array<{ dataUrl: string; note: string; id: string }> = [];
+    for (const scope of scopes) {
+      for (const item of listResources(scope)) {
+        if (item.kind !== "image" || seen.has(item.id)) continue;
+        seen.add(item.id);
+        result.push({ dataUrl: item.dataUrl, note: item.note || item.category, id: item.id });
+      }
+    }
+    return result;
+  }, [characterId]);
+  return (
+    <div className="journal-sheet-overlay" onClick={onClose}>
+      <div className="journal-sheet" onClick={event => event.stopPropagation()}>
+        <div className="journal-sheet-title">从资源库选一张图</div>
+        <div className="journal-clip-list journal-resource-grid">
+          {images.length === 0 ? <p className="journal-empty">资源库还没有图片</p> : images.map(image => (
+            <button key={image.id} type="button" className="journal-resource-cell" onClick={() => onPick(image)}>
+              <img src={image.dataUrl} alt="" />
+              <span>{image.note}</span>
+            </button>
+          ))}
+        </div>
+        <button type="button" className="journal-sheet-cancel" onClick={onClose}>取消</button>
+      </div>
+    </div>
+  );
+}
+
+export function JournalApp({ onBack, onNotice }: JournalAppProps) {  const [view, setView] = useState<JournalView>({ name: "home" });
   const [books, setBooks] = useState<JournalBook[]>(() => loadJournalBooks());
   const [annotations, setAnnotations] = useState<JournalAnnotation[]>(() => loadJournalAnnotations());
   const [characters, setCharacters] = useState<Character[]>(() => loadCharacters());
@@ -103,6 +143,7 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
   const [busy, setBusy] = useState("");
   const [clips, setClips] = useState<JournalClipCandidate[]>([]);
   const [clipOpen, setClipOpen] = useState(false);
+  const [resourceOpen, setResourceOpen] = useState(false);
   const [createCoupleOpen, setCreateCoupleOpen] = useState(false);
   const [focusBlockId, setFocusBlockId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<JournalDeleteConfirm | null>(null);
@@ -252,8 +293,9 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         side: "left",
         fontSize: draft.fontSize,
         fontFamily: "hand",
-        x: 10,
-        y: userWrote ? 48 : 14,
+        x: draft.textX ?? 10,
+        y: draft.textY ?? (userWrote ? 48 : 14),
+        rotation: draft.textRotation,
         boxW: 72,
         boxH: 24,
       });
@@ -275,10 +317,10 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
       blocks.push({
         id: createJournalBlockId(),
         type: "doodle",
-        strokes: createCharacterDoodleStrokes(draft.stamp || "heart", {
+        strokes: createCharacterDoodleStrokes(draft.stamp, {
           skill,
           seed: `${characterId}:${Date.now()}`,
-          hint,
+          hint: hint || draft.text || "随手涂鸦",
         }),
         author: "character",
         characterId,
@@ -487,6 +529,10 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
         onAddImage={() => {
           setRailOpen(false);
           imageInputRef.current?.click();
+        }}
+        onAddResourceImage={() => {
+          setRailOpen(false);
+          setResourceOpen(true);
         }}
         onAddDoodle={() => {
           setRailOpen(false);
@@ -806,6 +852,28 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {
           </div>
         </div>
       )}
+
+      {resourceOpen && currentBook && currentPage ? (
+        <JournalResourcePicker
+          characterId={currentBook.characterId}
+          onClose={() => setResourceOpen(false)}
+          onPick={item => {
+            addSideBlock({
+              id: createJournalBlockId(),
+              type: "image",
+              src: item.dataUrl,
+              caption: item.note || undefined,
+              author: "user",
+              side: "left",
+              x: 12,
+              y: 20,
+              boxW: 64,
+              boxH: 40,
+            });
+            setResourceOpen(false);
+          }}
+        />
+      ) : null}
 
       {deleteConfirm ? (
         <ConfirmDialog

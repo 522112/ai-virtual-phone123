@@ -9,7 +9,7 @@ import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memo
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
 import { prepareShortTermContext } from "./short-term-assembler";
 import { parseNoteWallActionContent, parseNoteWallReplyContent, type ParsedNoteWallAction, type ParsedNoteWallReply } from "./notewall-utils";
-import { fetchNoteWallStyles } from "./notewall-client";
+import { fetchNoteWallFonts, fetchNoteWallStyles } from "./notewall-client";
 import { builtinStylesAsLibrary } from "./notewall-style-presets";
 import type { NoteWallComment, NoteWallNote, NoteWallStyle } from "./notewall-types";
 
@@ -178,6 +178,10 @@ export async function generateNoteWallCharacterNote(
   const styleCatalog = catalog.length > 0
     ? catalog.map(style => `- 样式名「${style.name}」${style.note ? `（${style.note}）` : ""}`).join("\n")
     : "";
+  const fonts = await fetchNoteWallFonts().catch(() => [] as Array<{ id: string; name: string; note: string }>);
+  const fontCatalog = fonts.length > 0
+    ? fonts.map(font => `- 字体「${font.name}」（发帖时 font 字段填 custom-${font.id}${font.note ? `，${font.note}` : ""}）`).join("\n")
+    : "";
 
   resolved.messages.push({
     role: "system",
@@ -188,8 +192,10 @@ export async function generateNoteWallCharacterNote(
       "翻翻你的长期记忆和核心记忆，有相关的事就拿来写，写出连续剧感，别每次都从零开始报到。",
       `现在是${formatNoteWallTime(new Date().toISOString())}，按这个时间点写（深夜就别写大中午的太阳）。`,
       "署名用你的网名。",
+      "发帖不是任务：先刷一遍墙，没戳中你的就不写，直接返回空；有感才写。",
       "墙上有匿名的便签和评论：你认不出匿名的是谁，不许猜测身份、不许点破、不许拿现实细节去对号入座。",
       styleCatalog ? `【可用便签样式库】你可以挑一个合适风格的样式，在返回里加 "styleName" 字段写样式名：\n${styleCatalog}` : "",
+      fontCatalog ? `【可用字体库】你可以挑一款搭的字体，在返回里加 "font" 字段：\n${fontCatalog}` : "",
       extraContext ? `此刻的由头：${extraContext}` : "",
     ].filter(Boolean).join("\n"),
   });
@@ -233,7 +239,7 @@ export async function generateNoteWallCharacterReplies(
   resolved.messages.push({
     role: "system",
     content: [
-      "你是便签墙上的真人用户，按人设回帖：至少回一条，只回你真的会有话说的帖子，感兴趣的多回几条也行。",
+      "你是便签墙上的真人用户，按人设回帖：只回你真的会有话说的帖子，没兴趣就一个都不回，直接返回空；感兴趣的多回几条也行。",
       "回帖要接住对方的具体细节（复述+回应+追问/支招），别写放之四海皆准的片汤话；可以翻你的记忆找共鸣。",
       "语气按你的人设来，熟人多损两句也行，别端着；署名用你的网名。",
       "匿名的帖子和评论你认不出是谁，不许猜测身份、不许点破。",

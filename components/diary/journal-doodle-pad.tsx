@@ -20,8 +20,38 @@ function paintStroke(
   width: number,
   height: number,
 ) {
-  if (stroke.points.length < 2) return;
   const brush = stroke.brush || "pen";
+  const lineWidth = brush === "highlighter"
+    ? stroke.width * 2.4
+    : brush === "marker"
+      ? stroke.width * 1.55
+      : brush === "pencil"
+        ? Math.max(0.7, stroke.width * 0.7)
+        : brush === "watercolor"
+          ? stroke.width * 2.6
+          : stroke.width;
+  const alpha = brush === "highlighter"
+    ? 0.28
+    : brush === "marker"
+      ? 0.82
+      : brush === "pencil"
+        ? 0.5
+        : brush === "watercolor"
+          ? 0.2
+          : 1;
+  // 单点也要落笔成点
+  if (stroke.points.length < 2) {
+    const only = stroke.points[0];
+    if (!only) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = stroke.color;
+    ctx.beginPath();
+    ctx.arc(only.x * width, only.y * height, Math.max(0.8, lineWidth / 2), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
   const copies = brush === "watercolor" ? 3 : brush === "pencil" ? 2 : 1;
   for (let copy = 0; copy < copies; copy += 1) {
     const ox = brush === "watercolor" ? (copy - 1) * 1.4 : brush === "pencil" ? copy * 0.6 : 0;
@@ -118,6 +148,21 @@ export function JournalDoodlePad({
     };
   };
 
+  const appendLivePoints = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const live = drawingRef.current;
+    if (!live) return;
+    const native = event.nativeEvent as PointerEvent & { getCoalescedEvents?: () => PointerEvent[] };
+    const rawEvents = typeof native.getCoalescedEvents === "function" ? native.getCoalescedEvents() : [native];
+    const rect = event.currentTarget.getBoundingClientRect();
+    for (const raw of rawEvents) {
+      live.points.push({
+        x: Math.min(1, Math.max(0, (raw.clientX - rect.left) / rect.width)),
+        y: Math.min(1, Math.max(0, (raw.clientY - rect.top) / rect.height)),
+      });
+    }
+    onChange([...strokesRef.current.filter(item => item !== live), live]);
+  };
+
   return (
     <div className={`journal-doodle-wrap${tools ? " has-tools" : ""}`}>
       {tools && !disabled ? (
@@ -181,9 +226,8 @@ export function JournalDoodlePad({
         }}
         onPointerMove={event => {
           if (!drawingRef.current) return;
-          drawingRef.current.points.push(pointFromEvent(event));
-          const live = drawingRef.current;
-          onChange([...strokesRef.current.filter(item => item !== live), live]);
+          event.preventDefault();
+          appendLivePoints(event);
         }}
         onPointerUp={() => {
           if (!drawingRef.current) return;

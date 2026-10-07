@@ -30,6 +30,7 @@ type JournalBlockBase = {
   fontFamily?: JournalFontId;
   x?: number;
   y?: number;
+  rotation?: number;
   scale?: number;
   boxW?: number;
   boxH?: number;

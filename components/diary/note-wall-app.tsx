@@ -9,14 +9,18 @@ import type { Character } from "@/lib/character-types";
 import { useAccount } from "@/lib/account-context";
 import {
   createNoteWallComment,
+  createNoteWallFont,
   createNoteWallNote,
   createNoteWallStyle,
   deleteNoteWallComment,
+  deleteNoteWallFont,
   deleteNoteWallNote,
   deleteNoteWallStyle,
+  ensureNoteWallFonts,
   fetchMyNoteWallComments,
   fetchNoteWall,
   fetchNoteWallComments,
+  fetchNoteWallFonts,
   fetchNoteWallStyles,
   subscribeNoteWallChanges,
   updateNoteWallNote,
@@ -38,7 +42,7 @@ import {
   type NoteWallTimerSettings,
   type NoteWallStyle,
 } from "@/lib/notewall-types";
-import { characterWallName, findNoteWallPlacement, sanitizeNoteWallCss } from "@/lib/notewall-utils";
+import { characterWallName, findNoteWallPlacement, noteWallFontFamilyName, noteWallFontFieldValue, sanitizeNoteWallCss } from "@/lib/notewall-utils";
 import { builtinStylesAsLibrary } from "@/lib/notewall-style-presets";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 
@@ -141,7 +145,10 @@ function styleFromSafeStyle(style: Record<string, string>): CSSProperties {
 }
 
 function fontStyle(font: string): CSSProperties {
-  const fontFamily = FONT_FAMILIES[font] ?? "var(--app-font-family)";
+  let fontFamily = FONT_FAMILIES[font] ?? "var(--app-font-family)";
+  if (font.startsWith("custom-")) {
+    fontFamily = `"${noteWallFontFamilyName(font)}", var(--app-font-family)`;
+  }
   return {
     "--nw-font-family": fontFamily,
     fontFamily,
@@ -932,6 +939,15 @@ export function NoteWallApp({ onBack, onNotice }: NoteWallAppProps) {
     };
   }, [refresh]);
 
+  // 云端字体注入一次，全 App 可用
+  useEffect(() => {
+    let cancelled = false;
+    void fetchNoteWallFonts()
+      .then(fonts => { if (!cancelled) ensureNoteWallFonts(fonts); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <section className={`note-wall-app ${noteDrag ? "is-note-dragging" : ""}`}>
       <header className="note-wall-header">
@@ -1345,6 +1361,18 @@ function NoteComposer({ draft, userName, submitting, onChange, onClose, onSubmit
   const previewAuthorName = draft.isAnonymous ? "匿名" : draft.signature.trim() || userName;
   const previewDate = formatCardDate(new Date().toISOString());
   const [libraryStyles, setLibraryStyles] = useState<Array<{ name: string; css: string; paper: string }>>([]);
+  const [libraryFonts, setLibraryFonts] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchNoteWallFonts()
+      .then(fonts => {
+        if (cancelled) return;
+        ensureNoteWallFonts(fonts);
+        setLibraryFonts(fonts.map(font => ({ id: font.id, name: font.name })));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
@@ -1424,7 +1452,22 @@ function NoteComposer({ draft, userName, submitting, onChange, onClose, onSubmit
             ) : null}
             <SegmentedOptions label="纸张" value={draft.paper} options={PAPER_OPTIONS} labels={PAPER_LABELS} onChange={value => onChange({ ...draft, paper: value })} />
             <SegmentedOptions label="胶带" value={draft.tape} options={TAPE_OPTIONS} labels={TAPE_LABELS} onChange={value => onChange({ ...draft, tape: value })} />
-            <SegmentedOptions label="字体" value={draft.font} options={FONT_OPTIONS} labels={FONT_LABELS} onChange={value => onChange({ ...draft, font: value })} />
+            <label className="nw-field">
+              <span>字体</span>
+              <select
+                className="ui-select"
+                value={draft.font}
+                onChange={event => onChange({ ...draft, font: event.target.value })}
+              >
+                <option value="default">默认</option>
+                <option value="huangyou">喜脉</option>
+                <option value="shangshangqian">小纸条</option>
+                <option value="huiwen">汇文</option>
+                {libraryFonts.map(font => (
+                  <option key={font.id} value={noteWallFontFieldValue(font.id)}>{font.name}（上传）</option>
+                ))}
+              </select>
+            </label>
             <label className="nw-field">
               <span>美化库样式</span>
               <select
@@ -1641,6 +1684,57 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
   const [confirmingComments, setConfirmingComments] = useState(false);
   const busy = Boolean(generatingCharacterIds.length || replyingCharacterIds.length || confirmingPosts || confirmingComments);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState({ master: false, perchar: true, style: false, font: false, manual: false });
+  const toggleSection = (key: "master" | "perchar" | "style" | "font" | "manual") => {
+    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+  const [fontAssets, setFontAssets] = useState<Array<{ id: string; name: string; note: string; url: string; format: string }>>([]);
+  const [fontName, setFontName] = useState("");
+  const [fontNote, setFontNote] = useState("");
+  const [fontBusy, setFontBusy] = useState(false);
+  const fontFileRef = useRef<HTMLInputElement>(null);
+
+  const loadFontAssets = useCallback(async () => {
+    try {
+      const fonts = await fetchNoteWallFonts();
+      setFontAssets(fonts);
+      ensureNoteWallFonts(fonts);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => { void loadFontAssets(); }, [loadFontAssets]);
+
+  const handleUploadFont = async () => {
+    const file = fontFileRef.current?.files?.[0];
+    if (!fontName.trim() || !file || fontBusy) return;
+    setFontBusy(true);
+    try {
+      const form = new FormData();
+      form.append("name", fontName.trim());
+      form.append("note", fontNote.trim());
+      form.append("file", file);
+      const created = await createNoteWallFont(form);
+      setFontAssets(prev => [...prev, created]);
+      ensureNoteWallFonts([created]);
+      setFontName(""); setFontNote("");
+      if (fontFileRef.current) fontFileRef.current.value = "";
+    } catch {
+      /* ignore */
+    } finally {
+      setFontBusy(false);
+    }
+  };
+
+  const handleDeleteFont = async (id: string) => {
+    try {
+      await deleteNoteWallFont(id);
+      setFontAssets(prev => prev.filter(font => font.id !== id));
+    } catch {
+      /* ignore */
+    }
+  };
   const [styles, setStyles] = useState<NoteWallStyle[]>([]);
   const [styleName, setStyleName] = useState("");
   const [styleNote, setStyleNote] = useState("");
@@ -1735,7 +1829,11 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
             <X size={18} />
           </button>
         </header>
-        <div className="nw-timer-controls">
+        <div className={`nw-timer-controls nw-collapse${openSections.master ? "" : " is-collapsed"}`}>
+          <button type="button" className="nw-section-head" onClick={() => toggleSection("master")}>
+            <span>定时总控</span>
+            <span className={`nw-perchar-caret${openSections.master ? " is-open" : ""}`}>›</span>
+          </button>
           <div className="nw-timer-schedule-row">
             <label className="nw-toggle-row">
               <span>
@@ -1759,9 +1857,13 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
               />
             </label>
           </div>
-          <p className="nw-timer-hint">到点后会先写便签，再查看候选便签并选择 5 条回复。</p>
+          <p className="nw-timer-hint">总开关与默认间隔（各角色没单独设就走这里）。到点后角色先刷墙，有兴趣才发帖，只回想回的帖子。</p>
         </div>
-        <div className="nw-perchar-panel">
+        <div className={`nw-perchar-panel nw-collapse${openSections.perchar ? "" : " is-collapsed"}`}>
+          <button type="button" className="nw-section-head" onClick={() => toggleSection("perchar")}>
+            <span>按角色开关（{characters.length}）</span>
+            <span className={`nw-perchar-caret${openSections.perchar ? " is-open" : ""}`}>›</span>
+          </button>
           <p className="nw-timer-hint">每个角色单独开关和间隔（开着 App 就会按各自间隔自动读墙、发帖、回帖）</p>
           {characters.length === 0 ? <p className="nw-empty">暂无角色。</p> : null}
           {characters.map(character => {
@@ -1866,7 +1968,11 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
             );
           })}
         </div>
-        <div className="nw-style-panel">
+        <div className={`nw-style-panel nw-collapse${openSections.style ? "" : " is-collapsed"}`}>
+          <button type="button" className="nw-section-head" onClick={() => toggleSection("style")}>
+            <span>云端美化库</span>
+            <span className={`nw-perchar-caret${openSections.style ? " is-open" : ""}`}>›</span>
+          </button>
           <p className="nw-timer-hint">云端美化库：上传样式（命名 + 备注 + CSS），角色的便签会按备注自选套用</p>
           <div className="nw-style-form">
             <input value={styleName} onChange={e => setStyleName(e.target.value)} placeholder="样式名，如 复古胶片" className="ui-input" />
@@ -1886,7 +1992,35 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
             </div>
           ))}
         </div>
-        <div className="nw-character-action-panel">
+        <div className={`nw-style-panel nw-collapse${openSections.font ? "" : " is-collapsed"}`}>
+          <button type="button" className="nw-section-head" onClick={() => toggleSection("font")}>
+            <span>字体库（{fontAssets.length}）</span>
+            <span className={`nw-perchar-caret${openSections.font ? " is-open" : ""}`}>›</span>
+          </button>
+          <p className="nw-timer-hint">上传字体文件（woff2/ttf/otf，8MB 内），保存后写帖下拉和角色发帖都能用</p>
+          <div className="nw-style-form">
+            <input value={fontName} onChange={e => setFontName(e.target.value)} placeholder="字体名，如 奶油圆体" className="ui-input" />
+            <input value={fontNote} onChange={e => setFontNote(e.target.value)} placeholder="备注：什么气质、配什么内容（角色会读）" className="ui-input" />
+            <input ref={fontFileRef} type="file" accept=".woff2,.woff,.ttf,.otf" className="ui-input" />
+            <button type="button" className="nw-now-btn" disabled={fontBusy || !fontName.trim()} onClick={() => void handleUploadFont()}>
+              {fontBusy ? "上传中…" : "上传字体"}
+            </button>
+          </div>
+          {fontAssets.map(font => (
+            <div key={font.id} className="nw-style-item">
+              <span className="nw-style-meta">
+                <strong style={{ fontFamily: `"NoteWallCustom-${font.id}", var(--app-font-family)` }}>{font.name}</strong>
+                <em>{font.note || "（无备注）"}</em>
+              </span>
+              <button type="button" className="nw-style-del" onClick={() => void handleDeleteFont(font.id)}>删除</button>
+            </div>
+          ))}
+        </div>
+        <div className={`nw-character-action-panel nw-collapse${openSections.manual ? "" : " is-collapsed"}`}>
+          <button type="button" className="nw-section-head" onClick={() => toggleSection("manual")}>
+            <span>让TA发帖 / 评论</span>
+            <span className={`nw-perchar-caret${openSections.manual ? " is-open" : ""}`}>›</span>
+          </button>
           <div className="nw-character-action-buttons">
             <button
               type="button"
