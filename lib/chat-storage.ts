@@ -172,6 +172,7 @@ export type ChatMessage = {
         roleChatTitle?: string; // 角色互聊记录标题
         roleChatAId?: string;
         roleChatBId?: string;
+        roleChatNames?: string[]; // 参与人显示名（含 NPC）
         senderName?: string;      // 转账发起人显示名（群聊）
         recipientId?: string;     // 转账收款人角色 ID
         recipientName?: string;   // 转账收款人显示名

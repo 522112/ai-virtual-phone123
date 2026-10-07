@@ -81,10 +81,9 @@ export async function recommendCardToCharacter(
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId } }));
   }
-  try {
-    // 角色互聊：人设决定谁先开口，落专属会话+双方记忆，用户会话里留系统消息入口
-    const dialog = await generateRoleRoleDialog(hostCharacterId, guestCharacterId, topic);
-    pushRoleChatEntry(sessionId, dialog.sessionId, dialog.title, hostCharacterId, guestCharacterId);
-  } catch { /* 互聊生成失败不影响推荐结果 */ }
+  // 角色互聊：人设决定谁先开口，落专属会话+双方记忆，用户会话里留系统消息入口；
+  // 生成失败直接抛给弹窗显示中文原因，不吞掉
+  const dialog = await generateRoleRoleDialog(hostCharacterId, guestCharacterId, topic);
+  pushRoleChatEntry(sessionId, dialog.sessionId, dialog.title, hostCharacterId, guestCharacterId);
   return { accepted: true, reply };
 }

@@ -20,6 +20,7 @@ export const TIMED_WAKE_CAPABILITY_ID = "timed_wake";
 export const REALITY_BRIDGE_CAPABILITY_ID = "reality_bridge_send";
 export const RESOURCE_LIBRARY_CAPABILITY_ID = "resource_library";
 export const FORWARD_CHAT_CAPABILITY_ID = "forward_chat_record";
+export const ROLE_SIDE_CHAT_CAPABILITY_ID = "role_side_chat";
 
 export type InternalToolDefinition = {
     name: string;
@@ -1689,6 +1690,15 @@ const BUILTIN_INTERNAL_CAPABILITIES: InternalCapabilityConfig[] = [
         createdAt: 0,
         updatedAt: 0,
     },
+    {
+        id: ROLE_SIDE_CHAT_CAPABILITY_ID,
+        name: "角色私聊",
+        description: "角色在跟用户私聊之外，还可以跟 NPC 或其他角色私聊、拉群聊：生成一段他们之间的聊天，用户会话里留记录卡入口进上帝视角，双方记忆连贯。",
+        enabled: true,
+        mode: "auto",
+        createdAt: 0,
+        updatedAt: 0,
+    },
 ];
 
 export function loadInternalCapabilities(): InternalCapabilityConfig[] {
@@ -1834,6 +1844,14 @@ export function getInternalCapabilityToolDefinition(capability: InternalCapabili
             usageGuide: FORWARD_CHAT_USAGE_GUIDE,
         };
     }
+    if (capability.id === ROLE_SIDE_CHAT_CAPABILITY_ID) {
+        return {
+            name: capability.name,
+            description: capability.description,
+            parameterSchema: "{}",
+            usageGuide: ROLE_SIDE_CHAT_USAGE_GUIDE,
+        };
+    }
     return null;
 }
 
@@ -1937,6 +1955,9 @@ export function getInternalCapabilitySubToolDefinition(
     if (capability.id === FORWARD_CHAT_CAPABILITY_ID) {
         return FORWARD_CHAT_SUBTOOLS.find(tool => tool.name === name) ?? null;
     }
+    if (capability.id === ROLE_SIDE_CHAT_CAPABILITY_ID) {
+        return ROLE_SIDE_CHAT_SUBTOOLS.find(tool => tool.name === name) ?? null;
+    }
     return null;
 }
 
@@ -1969,6 +1990,9 @@ export function getInternalCapabilitySubToolDefinitions(
     }
     if (capability.id === FORWARD_CHAT_CAPABILITY_ID) {
         return FORWARD_CHAT_SUBTOOLS;
+    }
+    if (capability.id === ROLE_SIDE_CHAT_CAPABILITY_ID) {
+        return ROLE_SIDE_CHAT_SUBTOOLS;
     }
     return [];
 }
@@ -2032,5 +2056,30 @@ const FORWARD_CHAT_SUBTOOLS: InternalToolDefinition[] = [
         name: "转发聊天记录",
         description: "把当前会话最近的聊天记录打包转发给另一个角色或直接发给用户（对方不会自动回复）。",
         parameterSchema: FORWARD_CHAT_PARAMETER_SCHEMA,
+    },
+];
+
+const ROLE_SIDE_CHAT_USAGE_GUIDE = [
+    "跟用户私聊时，你也可以跟 NPC 或其他角色私聊、拉群聊：比如去问 NPC 打听消息、跟别的角色商量事情。",
+    "调用后会生成一段你们之间的聊天，用户会话里留一张记录卡，用户点卡进上帝视角围观（你不知道被围观）。",
+    "participants 写参与人的名字，多个用逗号/顿号隔开，第一个写你自己也行，不写默认带上你。",
+    "NPC（通讯录里没有的人）直接写名字就行，再补一句简单人设；topic 写你们要聊什么。",
+].join("\n");
+
+const ROLE_SIDE_CHAT_PARAMETER_SCHEMA = JSON.stringify({
+    type: "object",
+    properties: {
+        participants: { type: "string", description: "参与人名字，多个用逗号或顿号隔开；NPC 直接写名字" },
+        npcPersonas: { type: "string", description: "NPC 的简单人设，多个用分号隔开，顺序跟 participants 对应；都是熟人可不填" },
+        topic: { type: "string", description: "你们要聊的话题" },
+    },
+    required: ["participants", "topic"],
+});
+
+const ROLE_SIDE_CHAT_SUBTOOLS: InternalToolDefinition[] = [
+    {
+        name: "发起私聊",
+        description: "跟 NPC 或其他角色私聊/拉群聊，生成聊天并留记录卡入口（对方不会自动回复用户）。",
+        parameterSchema: ROLE_SIDE_CHAT_PARAMETER_SCHEMA,
     },
 ];

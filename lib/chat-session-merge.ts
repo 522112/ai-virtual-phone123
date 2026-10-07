@@ -54,8 +54,8 @@ function sessionActivityTime(session: ChatSession): number {
 }
 
 function duplicateKey(session: ChatSession): string | null {
-    // 主号/小号/面具各自独立：绝不跨身份合并（小号会话与主号同角色也绝不是重复）
-    if (!session.isGroup) return `direct:${session.subId || "main"}:${session.contactId}`;
+    // 单聊永不合并：主号/小号各自独立，哪怕同角色也不许动；只有群聊允许判重
+    if (!session.isGroup) return null;
     const members = [...(session.participantIds || [])].sort();
     if (members.length === 0) return null;
     return `group:${session.maskId || "legacy"}:${session.isSpectator ? "1" : "0"}:${members.join(",")}`;

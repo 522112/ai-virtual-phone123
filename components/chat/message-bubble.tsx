@@ -1519,6 +1519,13 @@ function RoleChatRecordBubble({ msg, onOpen }: { msg: ChatMessage; onOpen?: (ses
     const chars = useMemo(() => loadCharacters(), []);
     const a = chars.find(c => c.id === msg.mediaData?.roleChatAId);
     const b = chars.find(c => c.id === msg.mediaData?.roleChatBId);
+    const names = msg.mediaData?.roleChatNames && msg.mediaData.roleChatNames.length > 0
+        ? msg.mediaData.roleChatNames.slice(0, 3)
+        : [a, b].filter(Boolean).map(c => (c as { name: string }).name);
+    const avatarOf = (name: string): string | null => {
+        const hit = chars.find(c => c.name === name);
+        return hit?.avatar || null;
+    };
     return (
         <div
             className="wx-rr-bubble"
@@ -1530,8 +1537,11 @@ function RoleChatRecordBubble({ msg, onOpen }: { msg: ChatMessage; onOpen?: (ses
         >
             <div className="wx-rr-title">{title}</div>
             <div className="wx-rr-avatars">
-                {a?.avatar ? <img src={a.avatar} alt="" /> : <span>{(a?.name || "?").slice(0, 1)}</span>}
-                {b?.avatar ? <img src={b.avatar} alt="" /> : <span>{(b?.name || "?").slice(0, 1)}</span>}
+                {names.length === 0 ? <span>聊</span> : names.map(name => (
+                    avatarOf(name)
+                        ? <img key={name} src={avatarOf(name) as string} alt="" />
+                        : <span key={name}>{(name || "?").slice(0, 1)}</span>
+                ))}
             </div>
             <div className="wx-rr-sub">点击查看他们的聊天</div>
         </div>

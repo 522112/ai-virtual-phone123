@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { kvGet } from "@/lib/kv-db";
-import { pushChatMessage } from "@/lib/chat-storage";
+import { loadChatSessions, pushChatMessage } from "@/lib/chat-storage";
 import { getUserSubAccount } from "@/lib/sub-accounts";
 import { ensureSubSession } from "@/lib/sub-friend-engine";
 import { describeFlowError } from "@/lib/chunk-reload";
@@ -33,13 +33,18 @@ export function SelfAddSubModal({ characterId, characterName, characterAvatar, o
     setResult("");
     (async () => {
       try {
+        const charName = characterName || "对方";
+        const existed = loadChatSessions().some(s => !s.isGroup && s.contactId === characterId && (s.subId || null) === (pickedSubId || null));
         const session = ensureSubSession(characterId, pickedSubId);
-        pushChatMessage({
-          sessionId: session.id,
-          role: "system",
-          content: `[你在手机上通过了 ${picked.name} 的好友申请]`,
-          status: "sent",
-        });
+        // 全新会话只留一句干净提示；老会话直接进，不追加
+        if (!existed) {
+          pushChatMessage({
+            sessionId: session.id,
+            role: "system",
+            content: `你已添加了${charName}，现在可以开始聊天了。`,
+            status: "sent",
+          });
+        }
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: session.id } }));
           window.dispatchEvent(new CustomEvent("weixin-messages-updated"));
