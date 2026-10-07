@@ -26,6 +26,7 @@ import { kvGet, kvSet, registerKvMigration } from "@/lib/kv-db";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { SubAccountSheet } from "./sub-account-sheet";
 import { GodViewSheet } from "./god-view-sheet";
+import { UserBusinessCard } from "./user-business-card";
 import { getUserSubAccount, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
 import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import {
@@ -124,9 +125,11 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
     const [identity, setIdentity] = useState<UserIdentity | null>(null);
     const [showSubSheet, setShowSubSheet] = useState(false);
     const [showGodView, setShowGodView] = useState(false);
+    const [showUserCard, setShowUserCard] = useState(false);
     const [activeMaskId, setActiveMaskId] = useState<string>(() => kvGet("active_mask_id") || "");
     const [activeSubId, setActiveSubId] = useState<string | null>(() => kvGet("active_sub_id") || null);
     const longPressTimer = React.useRef<number | null>(null);
+    const suppressAvatarClick = React.useRef(false);
     useEffect(() => {
         if (!activeMaskId) {
             const first = resolveUserIdentity();
@@ -141,6 +144,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
         if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
         longPressTimer.current = window.setTimeout(() => {
             longPressTimer.current = null;
+            suppressAvatarClick.current = true;
             setShowSubSheet(true);
         }, 550);
     };
@@ -248,7 +252,14 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                         <div className="flex items-center gap-[10px]">
                             <div
                                 className="w-[36px] h-[36px] rounded-full overflow-hidden bg-[var(--c-input)] flex items-center justify-center shrink-0"
-                                title="长按切换面具 / 小号"
+                                title="点进我的名片，长按切换面具 / 小号"
+                                onClick={() => {
+                                    if (suppressAvatarClick.current) {
+                                        suppressAvatarClick.current = false;
+                                        return;
+                                    }
+                                    setShowUserCard(true);
+                                }}
                                 onPointerDown={beginAvatarLongPress}
                                 onPointerUp={cancelAvatarLongPress}
                                 onPointerLeave={cancelAvatarLongPress}
@@ -733,6 +744,9 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
             {/* User Profile Panel */}
             {showUserProfile && (
                 <UserProfilePanel onClose={() => { setShowUserProfile(false); setIdentity(resolveUserIdentity()); }} className="absolute inset-0 z-[100]" />
+            )}
+            {showUserCard && (
+                <UserBusinessCard onClose={() => setShowUserCard(false)} />
             )}
             {showGodView && (
                 <GodViewSheet onClose={() => setShowGodView(false)} />

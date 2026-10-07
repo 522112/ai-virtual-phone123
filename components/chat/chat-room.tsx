@@ -103,6 +103,7 @@ import { ChatPluginSlot } from "@/components/chat/chat-plugin-slot";
 import { RelationshipInviteModal } from "@/components/chat/relationship-invite-modal";
 import { CharacterBusinessCard } from "@/components/chat/character-business-card";
 import { RecommendCardModal } from "@/components/chat/god-view-sheet";
+import { getUserSubAccount } from "@/lib/sub-accounts";
 import { PeerHomepage } from "@/components/chat/peer-homepage";
 import { RelationshipSpace } from "@/components/chat/relationship-space";
 import {
@@ -6219,6 +6220,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     onClose={() => setPeerHomeCharId(null)}
                     onMessage={() => setPeerHomeCharId(null)}
                     onVoiceCall={() => { setPeerHomeCharId(null); setCallInitiator("user"); setShowVoiceCall(true); }}
+                    onVideoCall={() => { setPeerHomeCharId(null); setCallInitiator("user"); setShowVideoCall(true); }}
                 />
             )}
             {/* Message List */}
@@ -6839,11 +6841,15 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                         )}
                                         {msg.role === "user" && !isEmptyBubble && (
                                             <div className="chat-msg-avatar w-[40px] h-[40px] rounded-[20px] bg-[var(--c-page-body-bg)] shrink-0 flex items-center justify-center overflow-hidden">
-                                                {userIdentity?.avatarUrl ? (
-                                                    <img src={userIdentity.avatarUrl} alt="Me" className="w-full h-full object-cover rounded-[20px]" />
+                                                {(() => {
+                                                    const subAvatar = session.subId ? getUserSubAccount(session.subId)?.avatar : null;
+                                                    const url = subAvatar || userIdentity?.avatarUrl;
+                                                    return url ? (
+                                                    <img src={url} alt="Me" className="w-full h-full object-cover rounded-[20px]" />
                                                 ) : (
                                                     <User size={20} color="var(--c-text)" />
-                                                )}
+                                                );
+                                                })()}
                                             </div>
                                         )}
                                     </>

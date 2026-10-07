@@ -42,6 +42,8 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
     );
     const [tab, setTab] = useState<"home" | "moments">("home");
     const [coverBusy, setCoverBusy] = useState(false);
+    const [coverLinkOpen, setCoverLinkOpen] = useState(false);
+    const [coverLinkUrl, setCoverLinkUrl] = useState("");
     const [notice, setNotice] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const coverInputRef = useRef<HTMLInputElement>(null);
@@ -156,6 +158,33 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                                 <Camera size={16} />
                                 {coverBusy ? "处理中" : "换封面"}
                             </button>
+                            <button
+                                type="button"
+                                className="peer-home-cover-btn"
+                                style={{ right: 108 }}
+                                onClick={() => setCoverLinkOpen(v => !v)}
+                                aria-label="用链接换封面"
+                            >
+                                链接
+                            </button>
+                            {coverLinkOpen ? (
+                                <div style={{ position: "absolute", top: "calc(var(--page-header-safe-top, 48px) + 38px)", right: 12, left: 12, zIndex: 2, display: "flex", gap: 6 }}>
+                                    <input
+                                        value={coverLinkUrl}
+                                        onChange={e => setCoverLinkUrl(e.target.value)}
+                                        placeholder="粘贴封面图片链接"
+                                        style={{ flex: 1, borderRadius: 10, border: 0, padding: "8px 10px", fontSize: 13 }}
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={!coverLinkUrl.trim().startsWith("http")}
+                                        onClick={() => { patchCharacter({ momentsCover: coverLinkUrl.trim() }); flash("封面已更换"); setCoverLinkOpen(false); setCoverLinkUrl(""); }}
+                                        style={{ borderRadius: 10, border: 0, padding: "8px 12px", fontSize: 13, cursor: "pointer" }}
+                                    >
+                                        确定
+                                    </button>
+                                </div>
+                            ) : null}
                             <input
                                 ref={coverInputRef}
                                 type="file"

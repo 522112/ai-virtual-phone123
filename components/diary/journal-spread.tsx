@@ -585,6 +585,7 @@ export function JournalEditRail({
   onToggle,
   onAddText,
   onAddImage,
+  onAddImageLink,
   onAddResourceImage,
   onAddDoodle,
   onDrawOnPage,
@@ -609,6 +610,7 @@ export function JournalEditRail({
   onToggle: () => void;
   onAddText: () => void;
   onAddImage: () => void;
+  onAddImageLink?: () => void;
   onAddResourceImage?: () => void;
   onAddDoodle: () => void;
   onDrawOnPage: () => void;
@@ -639,6 +641,7 @@ export function JournalEditRail({
             <small>写在这一页</small>
             <button type="button" onClick={onAddText}>文字</button>
             <button type="button" onClick={onAddImage}>图片</button>
+            <button type="button" onClick={onAddImageLink}>链接图</button>
             <button type="button" onClick={onAddResourceImage}>资源图</button>
             <button type="button" onClick={onAddDoodle}>涂鸦</button>
             <button type="button" onClick={onDrawOnPage}>页上画</button>

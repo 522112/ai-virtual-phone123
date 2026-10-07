@@ -144,6 +144,8 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {  const [view
   const [clips, setClips] = useState<JournalClipCandidate[]>([]);
   const [clipOpen, setClipOpen] = useState(false);
   const [resourceOpen, setResourceOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
   const [createCoupleOpen, setCreateCoupleOpen] = useState(false);
   const [focusBlockId, setFocusBlockId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<JournalDeleteConfirm | null>(null);
@@ -530,6 +532,10 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {  const [view
           setRailOpen(false);
           imageInputRef.current?.click();
         }}
+        onAddImageLink={() => {
+          setRailOpen(false);
+          setLinkOpen(true);
+        }}
         onAddResourceImage={() => {
           setRailOpen(false);
           setResourceOpen(true);
@@ -853,6 +859,47 @@ export function JournalApp({ onBack, onNotice }: JournalAppProps) {  const [view
         </div>
       )}
 
+      {linkOpen && currentBook && currentPage ? (
+        <div className="journal-sheet-overlay" onClick={() => setLinkOpen(false)}>
+          <div className="journal-sheet" onClick={event => event.stopPropagation()}>
+            <div className="journal-sheet-title">粘贴图片链接</div>
+            <input
+              value={linkUrl}
+              onChange={e => setLinkUrl(e.target.value)}
+              placeholder="https://…"
+              className="ui-input"
+              style={{ width: "100%" }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button
+                type="button"
+                className="ui-btn ui-btn-success"
+                disabled={!linkUrl.trim().startsWith("http")}
+                onClick={() => {
+                  const id = createJournalBlockId();
+                  addSideBlock({
+                    id,
+                    type: "image",
+                    src: linkUrl.trim(),
+                    author: "user",
+                    side: "left",
+                    x: 16,
+                    y: 22,
+                    boxW: 58,
+                    boxH: 28,
+                  });
+                  setFocusBlockId(id);
+                  setLinkUrl("");
+                  setLinkOpen(false);
+                }}
+              >
+                贴进来
+              </button>
+              <button type="button" className="journal-sheet-cancel" onClick={() => setLinkOpen(false)}>取消</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {resourceOpen && currentBook && currentPage ? (
         <JournalResourcePicker
           characterId={currentBook.characterId}

@@ -1,5 +1,6 @@
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { resolveUserIdentity } from "./settings-storage";
+import { loadChatSessions } from "./chat-storage";
 
 export const SUB_ACCOUNTS_UPDATED_EVENT = "sub-accounts-updated";
 
@@ -116,9 +117,21 @@ export function deleteUserSubAccount(id: string): void {
 }
 
 /**
- * 会话级用户身份：小号会话返回小号伪装身份（网名/头像/人设全覆盖），
- * 角色看到的只有小号，绝不知道是用户本人。主号会话走原逻辑。
+ * 消息气泡里的用户头像：小号会话显示小号头像，否则回退默认。
  */
+export function resolveMessageUserAvatarUrl(sessionId: string | undefined, fallback: string | null): string | null {
+  if (!sessionId) return fallback;
+  try {
+    const session = loadChatSessions().find(s => s.id === sessionId);
+    if (!session?.subId) return fallback;
+    const sub = getUserSubAccount(session.subId);
+    return sub?.avatar || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** 会话级用户身份：小号会话返回小号伪装身份（网名/头像/人设全覆盖）。 */
 export function resolveSessionUserIdentity(
   session: { subId?: string } | null | undefined,
   characterId?: string,
