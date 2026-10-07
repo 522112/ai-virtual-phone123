@@ -3,6 +3,7 @@ import { loadCharacters } from "./character-storage";
 import { pushChatMessage } from "./chat-storage";
 import { sendLLMRequest } from "./chat-engine";
 import { loadApiConfigs } from "./settings-storage";
+import { generateRoleRoleDialog, pushRoleChatEntry } from "./role-chat";
 import { createCharacterSubAccount } from "./sub-accounts";
 import { findBestResourceImage, resourceDisplayUrl } from "./resource-library";
 
@@ -82,7 +83,6 @@ export async function recommendCardToCharacter(
   }
   try {
     // 角色互聊：人设决定谁先开口，落专属会话+双方记忆，用户会话里留系统消息入口
-    const { generateRoleRoleDialog, pushRoleChatEntry } = await import("./role-chat");
     const dialog = await generateRoleRoleDialog(hostCharacterId, guestCharacterId, topic);
     pushRoleChatEntry(sessionId, dialog.sessionId, dialog.title, hostCharacterId, guestCharacterId);
   } catch { /* 互聊生成失败不影响推荐结果 */ }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { loadCharacters } from "@/lib/character-storage";
-import { loadChatContacts } from "@/lib/chat-storage";
+import { loadChatContacts, loadChatSessions } from "@/lib/chat-storage";
+import { recommendCardToCharacter } from "@/lib/recommend-card-engine";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { WxContactSelectList } from "./wx-contact-select";
 import {
@@ -76,8 +77,6 @@ export function RecommendCardModal({ hostCharacterId, onClose }: { hostCharacter
     setBusyId(guestId);
     setResult("");
     try {
-      const { recommendCardToCharacter } = await import("@/lib/recommend-card-engine");
-      const { loadChatSessions } = await import("@/lib/chat-storage");
       const sessions = loadChatSessions();
       const hostSession = sessions.find(s => s.contactId === hostCharacterId && !s.isGroup);
       if (!hostSession) throw new Error("先打开和 TA 的聊天");

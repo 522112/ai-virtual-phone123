@@ -6,6 +6,7 @@ import { PageShell } from "@/components/ui/page-shell";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { createOrGetSession, type ChatSession } from "@/lib/chat-storage";
+import { ensureSubSession } from "@/lib/sub-friend-engine";
 import {
     USER_IDENTITIES_UPDATED_EVENT,
     resolveUserIdentity,
@@ -224,15 +225,11 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
                     className="ui-btn ui-btn-success w-full"
                     onClick={() => {
                         if (activeSubId) {
-                            void import("@/lib/sub-friend-engine").then(m => {
-                                try {
-                                    onSelectSession(m.ensureSubSession(characterId, activeSubId));
-                                } catch (error) {
-                                    showNotice(error instanceof Error ? error.message : "打开失败");
-                                }
-                            }).catch(error => {
+                            try {
+                                onSelectSession(ensureSubSession(characterId, activeSubId));
+                            } catch (error) {
                                 showNotice(error instanceof Error ? error.message : "打开失败");
-                            });
+                            }
                             return;
                         }
                         onSelectSession(createOrGetSession(characterId));
