@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from "react";
-import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import React, { useEffect, useState } from "react";import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import {
   createUserSubAccount,
   deleteUserSubAccount,
@@ -51,7 +50,7 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
   const [avatar, setAvatar] = useState<string | null>(null);
   const [swipedId, setSwipedId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [showAvatarPick, setShowAvatarPick] = useState(false);
+  const avatarFileRef = React.useRef<HTMLInputElement>(null);
   const touchStartX = React.useRef(0);
 
   const refresh = () => {
@@ -240,7 +239,7 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
             <div className="g-card" style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "stretch" }}>
               <button
                 type="button"
-                onClick={() => setShowAvatarPick(true)}
+                onClick={() => avatarFileRef.current?.click()}
                 style={{
                   alignSelf: "center", width: 84, height: 84, borderRadius: 18, overflow: "hidden",
                   border: "2px dashed rgba(0,0,0,0.2)", background: "rgba(0,0,0,0.04)",
@@ -254,6 +253,17 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
                   <span style={{ fontSize: 11, color: "var(--c-text-secondary)" }}>选头像</span>
                 )}
               </button>
+              <input
+                ref={avatarFileRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  if (file) setAvatar(await readFileAsDataUrl(file));
+                  e.target.value = "";
+                }}
+              />
               <input value={name} maxLength={30} onChange={e => setName(e.target.value)} placeholder="网名（对方看到的名字）" className="ui-input" />
               <textarea value={persona} rows={3} onChange={e => setPersona(e.target.value)} placeholder="人设（可选，不填对方就在聊天中认识你；绝不会暴露你是大号）" className="ui-textarea" />
               <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
@@ -266,68 +276,7 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
               ＋ 添加账号
             </button>
           ) : null}
-          {showAvatarPick ? (
-            <SubAvatarPicker
-              current={avatar}
-              onPick={url => { setAvatar(url); setShowAvatarPick(false); }}
-              onClose={() => setShowAvatarPick(false)}
-            />
-          ) : null}
         </div>
-        <button type="button" className="journal-sheet-cancel" onClick={onClose}>关闭</button>
-      </div>
-    </div>
-  );
-}
-
-/**
- * 小号头像：从资源库图库里选（沿用“有图都支持图库”的规则）。
- */
-function SubAvatarPicker({ current, onPick, onClose }: { current: string | null; onPick: (url: string) => void; onClose: () => void }) {
-  const [urls, setUrls] = useState<string[]>([]);
-  useEffect(() => {
-    void import("@/lib/resource-library").then(m => {
-      try {
-        const seen = new Set<string>();
-        const out: string[] = [];
-        for (const scope of m.listResourceScopes()) {
-          for (const item of m.listResources(scope)) {
-            const url = m.resourceDisplayUrl(item);
-            if (!url || seen.has(url)) continue;
-            seen.add(url);
-            out.push(url);
-          }
-        }
-        setUrls(out.slice(0, 120));
-      } catch {
-        setUrls([]);
-      }
-    });
-  }, []);
-  return (
-    <div className="journal-sheet-overlay" onClick={onClose}>
-      <div className="journal-sheet" onClick={e => e.stopPropagation()} style={{ height: "56vh", maxHeight: "56vh", display: "flex", flexDirection: "column" }}>
-        <div className="journal-sheet-title">从图库选头像</div>
-        {urls.length === 0 ? (
-          <p className="journal-empty">图库还没有图片，先去资源库上传</p>
-        ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, overflowY: "auto", flex: 1, paddingBottom: 4 }}>
-          {urls.map(url => (
-            <button
-              key={url}
-              type="button"
-              onClick={() => onPick(url)}
-              style={{
-                border: url === current ? "2px solid #07c160" : "1px solid rgba(0,0,0,0.1)",
-                borderRadius: 12, overflow: "hidden", padding: 0, cursor: "pointer",
-                aspectRatio: "1", background: "rgba(0,0,0,0.04)",
-              }}
-            >
-              <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            </button>
-          ))}
-        </div>
-        )}
         <button type="button" className="journal-sheet-cancel" onClick={onClose}>关闭</button>
       </div>
     </div>

@@ -2407,25 +2407,30 @@ async function executeForwardChatTool(call: ToolCall, context?: ToolExecutionCon
     const source = sessions.find(s => s.id === sourceSessionId);
     if (!source || source.isGroup) return fail("只能转发单聊记录");
     const sourceCharacterId = context?.characterId || source.contactId;
+    const selfName = resolveUserIdentity(sourceCharacterId, "chat")?.name
+        || resolveUserIdentity(undefined, "chat")?.name
+        || "我";
 
     const lowered = targetQuery.toLowerCase();
-    const target = loadCharacters().find(c =>
-        c.id !== sourceCharacterId && (
-            c.id.toLowerCase() === lowered
-            || (c.name || "").toLowerCase() === lowered
-            || ((c.wechatID || "").trim().toLowerCase() === lowered && lowered.length > 0)
-        ),
-    );
-    if (!target) return fail(`找不到角色「${targetQuery}」，换名字或微信号试试`);
+    // 转发给用户：直接发在当前会话里（角色把记录转给你看）
+    const toUser = ["我", "自己", "我自己", "用户", "user", "me"].includes(lowered)
+        || (selfName && lowered === selfName.toLowerCase());
+    const target = toUser
+        ? null
+        : loadCharacters().find(c =>
+            c.id !== sourceCharacterId && (
+                c.id.toLowerCase() === lowered
+                || (c.name || "").toLowerCase() === lowered
+                || ((c.wechatID || "").trim().toLowerCase() === lowered && lowered.length > 0)
+            ),
+        );
+    if (!toUser && !target) return fail(`找不到角色「${targetQuery}」，换名字或微信号试试`);
 
     const stored = loadChatMessages(sourceSessionId)
         .filter(m => m.role !== "system" && (m.content || "").trim().length > 0)
         .slice(-count);
     if (stored.length === 0) return fail("当前会话还没有可转发的聊天内容");
 
-    const selfName = resolveUserIdentity(sourceCharacterId, "chat")?.name
-        || resolveUserIdentity(undefined, "chat")?.name
-        || "我";
     const fromName = loadCharacters().find(c => c.id === sourceCharacterId)?.name || "对方";
     const items = stored.map(msg => toForwardedChatItem(
         msg,
@@ -2437,11 +2442,36 @@ async function executeForwardChatTool(call: ToolCall, context?: ToolExecutionCon
     const title = buildForwardedChatTitle(titleNames);
     const preview = buildForwardedRecordPreview(items);
 
-    let dest = sessions.find(s => !s.isGroup && s.contactId === target.id && (s.subId || null) === (source.subId || null));
+    // 转发给用户：直接发在当前会话，不找目标会话
+    if (toUser) {
+        pushChatMessage({
+            sessionId: sourceSessionId,
+            role: "assistant",
+            senderName: fromName,
+            content: preview,
+            mediaData: {
+                forwardedFromName: title,
+                forwardedTitle: title,
+                forwardedFromSessionId: sourceSessionId,
+                forwardedPreview: preview,
+                forwardedItems: items,
+            },
+        });
+        return {
+            name: call.name,
+            success: true,
+            data: `已把最近 ${stored.length} 条聊天记录发在当前会话`,
+            continueConversation: true,
+            persistToHistory: false,
+        };
+    }
+
+    const targetId = target!.id;
+    let dest = sessions.find(s => !s.isGroup && s.contactId === targetId && (s.subId || null) === (source.subId || null));
     if (!dest) {
         dest = {
             id: `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            contactId: target.id,
+            contactId: targetId,
             subId: source.subId,
             unreadCount: 0,
             updatedAt: new Date().toISOString(),
@@ -2453,7 +2483,7 @@ async function executeForwardChatTool(call: ToolCall, context?: ToolExecutionCon
     pushChatMessage({
         sessionId: dest.id,
         role: "assistant",
-        senderName: target.name,
+        senderName: target!.name,
         content: preview,
         mediaData: {
             forwardedFromName: title,
@@ -2469,7 +2499,7 @@ async function executeForwardChatTool(call: ToolCall, context?: ToolExecutionCon
     return {
         name: call.name,
         success: true,
-        data: `已把最近 ${stored.length} 条聊天记录转发给${target.name}`,
+        data: `已把最近 ${stored.length} 条聊天记录转发给${target!.name}`,
         continueConversation: true,
         persistToHistory: false,
     };

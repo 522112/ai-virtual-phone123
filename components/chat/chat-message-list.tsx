@@ -437,6 +437,8 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                     if (s.isGroup || s.subId !== activeSubId) return false;
                                 } else {
                                     if (s.subId) return false;
+                                    // 群聊也分面具：只看当前面具的群（老群无戳全部可见）
+                                    if (s.isGroup && s.maskId && activeMaskId && s.maskId !== activeMaskId) return false;
                                 }
                                 if (listTab === "private" && s.isGroup) return false;
                                 if (listTab === "group" && !s.isGroup) return false;
@@ -820,7 +822,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                 <GroupCreateModal
                     onClose={() => setShowGroupCreate(false)}
                     onCreate={(groupName, participantIds, isSpectator) => {
-                        const newSession = createGroupSession(groupName, participantIds, { isSpectator });
+                        const newSession = createGroupSession(groupName, participantIds, { isSpectator, maskId: activeMaskId || undefined });
                         const userName = resolveUserIdentity()?.name ?? "用户";
                         const allChars = loadCharacters();
                         const memberNames = participantIds

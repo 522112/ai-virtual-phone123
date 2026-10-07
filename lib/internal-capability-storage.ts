@@ -1683,7 +1683,7 @@ const BUILTIN_INTERNAL_CAPABILITIES: InternalCapabilityConfig[] = [
     {
         id: FORWARD_CHAT_CAPABILITY_ID,
         name: "转发聊天记录",
-        description: "把当前会话最近的聊天记录打包转发给另一个角色，就像用户多选转发一样；转发后对方不会自动回复。",
+        description: "把当前会话最近的聊天记录打包转发给另一个角色或直接发给用户，就像用户多选转发一样；转发后对方不会自动回复。",
         enabled: true,
         mode: "auto",
         createdAt: 0,
@@ -2012,15 +2012,16 @@ const RESOURCE_LIBRARY_USAGE_GUIDE = [
 ].join("\n");
 
 const FORWARD_CHAT_USAGE_GUIDE = [
-    "想把当前聊天记录分享给另一个角色时调用，就像用户多选转发一样。",
-    "给出对方的名字或微信号，以及要转发的最近消息条数（默认 10 条）。",
-    "转发后对方不会自动回复，对方只会在自己跟用户聊天时自然地提起。",
+    "想把当前聊天记录分享出去时调用，就像用户多选转发一样，可转给其他角色，也可以直接转给用户（发在当前会话）。",
+    "给出目标：其他角色的名字或微信号；转给用户时 target 填“用户”。",
+    "要转发的最近消息条数默认 10 条，最多 30 条。",
+    "转发后对方不会自动回复，对方只会在自己的聊天里自然地提起。",
 ].join("\n");
 
 const FORWARD_CHAT_PARAMETER_SCHEMA = JSON.stringify({
     type: "object",
     properties: {
-        target: { type: "string", description: "要转发给的角色名字、微信号或 id" },
+        target: { type: "string", description: "转发目标：其他角色的名字/微信号/id，或填“用户”直接发在当前会话" },
         count: { type: "number", description: "转发最近多少条消息，默认 10，最多 30" },
     },
     required: ["target"],
@@ -2029,7 +2030,7 @@ const FORWARD_CHAT_PARAMETER_SCHEMA = JSON.stringify({
 const FORWARD_CHAT_SUBTOOLS: InternalToolDefinition[] = [
     {
         name: "转发聊天记录",
-        description: "把当前会话最近的聊天记录打包转发给另一个角色（对方不会自动回复）。",
+        description: "把当前会话最近的聊天记录打包转发给另一个角色或直接发给用户（对方不会自动回复）。",
         parameterSchema: FORWARD_CHAT_PARAMETER_SCHEMA,
     },
 ];

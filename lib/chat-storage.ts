@@ -78,6 +78,8 @@ export type ChatSession = {
     offlineWritingStyleCustom?: string;
     // Group chat fields
     isGroup?: boolean;
+    /** 群聊所属面具 id：不同面具的群互不串；老群为空=全面具可见 */
+    maskId?: string;
     groupName?: string;
     participantIds?: string[]; // characterId array
     groupVideoBackgrounds?: Record<string, string>; // characterId|"self" → image ID
@@ -1215,9 +1217,11 @@ export function createOrGetSession(contactId: string): ChatSession {
     return newSession;
 }
 
-export function createGroupSession(groupName: string, participantIds: string[], options?: { isSpectator?: boolean }): ChatSession {
+export function createGroupSession(groupName: string, participantIds: string[], options?: { isSpectator?: boolean; maskId?: string }): ChatSession {
     const sessions = loadChatSessions();
     const isSpectator = options?.isSpectator === true;
+    const maskId = options?.maskId || undefined;
+    const maskId = options?.maskId || (typeof window !== "undefined" ? (localStorage.getItem("active_mask_id") || "") : "") || undefined;
     const newSession: ChatSession = {
         id: `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         contactId: `group_${Date.now()}`, // synthetic contactId for group
@@ -1228,6 +1232,7 @@ export function createGroupSession(groupName: string, participantIds: string[], 
         collapseBilingualTranslation: true,
         visionImagePromptLimit: DEFAULT_VISION_IMAGE_PROMPT_LIMIT,
         isGroup: true,
+        ...(maskId ? { maskId } : {}),
         groupName,
         participantIds,
         // 围观群用户不在群内，群主落在第一位成员头上
