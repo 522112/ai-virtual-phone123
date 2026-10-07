@@ -27,7 +27,7 @@ import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { SubAccountSheet, ACTIVE_SUB_CHANGED_EVENT } from "./sub-account-sheet";
 import { GodViewSheet } from "./god-view-sheet";
 import { UserBusinessCard } from "./user-business-card";
-import { getUserSubAccount, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
+import { getUserSubAccount, loadUserSubAccounts, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
 import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import {
     getMascotLastPreview,
@@ -109,9 +109,6 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
         return () => document.removeEventListener("pointerdown", handler);
     }, [showPlusMenu]);
     const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
-    const [showSubAddFriend, setShowSubAddFriend] = useState(false);
-    const [subTargetWechat, setSubTargetWechat] = useState("");
-    const [subVerifyMsg, setSubVerifyMsg] = useState("");
     const [subAddBusy, setSubAddBusy] = useState(false);
     const [subAddResult, setSubAddResult] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
@@ -349,6 +346,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                         {/* Dropout '+' Menu */}
                         {showPlusMenu && (
                             <div className="g-dropdown absolute top-[40px] right-0 py-2 px-0 w-[140px] z-[100]">
+                                {activeSubId ? null : (<>
                                 <MenuOption
                                     icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>}
                                     label="发起聊天"
@@ -365,18 +363,14 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                         setShowGroupCreate(true);
                                     }}
                                 />
+                                </>)}
                                 <MenuOption
                                     icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>}
                                     label="添加好友"
                                     onClick={() => {
                                         setShowPlusMenu(false);
-                                        if (activeSubId) {
-                                            setShowSubAddFriend(true);
-                                            setSubTargetWechat("");
-                                            setSubVerifyMsg("");
-                                            setSubAddResult("");
-                                            return;
-                                        }
+                                        // 小号加人复用大号同一套搜索流程，发送时走小号验证
+                                        setSubAddResult("");
                                         setIsSearchModalOpen(true);
                                         setSearchQuery("");
                                         setSearchResult(undefined);
@@ -385,6 +379,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                         setGreetingText(identity?.name ? `我是${identity.name}` : "你好");
                                     }}
                                 />
+                                {activeSubId ? null : (<>
                                 <MenuOption
                                     icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>}
                                     label="上帝视角"
@@ -393,6 +388,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                         setShowGodView(true);
                                     }}
                                 />
+                                </>)}
                             </div>
                         )}
                     </span>
@@ -441,6 +437,8 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                     if (s.isGroup || s.subId !== activeSubId) return false;
                                 } else {
                                     if (s.subId) return false;
+                                    // 群聊也分面具：只看当前面具的群（老群无戳全部可见）
+                                    if (s.isGroup && s.maskId && activeMaskId && s.maskId !== activeMaskId) return false;
                                 }
                                 if (listTab === "private" && s.isGroup) return false;
                                 if (listTab === "group" && !s.isGroup) return false;
@@ -648,6 +646,39 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                             <div className="flex flex-col gap-3">
                                 <button
                                     onClick={() => {
+                                        // 小号走同一套搜索流程，发送时按小号验证（对方看验证信息+人设决定过不过）
+                                        if (activeSubId) {
+                                            const target = searchResult;
+                                            const verify = greetingText.trim();
+                                            if (!target || !verify) {
+                                                setSubAddResult("写一句验证消息，对方要看这个决定过不过");
+                                                return;
+                                            }
+                                            setSubAddBusy(true);
+                                            setSubAddResult("");
+                                            void import("@/lib/sub-friend-engine").then(async m => {
+                                                try {
+                                                    const result = await m.requestSubFriend(activeSubId, target.wechatID || target.id, verify);
+                                                    if (result.accepted) {
+                                                        const session = m.ensureSubSession(target.id, activeSubId);
+                                                        setSessions(loadChatSessions());
+                                                        setIsSearchModalOpen(false);
+                                                        setSearchQuery("");
+                                                        setSearchResult(undefined);
+                                                        setIsSendingRequest(false);
+                                                        setSubAddResult("");
+                                                        onSelectSession(session);
+                                                    } else {
+                                                        setSubAddResult(`对方拒绝了：${result.reply}`);
+                                                    }
+                                                } catch (error) {
+                                                    setSubAddResult(error instanceof Error ? error.message : "发送失败");
+                                                } finally {
+                                                    setSubAddBusy(false);
+                                                }
+                                            });
+                                            return;
+                                        }
                                         // 1. Add to contacts
                                         addChatContact(searchResult.id);
                                         clearRequestsForCharacter(searchResult.id);
@@ -702,9 +733,13 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                         setIsSendingRequest(false);
                                     }}
                                     className="ui-btn ui-btn-success w-full"
+                                    disabled={activeSubId ? subAddBusy : false}
                                 >
-                                    发送
+                                    {activeSubId && subAddBusy ? "等待对方决定…" : "发送"}
                                 </button>
+                                {activeSubId && subAddResult ? (
+                                    <p className="menu-group-desc mx-0">{subAddResult}</p>
+                                ) : null}
                                 <button
                                     onClick={() => setIsSendingRequest(false)}
                                     className="ui-btn ui-btn-ghost w-full"
@@ -787,7 +822,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                 <GroupCreateModal
                     onClose={() => setShowGroupCreate(false)}
                     onCreate={(groupName, participantIds, isSpectator) => {
-                        const newSession = createGroupSession(groupName, participantIds, { isSpectator });
+                        const newSession = createGroupSession(groupName, participantIds, { isSpectator, maskId: activeMaskId || undefined });
                         const userName = resolveUserIdentity()?.name ?? "用户";
                         const allChars = loadCharacters();
                         const memberNames = participantIds
@@ -815,48 +850,6 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
             )}
             {showUserCard && (
                 <UserBusinessCard onClose={() => setShowUserCard(false)} />
-            )}
-            {showSubAddFriend && activeSubId && (
-                <div className="journal-sheet-overlay" onClick={() => setShowSubAddFriend(false)}>
-                    <div className="journal-sheet" onClick={e => e.stopPropagation()}>
-                        <div className="journal-sheet-title">小号加好友 · 对方按人设决定过不过</div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                            <input value={subTargetWechat} onChange={e => setSubTargetWechat(e.target.value)} placeholder="对方微信号" className="ui-input" />
-                            <input value={subVerifyMsg} maxLength={60} onChange={e => setSubVerifyMsg(e.target.value)} placeholder="验证消息（没填人设就靠这句话打动对方）" className="ui-input" />
-                            {subAddResult ? <small className="menu-desc">{subAddResult}</small> : null}
-                            <div style={{ display: "flex", gap: 8 }}>
-                                <button
-                                    type="button"
-                                    disabled={subAddBusy}
-                                    className="ui-btn ui-btn-success"
-                                    onClick={() => {
-                                        if (!subTargetWechat.trim() || !subVerifyMsg.trim()) {
-                                            setSubAddResult("填对方微信号和验证消息");
-                                            return;
-                                        }
-                                        setSubAddBusy(true);
-                                        setSubAddResult("");
-                                        void import("@/lib/sub-friend-engine").then(async m => {
-                                            try {
-                                                const result = await m.requestSubFriend(activeSubId, subTargetWechat.trim(), subVerifyMsg.trim());
-                                                setSubAddResult(result.accepted ? `对方通过了：${result.reply}` : `对方拒绝了：${result.reply}`);
-                                                setSessions(loadChatSessions());
-                                                if (result.accepted) setShowSubAddFriend(false);
-                                            } catch (error) {
-                                                setSubAddResult(error instanceof Error ? error.message : "发送失败");
-                                            } finally {
-                                                setSubAddBusy(false);
-                                            }
-                                        });
-                                    }}
-                                >
-                                    {subAddBusy ? "等待对方决定…" : "发送好友申请"}
-                                </button>
-                                <button type="button" className="journal-sheet-cancel" onClick={() => setShowSubAddFriend(false)}>取消</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             )}
             {showGodView && (
                 <GodViewSheet onClose={() => setShowGodView(false)} />

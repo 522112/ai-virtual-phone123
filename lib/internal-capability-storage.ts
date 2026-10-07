@@ -19,6 +19,7 @@ export const TOOLBOX_MANAGEMENT_CAPABILITY_ID = "toolbox_management";
 export const TIMED_WAKE_CAPABILITY_ID = "timed_wake";
 export const REALITY_BRIDGE_CAPABILITY_ID = "reality_bridge_send";
 export const RESOURCE_LIBRARY_CAPABILITY_ID = "resource_library";
+export const FORWARD_CHAT_CAPABILITY_ID = "forward_chat_record";
 
 export type InternalToolDefinition = {
     name: string;
@@ -1679,6 +1680,15 @@ const BUILTIN_INTERNAL_CAPABILITIES: InternalCapabilityConfig[] = [
         createdAt: 0,
         updatedAt: 0,
     },
+    {
+        id: FORWARD_CHAT_CAPABILITY_ID,
+        name: "转发聊天记录",
+        description: "把当前会话最近的聊天记录打包转发给另一个角色或直接发给用户，就像用户多选转发一样；转发后对方不会自动回复。",
+        enabled: true,
+        mode: "auto",
+        createdAt: 0,
+        updatedAt: 0,
+    },
 ];
 
 export function loadInternalCapabilities(): InternalCapabilityConfig[] {
@@ -1816,6 +1826,14 @@ export function getInternalCapabilityToolDefinition(capability: InternalCapabili
             usageGuide: RESOURCE_LIBRARY_USAGE_GUIDE,
         };
     }
+    if (capability.id === FORWARD_CHAT_CAPABILITY_ID) {
+        return {
+            name: capability.name,
+            description: capability.description,
+            parameterSchema: "{}",
+            usageGuide: FORWARD_CHAT_USAGE_GUIDE,
+        };
+    }
     return null;
 }
 
@@ -1916,6 +1934,9 @@ export function getInternalCapabilitySubToolDefinition(
     if (capability.id === REALITY_BRIDGE_CAPABILITY_ID) {
         return realityBridgeSubTools().find(tool => tool.name === name) ?? null;
     }
+    if (capability.id === FORWARD_CHAT_CAPABILITY_ID) {
+        return FORWARD_CHAT_SUBTOOLS.find(tool => tool.name === name) ?? null;
+    }
     return null;
 }
 
@@ -1945,6 +1966,9 @@ export function getInternalCapabilitySubToolDefinitions(
     }
     if (capability.id === REALITY_BRIDGE_CAPABILITY_ID) {
         return realityBridgeSubTools();
+    }
+    if (capability.id === FORWARD_CHAT_CAPABILITY_ID) {
+        return FORWARD_CHAT_SUBTOOLS;
     }
     return [];
 }
@@ -1986,3 +2010,27 @@ const RESOURCE_LIBRARY_USAGE_GUIDE = [
     "  - resourceId (string, 必填): 资源库中素材的 id",
     "示例：[发送资源:内置函数({\"resourceId\":\"res_xxx\"})]",
 ].join("\n");
+
+const FORWARD_CHAT_USAGE_GUIDE = [
+    "想把当前聊天记录分享出去时调用，就像用户多选转发一样，可转给其他角色，也可以直接转给用户（发在当前会话）。",
+    "给出目标：其他角色的名字或微信号；转给用户时 target 填“用户”。",
+    "要转发的最近消息条数默认 10 条，最多 30 条。",
+    "转发后对方不会自动回复，对方只会在自己的聊天里自然地提起。",
+].join("\n");
+
+const FORWARD_CHAT_PARAMETER_SCHEMA = JSON.stringify({
+    type: "object",
+    properties: {
+        target: { type: "string", description: "转发目标：其他角色的名字/微信号/id，或填“用户”直接发在当前会话" },
+        count: { type: "number", description: "转发最近多少条消息，默认 10，最多 30" },
+    },
+    required: ["target"],
+});
+
+const FORWARD_CHAT_SUBTOOLS: InternalToolDefinition[] = [
+    {
+        name: "转发聊天记录",
+        description: "把当前会话最近的聊天记录打包转发给另一个角色或直接发给用户（对方不会自动回复）。",
+        parameterSchema: FORWARD_CHAT_PARAMETER_SCHEMA,
+    },
+];

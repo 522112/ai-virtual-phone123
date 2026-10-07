@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from "react";
-import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import React, { useEffect, useState } from "react";import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import {
   createUserSubAccount,
   deleteUserSubAccount,
@@ -20,6 +19,9 @@ type Props = {
   onSelectSub: (subId: string | null) => void;
   onClose: () => void;
   onNotice?: (msg: string) => void;
+  /** 只选择不切换：点卡片只回传，不改当前身份（给“帮小号加人”用） */
+  selectOnly?: boolean;
+  onPickSub?: (subId: string | null) => void;
 };
 
 function readFileAsDataUrl(file: File): Promise<string | null> {
@@ -37,7 +39,7 @@ function dispatchSubChanged(subId: string | null): void {
 }
 
 /** 聊天主页长按：只切当前面具的小号（+新增）。面具切换去“我的”页面长按头像。 */
-export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClose, onNotice }: Props) {
+export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClose, onNotice, selectOnly, onPickSub }: Props) {
   const [maskName, setMaskName] = useState("");
   const [maskAvatar, setMaskAvatar] = useState<string | null>(null);
   const [maskBio, setMaskBio] = useState("");
@@ -46,6 +48,10 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
   const [name, setName] = useState("");
   const [persona, setPersona] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [swipedId, setSwipedId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const avatarFileRef = React.useRef<HTMLInputElement>(null);
+  const touchStartX = React.useRef(0);
 
   const refresh = () => {
     const mask = loadUserIdentities().find(i => i.id === activeMaskId);
@@ -63,6 +69,10 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
   }, [activeMaskId]);
 
   const pick = (subId: string | null) => {
+    if (selectOnly) {
+      onPickSub?.(subId);
+      return;
+    }
     onSelectSub(subId);
     dispatchSubChanged(subId);
     onClose();
@@ -132,11 +142,16 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
   };
 
   return (
-    <div className="journal-sheet-overlay" onClick={onClose}>
-      <div className="journal-sheet" onClick={e => e.stopPropagation()} style={{ maxHeight: "82vh", overflowY: "auto" }}>
-        <div className="journal-sheet-title">切换身份 · {maskName}</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div
+      className="journal-sheet-overlay"
+      onClick={onClose}
+      style={{ background: "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
+    >
+      <div className="journal-sheet" onClick={e => e.stopPropagation()} style={{ height: "62vh", maxHeight: "62vh", display: "flex", flexDirection: "column" }}>
+        <div className="journal-sheet-title">{selectOnly ? "选择小号" : `切换身份 · ${maskName}`}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, overflowY: "auto", flex: 1, paddingBottom: 4 }}>
           <small className="menu-desc">小号就是一个新号：聊天/好友/朋友圈从零开始，对方只认识这个号</small>
+          {!selectOnly && (
           <button type="button" style={cardStyle(!activeSubId)} onClick={() => pick(null)}>
             <span style={avatarStyle}>
               {maskAvatar ? <img src={maskAvatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ChatFallbackAvatar />}
@@ -149,10 +164,53 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
               <small className="menu-desc" style={{ display: "block", marginTop: 2 }}>主号 · {maskBio || "用本面具身份聊天"}</small>
             </span>
           </button>
-          {subs.map(sub => (
-            <div key={sub.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
-                <button type="button" style={{ ...cardStyle(sub.id === activeSubId), flex: 1 }} onClick={() => pick(sub.id)}>
+          )}
+          {subs.map(sub => {
+            const swiped = swipedId === sub.id;
+            const confirming = confirmDeleteId === sub.id;
+            return (
+            <div key={sub.id} style={{ position: "relative", overflow: "hidden", borderRadius: 16 }}>
+              <span
+                style={{
+                  position: "absolute", top: 0, right: 0, bottom: 0, width: 84,
+                  display: selectOnly ? "none" : "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirming) {
+                      deleteUserSubAccount(sub.id);
+                      setConfirmDeleteId(null);
+                      setSwipedId(null);
+                      if (activeSubId === sub.id) pick(null);
+                      else refresh();
+                    } else {
+                      setConfirmDeleteId(sub.id);
+                    }
+                  }}
+                  style={{
+                    border: 0, background: confirming ? "#e8354b" : "#ff7a59", color: "#fff",
+                    fontSize: 12, borderRadius: 10, padding: "8px 10px", cursor: "pointer", marginRight: 8,
+                  }}
+                >
+                  {confirming ? "确认删除" : "删除"}
+                </button>
+              </span>
+              <div
+                style={{ ...cardStyle(sub.id === activeSubId), transform: swiped ? "translateX(-84px)" : "translateX(0)", transition: "transform 0.18s ease" }}
+                onTouchStart={e => { touchStartX.current = e.touches[0].clientX; }}
+                onTouchMove={e => {
+                  const dx = e.touches[0].clientX - touchStartX.current;
+                  if (dx < -40 && swipedId !== sub.id) { setSwipedId(sub.id); setConfirmDeleteId(null); }
+                  if (dx > 40 && swipedId === sub.id) { setSwipedId(null); setConfirmDeleteId(null); }
+                }}
+              >
+                <button
+                  type="button"
+                  style={{ flex: 1, minWidth: 0, display: "flex", gap: 12, alignItems: "center", background: "none", border: 0, cursor: "pointer", textAlign: "left", padding: 0 }}
+                  onClick={() => { if (swiped) { setSwipedId(null); setConfirmDeleteId(null); return; } pick(sub.id); }}
+                >
                   <span style={avatarStyle}>
                     {sub.avatar ? <img src={sub.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ChatFallbackAvatar />}
                   </span>
@@ -166,46 +224,58 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
                     </small>
                   </span>
                 </button>
-                <span style={{ display: "flex", flexDirection: "column", gap: 4, justifyContent: "center" }}>
-                  <button type="button" onClick={() => openEditor(sub)} style={{ border: "1px solid rgba(0,0,0,0.1)", background: "var(--c-card, #fff)", borderRadius: 10, fontSize: 11, padding: "6px 8px", cursor: "pointer" }}>编辑</button>
-                  <button type="button" onClick={() => { deleteUserSubAccount(sub.id); if (activeSubId === sub.id) pick(null); }} style={{ border: 0, background: "none", color: "#e8354b", fontSize: 11, cursor: "pointer" }}>删除</button>
-                </span>
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); openEditor(sub); }}
+                  style={{ border: "1px solid rgba(0,0,0,0.12)", background: "var(--c-card, #fff)", borderRadius: 10, fontSize: 11, padding: "6px 10px", cursor: "pointer", flexShrink: 0, display: selectOnly ? "none" : undefined }}
+                >
+                  编辑
+                </button>
               </div>
             </div>
-          ))}
-          {editingId !== null ? (
-            <div className="g-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            );
+          })}
+          {!selectOnly && editingId !== null ? (
+            <div className="g-card" style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "stretch" }}>
+              <button
+                type="button"
+                onClick={() => avatarFileRef.current?.click()}
+                style={{
+                  alignSelf: "center", width: 84, height: 84, borderRadius: 18, overflow: "hidden",
+                  border: "2px dashed rgba(0,0,0,0.2)", background: "rgba(0,0,0,0.04)",
+                  display: "grid", placeItems: "center", cursor: "pointer", padding: 0,
+                }}
+                aria-label="选择头像"
+              >
+                {avatar ? (
+                  <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <span style={{ fontSize: 11, color: "var(--c-text-secondary)" }}>选头像</span>
+                )}
+              </button>
+              <input
+                ref={avatarFileRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  if (file) setAvatar(await readFileAsDataUrl(file));
+                  e.target.value = "";
+                }}
+              />
               <input value={name} maxLength={30} onChange={e => setName(e.target.value)} placeholder="网名（对方看到的名字）" className="ui-input" />
               <textarea value={persona} rows={3} onChange={e => setPersona(e.target.value)} placeholder="人设（可选，不填对方就在聊天中认识你；绝不会暴露你是大号）" className="ui-textarea" />
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <label style={{ border: "1px solid var(--c-panel-border)", borderRadius: 10, padding: "7px 10px", fontSize: 12, cursor: "pointer" }}>
-                  {avatar ? "换头像" : "传头像"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    style={{ display: "none" }}
-                    onChange={async e => {
-                      const file = e.target.files?.[0];
-                      if (file) setAvatar(await readFileAsDataUrl(file));
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                {avatar ? (
-                  <span style={{ width: 30, height: 30, borderRadius: 8, overflow: "hidden" }}>
-                    <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  </span>
-                ) : null}
-                <span style={{ flex: 1 }} />
+              <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
                 <button type="button" onClick={saveEditor} className="ui-btn ui-btn-success">保存</button>
                 <button type="button" onClick={() => setEditingId(null)} style={{ border: 0, background: "none", fontSize: 12, cursor: "pointer" }}>取消</button>
               </div>
             </div>
-          ) : (
+          ) : !selectOnly ? (
             <button type="button" style={{ ...cardStyle(false), borderStyle: "dashed", justifyContent: "center", color: "var(--c-text-secondary)" }} onClick={() => openEditor(null)}>
-              ＋ 开个新小号（像 QQ 新号）
+              ＋ 添加账号
             </button>
-          )}
+          ) : null}
         </div>
         <button type="button" className="journal-sheet-cancel" onClick={onClose}>关闭</button>
       </div>

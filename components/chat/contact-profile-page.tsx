@@ -10,6 +10,7 @@ import {
     USER_IDENTITIES_UPDATED_EVENT,
     resolveUserIdentity,
 } from "@/lib/settings-storage";
+import { getActiveSub } from "./sub-account-sheet";
 import {
     COUPLE_AVATARS_UPDATED_EVENT,
     overlayCharacterForDisplay,
@@ -96,15 +97,31 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
         return raw ? overlayCharacterForDisplay(raw) : null;
     });
     const [identity, setIdentity] = useState<UserIdentity | null>(() =>
-        overlayUserIdentityForDisplay(characterId, resolveUserIdentity(characterId, "chat")),
+        overlayUserIdentityForDisplay(characterId, resolveSubAwareIdentity(characterId)),
     );
     const [busySide, setBusySide] = useState<"user" | "character" | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [activeSubId, setActiveSubId] = useState<string | null>(() => getActiveSub()?.id || null);
+
+    function resolveSubAwareIdentity(cid: string): UserIdentity {
+        const sub = getActiveSub();
+        const base = resolveUserIdentity(cid, "chat");
+        if (!sub) return base;
+        return { ...base, name: sub.name, screenName: sub.name, avatarUrl: sub.avatar || undefined };
+    }
 
     const refresh = useCallback(() => {
         const raw = loadCharacters().find(item => item.id === characterId) || null;
         setCharacter(raw ? overlayCharacterForDisplay(raw) : null);
-        setIdentity(overlayUserIdentityForDisplay(characterId, resolveUserIdentity(characterId, "chat")));
+        const sub = getActiveSub();
+        const overlaid = overlayUserIdentityForDisplay(characterId, resolveSubAwareIdentity(characterId));
+        // 小号模式我这边强制显示小号头像，不吃主号的情头覆盖
+        if (sub && overlaid) {
+            overlaid.avatarUrl = sub.avatar || undefined;
+            overlaid.name = sub.name;
+        }
+        setIdentity(overlaid);
+        setActiveSubId(sub?.id || null);
     }, [characterId]);
 
     useEffect(() => {
@@ -132,6 +149,24 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
     };
 
     const pickAndApply = async (side: "user" | "character", file: File) => {
+        // 小号模式：不能改对方头像（除非角色自己换）；我这边显示小号头像
+        if (side === "character" && getActiveSub()) {
+            showNotice("小号不能改对方头像");
+            return;
+        }
+        if (side === "user" && getActiveSub()) {
+            try {
+                const url = await fileToAvatarDataUrl(file);
+                const { updateUserSubAccount } = await import("@/lib/sub-accounts");
+                const sub = getActiveSub();
+                if (sub) updateUserSubAccount(sub.id, { avatar: url });
+                showNotice("已更换小号头像");
+                refresh();
+            } catch (error) {
+                showNotice(error instanceof Error ? error.message : "图片处理失败");
+            }
+            return;
+        }
         setBusySide(side);
         try {
             const url = await fileToAvatarDataUrl(file);
@@ -187,7 +222,15 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
                 <button
                     type="button"
                     className="ui-btn ui-btn-success w-full"
-                    onClick={() => onSelectSession(createOrGetSession(characterId))}
+                    onClick={() => {
+                        if (activeSubId) {
+                            void import("@/lib/sub-friend-engine").then(m => {
+                                onSelectSession(m.ensureSubSession(characterId, activeSubId));
+                            });
+                            return;
+                        }
+                        onSelectSession(createOrGetSession(characterId));
+                    }}
                 >
                     发消息
                 </button>

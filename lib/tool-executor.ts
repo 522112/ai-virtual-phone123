@@ -23,12 +23,23 @@ import {
 } from "./tool-storage";
 import { executeCustomAppToolCall } from "./custom-app-tool-runtime";
 import { characterWorkspace, agentComputerRequest, isAgentComputerConfigured } from "./agent-computer";
-import { AGENT_COMPUTER_CAPABILITY_ID, CALENDAR_MANAGEMENT_CAPABILITY_ID, LISTEN_TOGETHER_CAPABILITY_ID, LOCAL_DATA_LIBRARY_CAPABILITY_ID, MEMORY_WRITE_CAPABILITY_ID, MUSIC_CONTROL_CAPABILITY_ID, NOTE_WALL_CAPABILITY_ID, REALITY_BRIDGE_CAPABILITY_ID, REVERSE_WATCH_CAPABILITY_ID, SEND_FILE_CAPABILITY_ID, TIMED_WAKE_CAPABILITY_ID, TOOLBOX_MANAGEMENT_CAPABILITY_ID, getInternalCapability } from "./internal-capability-storage";
+import { AGENT_COMPUTER_CAPABILITY_ID, CALENDAR_MANAGEMENT_CAPABILITY_ID, FORWARD_CHAT_CAPABILITY_ID, LISTEN_TOGETHER_CAPABILITY_ID, LOCAL_DATA_LIBRARY_CAPABILITY_ID, MEMORY_WRITE_CAPABILITY_ID, MUSIC_CONTROL_CAPABILITY_ID, NOTE_WALL_CAPABILITY_ID, REALITY_BRIDGE_CAPABILITY_ID, REVERSE_WATCH_CAPABILITY_ID, SEND_FILE_CAPABILITY_ID, TIMED_WAKE_CAPABILITY_ID, TOOLBOX_MANAGEMENT_CAPABILITY_ID, getInternalCapability } from "./internal-capability-storage";
 import { bridgeConnection, loadBridgeDataItems, loadBridgeShortcutActions, readAllBridgeStateSnapshots, readBridgeStateSnapshot } from "./reality-bridge/storage";
 import { createShortcutCommand, deliverShortcutCommand, waitForShortcutCommand } from "./shortcut-command-client";
 import { loadMemoryEntriesByType, saveMemoryEntry } from "./memory-storage";
 import type { MemoryEntry } from "./memory-types";
+import {
+    buildForwardedChatTitle,
+    buildForwardedRecordPreview,
+    loadChatMessages,
+    loadChatSessions,
+    pushChatMessage,
+    saveChatSessions,
+    toForwardedChatItem,
+    type ChatSession,
+} from "./chat-storage";
 import { loadCharacters } from "./character-storage";
+import { resolveUserIdentity } from "./settings-storage";
 import {
     deleteCalendarScheduleItem,
     loadCalendarWeekPlan,
@@ -74,7 +85,6 @@ import {
     searchLocalDataRecords,
 } from "./local-data-fs";
 import { makeTimedWakeId, saveTimedWakeSchedule } from "./timed-wake-storage";
-import { resolveUserIdentity } from "./settings-storage";
 import { attachAbortSignal, isAbortError, throwIfAborted } from "./abort-utils";
 import {
     deleteShortcutCommandMediaUrl,
@@ -796,6 +806,7 @@ async function executeInternalTool(call: ToolCall, context?: ToolExecutionContex
     if (call.name === "角色电脑") return executeAgentComputerTool(call, context);
     if (isRealityBridgeToolName(call.name)) return executeRealityBridgeTool(call, context);
     if (call.name === "稍后主动联系" || call.name === "设置定时醒来") return executeTimedWakeTool(call, context);
+    if (call.name === "转发聊天记录") return executeForwardChatTool(call, context);
 
     if (call.name !== "写入记忆") return null;
 
@@ -2371,6 +2382,127 @@ function inferMediaAttachmentType(url: string, title: string): MediaAttachment["
     if (/\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(source)) return "audio";
     if (/\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(source)) return "video";
     return "file";
+}
+
+/**
+ * 角色转发聊天记录：把当前会话最近 N 条打包发给另一个角色（用户多选转发同款）。
+ * 转发后不触发对方自动回复，对方在自己的聊天里自然提起。
+ */
+async function executeForwardChatTool(call: ToolCall, context?: ToolExecutionContext): Promise<ToolResult> {
+    const fail = (error: string): ToolResult => ({
+        name: call.name, success: false, error, continueConversation: true,
+    });
+    const capability = getInternalCapability(FORWARD_CHAT_CAPABILITY_ID);
+    if (!capability || !capability.enabled || capability.mode === "off") {
+        return fail("转发聊天记录能力未启用");
+    }
+    const args = call.args || {};
+    const targetQuery = typeof args.target === "string" ? args.target.trim() : "";
+    if (!targetQuery) return fail("缺少转发目标（对方名字或微信号）");
+    const count = Math.max(1, Math.min(30, Math.floor(Number(args.count) || 10)));
+
+    const sourceSessionId = context?.sessionId || "";
+    if (!sourceSessionId) return fail("当前没有可转发的会话");
+    const sessions = loadChatSessions();
+    const source = sessions.find(s => s.id === sourceSessionId);
+    if (!source || source.isGroup) return fail("只能转发单聊记录");
+    const sourceCharacterId = context?.characterId || source.contactId;
+    const selfName = resolveUserIdentity(sourceCharacterId, "chat")?.name
+        || resolveUserIdentity(undefined, "chat")?.name
+        || "我";
+
+    const lowered = targetQuery.toLowerCase();
+    // 转发给用户：直接发在当前会话里（角色把记录转给你看）
+    const toUser = ["我", "自己", "我自己", "用户", "user", "me"].includes(lowered)
+        || (selfName && lowered === selfName.toLowerCase());
+    const target = toUser
+        ? null
+        : loadCharacters().find(c =>
+            c.id !== sourceCharacterId && (
+                c.id.toLowerCase() === lowered
+                || (c.name || "").toLowerCase() === lowered
+                || ((c.wechatID || "").trim().toLowerCase() === lowered && lowered.length > 0)
+            ),
+        );
+    if (!toUser && !target) return fail(`找不到角色「${targetQuery}」，换名字或微信号试试`);
+
+    const stored = loadChatMessages(sourceSessionId)
+        .filter(m => m.role !== "system" && (m.content || "").trim().length > 0)
+        .slice(-count);
+    if (stored.length === 0) return fail("当前会话还没有可转发的聊天内容");
+
+    const fromName = loadCharacters().find(c => c.id === sourceCharacterId)?.name || "对方";
+    const items = stored.map(msg => toForwardedChatItem(
+        msg,
+        msg.role === "user" ? selfName : (msg.senderName || fromName),
+    ));
+    const titleNames = items.map(item => item.name);
+    if (!titleNames.includes(selfName)) titleNames.unshift(selfName);
+    if (!titleNames.includes(fromName)) titleNames.push(fromName);
+    const title = buildForwardedChatTitle(titleNames);
+    const preview = buildForwardedRecordPreview(items);
+
+    // 转发给用户：直接发在当前会话，不找目标会话
+    if (toUser) {
+        pushChatMessage({
+            sessionId: sourceSessionId,
+            role: "assistant",
+            senderName: fromName,
+            content: preview,
+            mediaData: {
+                forwardedFromName: title,
+                forwardedTitle: title,
+                forwardedFromSessionId: sourceSessionId,
+                forwardedPreview: preview,
+                forwardedItems: items,
+            },
+        });
+        return {
+            name: call.name,
+            success: true,
+            data: `已把最近 ${stored.length} 条聊天记录发在当前会话`,
+            continueConversation: true,
+            persistToHistory: false,
+        };
+    }
+
+    const targetId = target!.id;
+    let dest = sessions.find(s => !s.isGroup && s.contactId === targetId && (s.subId || null) === (source.subId || null));
+    if (!dest) {
+        dest = {
+            id: `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            contactId: targetId,
+            subId: source.subId,
+            unreadCount: 0,
+            updatedAt: new Date().toISOString(),
+            isPinned: false,
+        } as ChatSession;
+        sessions.unshift(dest);
+        saveChatSessions(sessions);
+    }
+    pushChatMessage({
+        sessionId: dest.id,
+        role: "assistant",
+        senderName: target!.name,
+        content: preview,
+        mediaData: {
+            forwardedFromName: title,
+            forwardedTitle: title,
+            forwardedFromSessionId: sourceSessionId,
+            forwardedPreview: preview,
+            forwardedItems: items,
+        },
+    });
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: dest.id } }));
+    }
+    return {
+        name: call.name,
+        success: true,
+        data: `已把最近 ${stored.length} 条聊天记录转发给${target!.name}`,
+        continueConversation: true,
+        persistToHistory: false,
+    };
 }
 
 function musicToolSuccess(name: string, data: unknown, options?: { continueConversation?: boolean; userNotice?: string; persistToHistory?: boolean }): ToolResult {

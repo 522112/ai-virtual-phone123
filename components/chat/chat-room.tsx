@@ -103,6 +103,7 @@ import { ChatPluginSlot } from "@/components/chat/chat-plugin-slot";
 import { RelationshipInviteModal } from "@/components/chat/relationship-invite-modal";
 import { CharacterBusinessCard } from "@/components/chat/character-business-card";
 import { RecommendCardModal } from "@/components/chat/god-view-sheet";
+import { SelfAddSubModal } from "@/components/chat/self-add-sub-modal";
 import { getUserSubAccount } from "@/lib/sub-accounts";
 import { PeerHomepage } from "@/components/chat/peer-homepage";
 import { RelationshipSpace } from "@/components/chat/relationship-space";
@@ -672,6 +673,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
     onCloseTheaterMode: () => void;
     onOpenRichModal: (modal: RichModalKind) => void;
     onRecommendCard: () => void;
+    onSelfAddSub?: () => void;
     onOpenCustomPlusAction: (action: RegisteredCustomAppChatPlusAction) => void;
     onStartVideoCall: () => void;
     onStartVoiceCall: () => void;
@@ -705,6 +707,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
     onCloseTheaterMode,
     onOpenRichModal,
     onRecommendCard,
+    onSelfAddSub,
     onOpenCustomPlusAction,
     onStartVideoCall,
     onStartVoiceCall,
@@ -785,6 +788,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="22" /><line x1="8" y1="22" x2="16" y2="22" /></svg>, label: "语音条", onClick: () => onOpenRichModal("voice_msg") },
         ...(!isGroup ? [{ icon: <Heart size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "关系", onClick: onOpenRelationship }] : []),
         ...(!isGroup ? [{ icon: <Users size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "推荐名片", onClick: onRecommendCard }] : []),
+        ...(onSelfAddSub && !isGroup ? [{ icon: <Users size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "帮小号加人", onClick: onSelfAddSub }] : []),
         ...customPlusActions.map(action => ({
             icon: action.appIconDataUrl
                 ? <span className="chat-plus-custom-app-icon" style={{ backgroundImage: `url(${action.appIconDataUrl})` }} aria-hidden="true" />
@@ -1182,6 +1186,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [showSettings, setShowSettings] = useState(false);
     const [showBusinessCard, setShowBusinessCard] = useState(false);
     const [showRecommendCard, setShowRecommendCard] = useState(false);
+    const [showSelfAddSub, setShowSelfAddSub] = useState(false);
     // 单击进名片 / 双击拍一拍：单击延迟 260ms，防双击误触
     const avatarTapTimer = useRef<number | null>(null);
     // 对方个人主页浮层：单击消息区对方头像打开（微信式主页+仅 TA 朋友圈）
@@ -6018,7 +6023,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 forwardedItems: items,
             },
         });
-        kvSet(PENDING_REPLY_PREFIX + dest, "1");
+        // 转发不自动触发对方回复：只留记录，对方在自己的聊天里自然提起
         if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: dest } }));
         }
@@ -6213,6 +6218,15 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             )}
             {showRecommendCard && !session.isGroup && (
                 <RecommendCardModal hostCharacterId={session.contactId} onClose={() => setShowRecommendCard(false)} />
+            )}
+            {showSelfAddSub && !session.isGroup && !session.subId && (
+                <SelfAddSubModal
+                    characterId={session.contactId}
+                    characterName={character?.name}
+                    characterAvatar={character?.avatar}
+                    onClose={() => setShowSelfAddSub(false)}
+                    onDone={() => { setShowSelfAddSub(false); syncMessagesFromStorage(); }}
+                />
             )}
             {peerHomeCharId && (
                 <PeerHomepage
@@ -7082,6 +7096,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 	                onCloseTheaterMode={closeTheaterMode}
 	                onOpenRichModal={(modal) => { setShowPlusMenu(false); setRichModal(modal); }}
                 onRecommendCard={() => { setShowPlusMenu(false); setShowRecommendCard(true); }}
+                onSelfAddSub={!session.subId && !session.isGroup ? () => { setShowPlusMenu(false); setShowSelfAddSub(true); } : undefined}
                 onOpenCustomPlusAction={handleOpenCustomPlusAction}
                 onStartVideoCall={() => { cancelFollowUp(session.id); setShowPlusMenu(false); setCallInitiator("user"); setShowVideoCall(true); }}
                 onStartVoiceCall={() => { cancelFollowUp(session.id); setShowPlusMenu(false); setCallInitiator("user"); setShowVoiceCall(true); }}
