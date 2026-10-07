@@ -1889,6 +1889,8 @@ function CharArchiveView({
   const [showTimeZonePicker, setShowTimeZonePicker] = useState(false);
   const [timeZoneSearch, setTimeZoneSearch] = useState(char.timeZone || "");
   const [avatar, setAvatar] = useState<string | null>(char.avatar || null);
+  const [chatAvatar, setChatAvatar] = useState<string | null>(char.chatAvatar || null);
+  const chatAvatarFileRef = useRef<HTMLInputElement>(null);
   const [polaroidStyle, setPolaroidStyle] = useState(char.polaroidStyle ?? 0);
   const [polaroidSize, setPolaroidSize] = useState<Character["polaroidSize"]>(char.polaroidSize ?? "random");
   const [polaroidImageX, setPolaroidImageX] = useState(char.polaroidImageX ?? 50);
@@ -2010,6 +2012,7 @@ function CharArchiveView({
       setShowTimeZonePicker(false);
       setTags(char.tags || []);
       setAvatar(char.avatar || null);
+      setChatAvatar(char.chatAvatar || null);
       setPolaroidStyle(char.polaroidStyle ?? 0);
       setPolaroidSize(char.polaroidSize ?? "random");
       setPolaroidImageX(char.polaroidImageX ?? 50);
@@ -2023,7 +2026,7 @@ function CharArchiveView({
     }
   }, [isEditing, char]);
 
-  async function handleAvatarFile(file: File) {
+  async function handleAvatarFile(file: File, setter?: (url: string | null) => void) {
     setAvatarBusy(true);
     try {
       const url = await fileToDataUrl(file, {
@@ -2032,7 +2035,7 @@ function CharArchiveView({
         maxBytes: CHARACTER_AVATAR_MAX_BYTES,
         fallbacks: CHARACTER_AVATAR_COMPRESSION_FALLBACKS,
       });
-      setAvatar(url);
+      (setter || setAvatar)(url);
     } catch (error) {
       console.error("Failed to optimize character avatar", error);
       onNotice(error instanceof Error ? error.message : "图片处理失败，请更换图片");
@@ -2076,6 +2079,7 @@ function CharArchiveView({
         timeZone: normalizedTimeZone,
         tags,
         avatar: avatar ?? null,
+        chatAvatar: chatAvatar ?? null,
         polaroidStyle,
         polaroidSize,
         polaroidImageX: clampCharacterImageValue(polaroidImageX, 0, 100, 50),
@@ -2311,6 +2315,41 @@ function CharArchiveView({
                     >OK</button>
                   </div>
                 )}
+              </div>
+            )}
+            {isEditing && (
+              <div className="mt-2 flex flex-col gap-1 w-full justify-center">
+                <span className="ts-10 text-[var(--c-text)]">聊天头像（联系人/聊天/名片用，空则用立绘）</span>
+                <div className="flex gap-1 items-center">
+                  <span style={{ width: 34, height: 34, borderRadius: 17, overflow: "hidden", flexShrink: 0, background: "rgba(0,0,0,.08)", display: "grid", placeItems: "center" }}>
+                    {chatAvatar ? <img src={chatAvatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <CharAvatarFallback name={name || char.name} size="100%" />}
+                  </span>
+                  <button
+                    className="ts-10 px-3 py-1 bg-[#111111] text-white border-none rounded-full cursor-pointer hover:bg-[#222222] transition-colors"
+                    onClick={() => chatAvatarFileRef.current?.click()}
+                  >
+                    上传头像
+                  </button>
+                  {chatAvatar ? (
+                    <button
+                      className="ts-10 px-3 py-1 bg-transparent text-[var(--c-text)] border border-[var(--c-panel-border)] rounded-full cursor-pointer"
+                      onClick={() => setChatAvatar(null)}
+                    >
+                      清除
+                    </button>
+                  ) : null}
+                </div>
+                <input
+                  ref={chatAvatarFileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) await handleAvatarFile(file, setChatAvatar);
+                    e.target.value = "";
+                  }}
+                />
               </div>
             )}
           </div>

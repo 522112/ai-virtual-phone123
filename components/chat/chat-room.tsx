@@ -64,7 +64,7 @@ import { useKeyboardDismissAutoSend } from "@/components/chat/use-keyboard-dismi
 import { cancelBailoutKey } from "@/lib/push-bailout-client";
 import { PENDING_REPLY_PREFIX } from "@/lib/friend-request-engine";
 import type { UserIdentity } from "@/components/settings/user-identity";
-import { AlertCircle, Blocks, Check, Trash2, User, ChevronLeft, ChevronRight, Clapperboard, Clock, Gift, Heart, Languages, Loader2, MoreHorizontal, X } from "lucide-react";
+import { AlertCircle, Blocks, Check, Trash2, User, Users, ChevronLeft, ChevronRight, Clapperboard, Clock, Gift, Heart, Languages, Loader2, MoreHorizontal, X } from "lucide-react";
 import { setDebugChatState } from "@/lib/debug-store";
 import { SessionCustomCSS } from "@/components/ui/session-custom-css";
 import { setChatActive } from "@/lib/music-action-queue";
@@ -102,6 +102,7 @@ import { CHAT_PLUGIN_TOAST_EVENT, getChatPluginRuntime } from "@/lib/chat-plugin
 import { ChatPluginSlot } from "@/components/chat/chat-plugin-slot";
 import { RelationshipInviteModal } from "@/components/chat/relationship-invite-modal";
 import { CharacterBusinessCard } from "@/components/chat/character-business-card";
+import { RecommendCardModal } from "@/components/chat/god-view-sheet";
 import { PeerHomepage } from "@/components/chat/peer-homepage";
 import { RelationshipSpace } from "@/components/chat/relationship-space";
 import {
@@ -669,6 +670,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
     onToggleTheaterMode: () => void;
     onCloseTheaterMode: () => void;
     onOpenRichModal: (modal: RichModalKind) => void;
+    onRecommendCard: () => void;
     onOpenCustomPlusAction: (action: RegisteredCustomAppChatPlusAction) => void;
     onStartVideoCall: () => void;
     onStartVoiceCall: () => void;
@@ -701,6 +703,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
     onToggleTheaterMode,
     onCloseTheaterMode,
     onOpenRichModal,
+    onRecommendCard,
     onOpenCustomPlusAction,
     onStartVideoCall,
     onStartVoiceCall,
@@ -780,6 +783,7 @@ const ChatTextInputBar = memo(forwardRef<ChatTextInputHandle, {
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>, label: "位置", onClick: () => onOpenRichModal("location") },
         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--c-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="22" /><line x1="8" y1="22" x2="16" y2="22" /></svg>, label: "语音条", onClick: () => onOpenRichModal("voice_msg") },
         ...(!isGroup ? [{ icon: <Heart size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "关系", onClick: onOpenRelationship }] : []),
+        ...(!isGroup ? [{ icon: <Users size={22} strokeWidth={1.5} color="var(--c-text)" />, label: "推荐名片", onClick: onRecommendCard }] : []),
         ...customPlusActions.map(action => ({
             icon: action.appIconDataUrl
                 ? <span className="chat-plus-custom-app-icon" style={{ backgroundImage: `url(${action.appIconDataUrl})` }} aria-hidden="true" />
@@ -1176,6 +1180,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [activeCustomChatPlus, setActiveCustomChatPlus] = useState<ActiveCustomChatPlus | null>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [showBusinessCard, setShowBusinessCard] = useState(false);
+    const [showRecommendCard, setShowRecommendCard] = useState(false);
     // 单击进名片 / 双击拍一拍：单击延迟 260ms，防双击误触
     const avatarTapTimer = useRef<number | null>(null);
     // 对方个人主页浮层：单击消息区对方头像打开（微信式主页+仅 TA 朋友圈）
@@ -6205,6 +6210,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             {showBusinessCard && !session.isGroup && (
                 <CharacterBusinessCard characterId={session.contactId} sessionId={session.id} onClose={() => setShowBusinessCard(false)} onOpenHomepage={setPeerHomeCharId} />
             )}
+            {showRecommendCard && !session.isGroup && (
+                <RecommendCardModal hostCharacterId={session.contactId} onClose={() => setShowRecommendCard(false)} />
+            )}
             {peerHomeCharId && (
                 <PeerHomepage
                     characterId={peerHomeCharId}
@@ -7067,6 +7075,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
 	                onToggleTheaterMode={toggleTheaterMode}
 	                onCloseTheaterMode={closeTheaterMode}
 	                onOpenRichModal={(modal) => { setShowPlusMenu(false); setRichModal(modal); }}
+                onRecommendCard={() => { setShowPlusMenu(false); setShowRecommendCard(true); }}
                 onOpenCustomPlusAction={handleOpenCustomPlusAction}
                 onStartVideoCall={() => { cancelFollowUp(session.id); setShowPlusMenu(false); setCallInitiator("user"); setShowVideoCall(true); }}
                 onStartVoiceCall={() => { cancelFollowUp(session.id); setShowPlusMenu(false); setCallInitiator("user"); setShowVoiceCall(true); }}

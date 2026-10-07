@@ -18,6 +18,7 @@ export function MomentsCompose({ onClose, onPublished }: Props) {
     const [text, setText] = useState("");
     const [photoAssetId, setPhotoAssetId] = useState<string | null>(null);
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+    const [photoLink, setPhotoLink] = useState("");
     const [photoDesc, setPhotoDesc] = useState("");
     const [location, setLocation] = useState("");
     const [locationDraft, setLocationDraft] = useState("");
@@ -171,7 +172,7 @@ export function MomentsCompose({ onClose, onPublished }: Props) {
             authorId: "user",
             maskId: resolveUserIdentity(undefined, "chat")?.id,
             content,
-            photoUrl: photoAssetId ? `asset://${photoAssetId}` : undefined,
+            photoUrl: photoLink.trim() || (photoAssetId ? `asset://${photoAssetId}` : undefined),
             photoDescription: photoDesc.trim() || undefined,
             visibility: visibleCharIds,
             location: location || undefined,
@@ -224,10 +225,10 @@ export function MomentsCompose({ onClose, onPublished }: Props) {
 
                     {/* Photo block */}
                     <div className="compose-media-grid">
-                        {photoPreview ? (
+                        {photoPreview || photoLink.trim() ? (
                             <div className="compose-photo-block-preview">
-                                <img src={photoPreview} alt="" />
-                                <button onClick={handleRemovePhoto} className="ui-close-sm compose-photo-remove">×</button>
+                                <img src={photoLink.trim() || photoPreview || ""} alt="" />
+                                <button onClick={() => { handleRemovePhoto(); setPhotoLink(""); }} className="ui-close-sm compose-photo-remove">×</button>
                             </div>
                         ) : (
                             <button onClick={handleImageSelect} className="compose-photo-block">
@@ -238,6 +239,14 @@ export function MomentsCompose({ onClose, onPublished }: Props) {
                             </button>
                         )}
                     </div>
+                    {!photoPreview && (
+                        <input
+                            value={photoLink}
+                            onChange={e => setPhotoLink(e.target.value)}
+                            placeholder="或粘贴图片链接"
+                            className="ui-input w-full mt-2"
+                        />
+                    )}
                     {!photoPreview && (
                         <input
                             value={photoDesc || ""}

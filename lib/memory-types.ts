@@ -5,6 +5,8 @@ import type { ContentAppId } from "./settings-types";
 export type MemoryEntry = {
     id: string;
     characterId: string;
+    /** 对方身份：主号为空，用户小号为 subId；不同身份记忆隔离，防串联污染 */
+    counterpartId?: string;
     sourceApp: ContentAppId;
     type: "long_term" | "core";
     content: string;

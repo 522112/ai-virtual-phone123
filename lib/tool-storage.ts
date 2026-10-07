@@ -629,16 +629,32 @@ const BUILTIN_REST_TOOLS: RestToolConfig[] = [
     BUILTIN_SEARCH,
 ];
 
+/** 本地存的数据若被错误编码洗成 ????（中文全变问号），用内置源码修复 */
+function isMangledToolText(value: unknown): boolean {
+    if (typeof value !== "string") return false;
+    return /\?{3,}/.test(value);
+}
+
+function repairMangledRestTool(existing: RestToolConfig, builtin: RestToolConfig): RestToolConfig {
+    const repaired = { ...existing };
+    if (isMangledToolText(existing.name)) repaired.name = builtin.name;
+    if (isMangledToolText(existing.description)) repaired.description = builtin.description;
+    if (isMangledToolText(existing.endpoint)) repaired.endpoint = builtin.endpoint;
+    if (isMangledToolText(existing.parameterSchema)) repaired.parameterSchema = builtin.parameterSchema;
+    return repaired;
+}
+
 function mergeBuiltinRestTool(existing: RestToolConfig | undefined, builtin: RestToolConfig): RestToolConfig {
     if (!existing) return builtin;
+    const clean = repairMangledRestTool(existing, builtin);
     return {
         ...builtin,
-        ...existing,
+        ...clean,
         id: builtin.id,
         builtIn: true,
-        createdBy: existing.createdBy || builtin.createdBy,
-        createdAt: existing.createdAt ?? builtin.createdAt,
-        updatedAt: existing.updatedAt ?? builtin.updatedAt,
+        createdBy: clean.createdBy || builtin.createdBy,
+        createdAt: clean.createdAt ?? builtin.createdAt,
+        updatedAt: clean.updatedAt ?? builtin.updatedAt,
     };
 }
 

@@ -8,7 +8,9 @@ import {
   RESOURCE_CATEGORIES,
   RESOURCE_LIBRARY_SHARED_SCOPE,
   addResource,
+  addResourceCategory,
   deleteResource,
+  listResourceCategories,
   listResources,
   resourceDisplayUrl,
   updateResource,
@@ -141,6 +143,7 @@ export function ResourceLibraryPage({ onNotice, scope: scopeProp, category: cate
     () => (scope ? listResources(scope).filter(item => !category || item.category === category) : []),
     [scope, category, tick],
   );
+  const allCategories = useMemo(() => listResourceCategories(), [tick]);
   const folderCounts = useMemo(() => {
     if (!scope) return {} as Record<string, number>;
     const counts: Record<string, number> = {};
@@ -204,7 +207,7 @@ export function ResourceLibraryPage({ onNotice, scope: scopeProp, category: cate
     }
   };
 
-  const saveMeta = (item: ResourceItem, patch: { note?: string; category?: string }) => {
+  const saveMeta = (item: ResourceItem, patch: { note?: string; category?: string; url?: string }) => {
     updateResource(item.id, patch);
     setTick(n => n + 1);
   };
@@ -281,7 +284,7 @@ export function ResourceLibraryPage({ onNotice, scope: scopeProp, category: cate
             {uploading ? "上传中…" : "上传图片 / 视频 / 语音"}
           </button>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {RESOURCE_CATEGORIES.map(cat => (
+            {allCategories.map(cat => (
               <button
                 key={cat}
                 type="button"
@@ -322,8 +325,10 @@ export function ResourceLibraryPage({ onNotice, scope: scopeProp, category: cate
               <ResourceTile
                 key={item.id}
                 item={item}
+                categories={allCategories}
                 confirming={confirmDeleteId === item.id}
                 onSaveMeta={saveMeta}
+                onAddCategory={name => { addResourceCategory(name); setTick(n => n + 1); }}
                 onAskDelete={() => setConfirmDeleteId(item.id)}
                 onCancelDelete={() => setConfirmDeleteId(null)}
                 onConfirmDelete={() => removeItem(item.id)}
@@ -336,27 +341,34 @@ export function ResourceLibraryPage({ onNotice, scope: scopeProp, category: cate
   );
 }
 
-function ResourceTile({ item, confirming, onSaveMeta, onAskDelete, onCancelDelete, onConfirmDelete }: {
+function ResourceTile({ item, categories, confirming, onSaveMeta, onAddCategory, onAskDelete, onCancelDelete, onConfirmDelete }: {
   item: ResourceItem;
+  categories: string[];
   confirming: boolean;
-  onSaveMeta: (item: ResourceItem, patch: { note?: string; category?: string }) => void;
+  onSaveMeta: (item: ResourceItem, patch: { note?: string; category?: string; url?: string }) => void;
+  onAddCategory: (name: string) => void;
   onAskDelete: () => void;
   onCancelDelete: () => void;
   onConfirmDelete: () => void;
 }) {
   const [note, setNote] = useState(item.note);
+  const [url, setUrl] = useState(item.url || "");
   const [category, setCategory] = useState(item.category);
   const [describing, setDescribing] = useState(false);
+  const [describeError, setDescribeError] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [newCategory, setNewCategory] = useState("");
   const src = resourceDisplayUrl(item);
   const handleDescribe = async () => {
     if (describing || item.kind !== "image" || !src) return;
     setDescribing(true);
+    setDescribeError("");
     try {
       const text = await describeResourceImage(src);
       setNote(text);
       onSaveMeta(item, { note: text });
     } catch (error) {
-      onSaveMeta(item, { note });
+      setDescribeError(error instanceof Error ? error.message : "识别失败");
     } finally {
       setDescribing(false);
     }
@@ -393,15 +405,47 @@ function ResourceTile({ item, confirming, onSaveMeta, onAskDelete, onCancelDelet
           </button>
         ) : null}
       </div>
+      {describeError ? <span className="menu-desc" style={{ color: "#e8354b" }}>{describeError}</span> : null}
+      <input
+        value={url}
+        onChange={e => setUrl(e.target.value)}
+        onBlur={() => { if (url.trim() !== (item.url || "")) onSaveMeta(item, { url: url.trim() }); }}
+        placeholder="链接：自己图床的直链，角色用这个发"
+        className="ui-input"
+        style={{ fontSize: 12 }}
+      />
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <select
-          value={RESOURCE_CATEGORIES.includes(item.category as never) ? category : "其他"}
+          value={categories.includes(category) ? category : "其他"}
           onChange={e => { setCategory(e.target.value); onSaveMeta(item, { category: e.target.value }); }}
           className="ui-select"
           style={{ fontSize: 12, flex: 1, minWidth: 0 }}
         >
-          {RESOURCE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          {categories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
+        {addingCategory ? (
+          <input
+            value={newCategory}
+            autoFocus
+            maxLength={12}
+            onChange={e => setNewCategory(e.target.value)}
+            onBlur={() => {
+              if (newCategory.trim()) {
+                onAddCategory(newCategory.trim());
+                setCategory(newCategory.trim());
+                onSaveMeta(item, { category: newCategory.trim() });
+              }
+              setAddingCategory(false);
+              setNewCategory("");
+            }}
+            onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+            placeholder="新分类"
+            className="ui-input"
+            style={{ fontSize: 12, width: 76 }}
+          />
+        ) : (
+          <button type="button" onClick={() => setAddingCategory(true)} style={{ border: "1px solid var(--c-panel-border)", background: "none", color: "var(--c-text-title)", fontSize: 12, borderRadius: 10, padding: "7px 8px", cursor: "pointer" }}>＋类</button>
+        )}
         {confirming ? (
           <button type="button" onClick={onConfirmDelete} style={{ border: 0, background: "#e8354b", color: "#fff", fontSize: 12, fontWeight: 700, borderRadius: 10, padding: "7px 10px", cursor: "pointer" }}>确认</button>
         ) : (

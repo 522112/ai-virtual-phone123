@@ -31,6 +31,63 @@ export const RESOURCE_CATEGORIES = [
   "其他",
 ] as const;
 
+const CUSTOM_CATEGORIES_KEY = "ai_phone_resource_custom_categories_v1";
+registerKvMigration(CUSTOM_CATEGORIES_KEY);
+
+/** 内置分类 + 用户自定义分类 */
+export function listResourceCategories(): string[] {
+  try {
+    const raw = kvGet(CUSTOM_CATEGORIES_KEY);
+    const custom = raw ? (JSON.parse(raw) as unknown) : [];
+    const extra = Array.isArray(custom) ? custom.filter(c => typeof c === "string" && c.trim()).map(c => c.trim()) : [];
+    return [...RESOURCE_CATEGORIES, ...extra.filter(c => !(RESOURCE_CATEGORIES as readonly string[]).includes(c))];
+  } catch {
+    return [...RESOURCE_CATEGORIES];
+  }
+}
+
+export function addResourceCategory(name: string): string[] {
+  const trimmed = name.trim().slice(0, 12);
+  if (!trimmed) return listResourceCategories();
+  const next = listResourceCategories();
+  if (!next.includes(trimmed)) {
+    next.push(trimmed);
+    try {
+      kvSet(CUSTOM_CATEGORIES_KEY, JSON.stringify(next.filter(c => !(RESOURCE_CATEGORIES as readonly string[]).includes(c))));
+    } catch { /* ignore */ }
+  }
+  return next;
+}
+
+/**
+ * 模糊找最相关的一张图：按关键词在备注/分类里计分，取最高分。
+ * 角色发图/配图时用这个，不要写死 id。
+ */
+export function findBestResourceImage(scope: string, keyword: string): ResourceItem | null {
+  const terms = keyword.split(/[\s,，。；;、]+/).map(t => t.trim()).filter(Boolean).slice(0, 8);
+  const pool = [
+    ...listResources(scope).filter(item => item.kind === "image"),
+    ...listResources(RESOURCE_LIBRARY_SHARED_SCOPE).filter(item => item.kind === "image"),
+  ];
+  if (pool.length === 0) return null;
+  if (terms.length === 0) return pool[0];
+  let best: ResourceItem | null = null;
+  let bestScore = 0;
+  for (const item of pool) {
+    const hay = `${item.note} ${item.category}`;
+    let score = 0;
+    for (const term of terms) {
+      if (hay.includes(term)) score += term.length >= 2 ? 3 : 1;
+    }
+    if (item.note) score += 0.5;
+    if (score > bestScore) {
+      bestScore = score;
+      best = item;
+    }
+  }
+  return bestScore > 0 ? best : null;
+}
+
 const RESOURCE_KEY = "ai_phone_resource_library_v1";
 
 registerKvMigration(RESOURCE_KEY);
@@ -111,7 +168,7 @@ export function resourceDisplayUrl(item: Pick<ResourceItem, "url" | "dataUrl">):
 
 export function updateResource(
   id: string,
-  patch: Partial<Pick<ResourceItem, "note" | "category">>,
+  patch: Partial<Pick<ResourceItem, "note" | "category" | "url">>,
 ): ResourceItem | null {
   const items = readAll();
   const idx = items.findIndex(item => item.id === id);
@@ -119,6 +176,7 @@ export function updateResource(
   const updated: ResourceItem = {
     ...items[idx],
     note: typeof patch.note === "string" ? patch.note.trim() : items[idx].note,
+    url: typeof patch.url === "string" ? patch.url.trim() : items[idx].url,
     category: typeof patch.category === "string" && patch.category.trim()
       ? patch.category.trim()
       : items[idx].category,

@@ -11,6 +11,13 @@ import {
   notifyCharacterOfUserRemarkChange,
 } from "@/lib/contact-remarks";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import { overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
+import {
+  createCharacterSubAccount,
+  deleteCharacterSubAccount,
+  loadCharacterSubAccounts,
+  type CharacterSubAccount,
+} from "@/lib/sub-accounts";
 import type { Character } from "@/lib/character-types";
 
 const L = {
@@ -55,6 +62,8 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenH
   const [theirRemark, setTheirRemark] = useState(() => getCharacterRemark(characterId));
   const [moments, setMoments] = useState(() => getCharacterRecentMoments(characterId));
   const [notice, setNotice] = useState("");
+  const [charSubs, setCharSubs] = useState<CharacterSubAccount[]>(() => loadCharacterSubAccounts(characterId));
+  const [subBusy, setSubBusy] = useState(false);
 
   useEffect(() => {
     const chars = loadCharacters();
@@ -66,6 +75,10 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenH
     setDraft(current);
     setTheirRemark(getCharacterRemark(characterId));
     setMoments(getCharacterRecentMoments(characterId));
+    // 对方备注初始生成（按人设+记忆，后续对方可改）
+    if (!getCharacterRemark(characterId)) {
+      void import("@/lib/character-remark-engine").then(m => m.ensureInitialCharacterRemark(characterId)).catch(() => {});
+    }
     const onRemark = () => {
       setTheirRemark(getCharacterRemark(characterId));
       setMoments(getCharacterRecentMoments(characterId));
@@ -93,6 +106,7 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenH
   };
 
   if (!character) return null;
+  const shown = overlayCharacterForDisplay(character);
   const wechatId = character.wechatID || character.id.slice(-8);
 
   return (
@@ -106,7 +120,7 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenH
         </div>
         <div className="char-card-profile">
           <div className="char-card-avatar">
-            {character.avatar ? <img src={character.avatar} alt="" /> : <ChatFallbackAvatar />}
+            {shown.avatar ? <img src={shown.avatar} alt="" /> : <ChatFallbackAvatar />}
           </div>
           <div className="char-card-idblock">
             <strong>{alias || character.screenName || character.name}</strong>
@@ -148,13 +162,57 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenH
           ) : (
             moments.map(m => (
               <div key={m.id} className="char-card-moment">
-                <p>{m.content.slice(0, 90)}</p>
-                <span>{formatMomentTime(m.createdAt)}</span>
+                {m.photoUrl ? <img src={m.photoUrl} alt="" /> : null}
+                <div className="char-card-moment-body">
+                  <p>{m.content.slice(0, 90)}</p>
+                  <span>{formatMomentTime(m.createdAt)}</span>
+                </div>
               </div>
             ))
           )}
         </div>
         {notice ? <div className="char-card-notice">{notice}</div> : null}
+        <div className="char-card-moments">
+          <div className="char-card-moments-title"><span>TA 的小号（按人设开）</span></div>
+          {charSubs.length === 0 ? (
+            <div className="char-card-moments-empty">TA 还没开小号</div>
+          ) : (
+            charSubs.map(sub => (
+              <div key={sub.id} className="char-card-moment">
+                {sub.avatar ? <img src={sub.avatar} alt="" /> : null}
+                <div className="char-card-moment-body">
+                  <p>{sub.name}{sub.persona ? ` · ${sub.persona.slice(0, 40)}` : ""}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { deleteCharacterSubAccount(sub.id); setCharSubs(loadCharacterSubAccounts(characterId)); }}
+                  style={{ border: 0, background: "none", color: "#e8354b", fontSize: 12, cursor: "pointer", flexShrink: 0 }}
+                >
+                  删除
+                </button>
+              </div>
+            ))
+          )}
+          <button
+            type="button"
+            disabled={subBusy}
+            onClick={() => {
+              if (subBusy) return;
+              setSubBusy(true);
+              void import("@/lib/recommend-card-engine")
+                .then(m => m.createCharacterSubByPersona(characterId))
+                .then(() => {
+                  setCharSubs(loadCharacterSubAccounts(characterId));
+                  setNotice("TA 按人设开了个小号");
+                })
+                .catch(error => setNotice(error instanceof Error ? error.message : "开小号失败"))
+                .finally(() => setSubBusy(false));
+            }}
+            style={{ border: "1px solid var(--c-panel-border)", background: "none", borderRadius: 10, padding: "8px", fontSize: 13, cursor: "pointer", width: "100%" }}
+          >
+            {subBusy ? "TA 正在想…" : "让 TA 按人设开个小号"}
+          </button>
+        </div>
       </div>
     </div>
   );

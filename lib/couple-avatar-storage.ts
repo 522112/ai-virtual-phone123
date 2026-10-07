@@ -130,12 +130,13 @@ export function wearCharacterCoupleAvatar(characterId: string, avatar: string): 
 }
 
 export function resolveCharacterDisplayAvatar(
-    character: { id: string; avatar?: string | null } | null | undefined,
+    character: { id: string; avatar?: string | null; chatAvatar?: string | null } | null | undefined,
 ): string | null {
     if (!character) return null;
     const worn = loadCoupleAvatarWear(character.id)?.characterAvatar?.trim();
     if (worn) return worn;
-    return character.avatar || null;
+    // 聊天头像优先，空则回退立绘
+    return character.chatAvatar || character.avatar || null;
 }
 
 /** 只有传入该角色 id 时才盖用户情头；A/B 共用身份时，跟 B 仍走原 avatarUrl。 */
@@ -150,9 +151,9 @@ export function resolveUserDisplayAvatar(
     return resolveUserIdentity(characterId || undefined, appId)?.avatarUrl || null;
 }
 
-export function overlayCharacterForDisplay<T extends { id: string; avatar?: string | null }>(character: T): T {
+export function overlayCharacterForDisplay<T extends { id: string; avatar?: string | null; chatAvatar?: string | null }>(character: T): T {
     const avatar = resolveCharacterDisplayAvatar(character);
-    if (avatar === (character.avatar || null)) return character;
+    if (avatar === ((character.chatAvatar || character.avatar) || null)) return character;
     return { ...character, avatar };
 }
 

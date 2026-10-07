@@ -20,6 +20,20 @@ import { loadNativeTimeline, formatTimelineForSummarization, filterTimelineByAll
 import { generateEmbedding, resolveEmbeddingModel } from "./memory-embedding";
 import { simpleLLMCall } from "./api-helpers";
 import { maybeRunCoreMemoryPipeline } from "./core-memory-builder";
+import { loadChatSessions } from "./chat-storage";
+
+/** 汇总事件若全部来自同一个小号会话，打上身份戳，实现记忆隔离 */
+function resolveSummaryCounterpart(sessionIds: string[]): string | undefined {
+  if (sessionIds.length === 0) return undefined;
+  try {
+    const sessions = loadChatSessions();
+    const subIds = new Set(
+      sessionIds.map(id => sessions.find(s => s.id === id)?.subId).filter((v): v is string => Boolean(v)),
+    );
+    if (subIds.size === 1) return [...subIds][0];
+  } catch { /* ignore */ }
+  return undefined;
+}
 
 /** Per-character lock to prevent concurrent summarization. */
 const summarizingSet = new Set<string>();
@@ -151,6 +165,7 @@ export async function runSummarizationPipeline(
     const longTermEntry: MemoryEntry = {
         id: `mem_lt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         characterId,
+        counterpartId: resolveSummaryCounterpart(sourceSessionIds),
         sourceApp: dominantSource as MemoryEntry["sourceApp"],
         type: "long_term",
         content: summary,

@@ -8849,3 +8849,9 @@ button.peer-home-row { cursor: pointer; }
 
 .peer-home-actions { display: flex; gap: 10px; padding: 6px 16px 20px; }
 .peer-home-action-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 0; border-radius: 12px; border: 1px solid var(--c-panel-border); background: var(--c-card); color: var(--c-text-title); font-size: 14px; font-weight: 600; cursor: pointer; }
+
+.char-card-overlay { background: var(--c-page-body-bg); align-items: stretch; }
+.char-card { max-height: none; border-radius: 0; padding-top: calc(12px + var(--page-header-safe-top, 0px)); }
+.char-card-moment { display: flex; gap: 8px; align-items: flex-start; }
+.char-card-moment img { width: 52px; height: 52px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+.char-card-moment-body { flex: 1; min-width: 0; }

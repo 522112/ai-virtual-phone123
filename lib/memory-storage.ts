@@ -69,7 +69,7 @@ export async function saveMemoryEntry(entry: MemoryEntry): Promise<void> {
     }
 }
 
-export async function loadMemoryEntries(characterId: string): Promise<MemoryEntry[]> {
+export async function loadMemoryEntries(characterId: string, counterpartId?: string): Promise<MemoryEntry[]> {
     const db = await openDb();
     if (!db) return [];
     try {
@@ -84,8 +84,12 @@ export async function loadMemoryEntries(characterId: string): Promise<MemoryEntr
             const allEntries: MemoryEntry[] = await runRequest(tx.objectStore(STORE_NAME).getAll());
             entries = allEntries.filter(entry => entry.characterId === characterId);
         }
-        entries.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-        return entries;
+        // 小号隔离：有身份只看该身份的记忆（含历史无身份记忆）；主号只看无身份记忆
+        const scoped = entries.filter(entry => counterpartId
+            ? (!entry.counterpartId || entry.counterpartId === counterpartId)
+            : !entry.counterpartId);
+        scoped.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        return scoped;
     } finally {
         db.close();
     }
@@ -94,8 +98,9 @@ export async function loadMemoryEntries(characterId: string): Promise<MemoryEntr
 export async function loadMemoryEntriesByType(
     characterId: string,
     type: MemoryEntry["type"],
+    counterpartId?: string,
 ): Promise<MemoryEntry[]> {
-    const entries = await loadMemoryEntries(characterId);
+    const entries = await loadMemoryEntries(characterId, counterpartId);
     return entries.filter(entry => entry.type === type);
 }
 

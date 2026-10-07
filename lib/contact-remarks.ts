@@ -219,7 +219,7 @@ export function getCharacterRecentMoments(
   characterId: string,
   days = 7,
   limit = 4,
-): Array<{ id: string; content: string; createdAt: string }> {
+): Array<{ id: string; content: string; createdAt: string; photoUrl?: string }> {
   try {
     const all = getAllPosts()
       .filter(p => p.authorType === "character" && p.authorId === characterId)
@@ -234,6 +234,7 @@ export function getCharacterRecentMoments(
       id: String((p as { id?: unknown }).id || ""),
       content: String(p.content || ""),
       createdAt: String(p.createdAt || ""),
+      photoUrl: typeof (p as { photoUrl?: unknown }).photoUrl === "string" ? String((p as { photoUrl?: unknown }).photoUrl) : undefined,
     }));
   } catch {
     return [];

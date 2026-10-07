@@ -41,6 +41,8 @@ export type ChatSession = {
     unreadCount: number;
     updatedAt: string; // ISO date
     isPinned: boolean;
+    /** 用户小号 id：该会话是小号与角色的聊天；空=主号 */
+    subId?: string;
     backgroundImage?: string; // Add support for custom background
     autoReplied?: boolean; // Whether the initial greeting auto-reply has been triggered
     alias?: string;

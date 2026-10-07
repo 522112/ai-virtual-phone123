@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useSyncExternalStore } from "react";
 import { ChevronLeft } from "lucide-react";
-import { loadChatSessions, loadChatContacts, ChatSession, createOrGetSession, createGroupSession, pushChatMessage, addChatContact, loadChatMessages, getLastVisibleSessionMessage, getChatMessagePreview } from "@/lib/chat-storage";
+import { loadChatSessions, loadChatContacts, ChatSession, createOrGetSession, createGroupSession, pushChatMessage, addChatContact, loadChatMessages, saveChatSessions, getLastVisibleSessionMessage, getChatMessagePreview } from "@/lib/chat-storage";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { Character } from "@/lib/character-types";
 import { COUPLE_AVATARS_UPDATED_EVENT, overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
@@ -22,8 +22,12 @@ import {
     mergeDuplicateSessionGroup,
     type DuplicateSessionGroup,
 } from "@/lib/chat-session-merge";
-import { kvSet } from "@/lib/kv-db";
+import { kvGet, kvSet, registerKvMigration } from "@/lib/kv-db";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import { SubAccountSheet } from "./sub-account-sheet";
+import { GodViewSheet } from "./god-view-sheet";
+import { getUserSubAccount, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
+import { loadBindingConfig, resolveBinding } from "@/lib/settings-storage";
 import {
     getMascotLastPreview,
     getMascotChatSnapshot,
@@ -118,6 +122,50 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
     const [mergePrompt, setMergePrompt] = useState<DuplicateSessionGroup[] | null>(null);
     const [mergeSelected, setMergeSelected] = useState<Set<string>>(new Set());
     const [identity, setIdentity] = useState<UserIdentity | null>(null);
+    const [showSubSheet, setShowSubSheet] = useState(false);
+    const [showGodView, setShowGodView] = useState(false);
+    const [activeMaskId, setActiveMaskId] = useState<string>(() => kvGet("active_mask_id") || "");
+    const [activeSubId, setActiveSubId] = useState<string | null>(() => kvGet("active_sub_id") || null);
+    const longPressTimer = React.useRef<number | null>(null);
+    useEffect(() => {
+        if (!activeMaskId) {
+            const first = resolveUserIdentity();
+            if (first?.id) {
+                setActiveMaskId(first.id);
+                kvSet("active_mask_id", first.id);
+            }
+        }
+    }, [activeMaskId]);
+
+    const beginAvatarLongPress = () => {
+        if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
+        longPressTimer.current = window.setTimeout(() => {
+            longPressTimer.current = null;
+            setShowSubSheet(true);
+        }, 550);
+    };
+    const cancelAvatarLongPress = () => {
+        if (longPressTimer.current) {
+            window.clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    };
+
+    // 用小号开聊：空会话（没内容）第一次打开时打上小号戳；已有内容的会话不动
+    const openSession = (session: ChatSession) => {
+        let next = session;
+        if (activeSubId && !session.isGroup && !session.subId && !hasSessionListContent(session.id)) {
+            const all = loadChatSessions();
+            const idx = all.findIndex(s => s.id === session.id);
+            if (idx !== -1) {
+                next = { ...session, subId: activeSubId };
+                all[idx] = next;
+                saveChatSessions(all);
+                setSessions(all);
+            }
+        }
+        onSelectSession(next);
+    };
     const mascotSettings = useSyncExternalStore(subscribeMascotSettings, getMascotSettingsSnapshot, getMascotSettingsSnapshot);
     const mascotChat = useSyncExternalStore(subscribeMascotChat, getMascotChatSnapshot, getMascotChatSnapshot);
     const [mascotAvatarUrl, setMascotAvatarUrl] = useState(mascotSettings.avatarImage || DEFAULT_MASCOT_AVATAR);
@@ -198,7 +246,14 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                             <ChevronLeft size={24} strokeWidth={1.5} />
                         </button>
                         <div className="flex items-center gap-[10px]">
-                            <div className="w-[36px] h-[36px] rounded-full overflow-hidden bg-[var(--c-input)] flex items-center justify-center shrink-0">
+                            <div
+                                className="w-[36px] h-[36px] rounded-full overflow-hidden bg-[var(--c-input)] flex items-center justify-center shrink-0"
+                                title="长按切换面具 / 小号"
+                                onPointerDown={beginAvatarLongPress}
+                                onPointerUp={cancelAvatarLongPress}
+                                onPointerLeave={cancelAvatarLongPress}
+                                onContextMenu={e => { e.preventDefault(); setShowSubSheet(true); }}
+                            >
                                 {identity?.avatarUrl ? (
                                     <img src={identity.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                                 ) : (
@@ -257,6 +312,14 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                         setGreetingText(identity?.name ? `我是${identity.name}` : "你好");
                                     }}
                                 />
+                                <MenuOption
+                                    icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>}
+                                    label="上帝视角"
+                                    onClick={() => {
+                                        setShowPlusMenu(false);
+                                        setShowGodView(true);
+                                    }}
+                                />
                             </div>
                         )}
                     </span>
@@ -302,6 +365,14 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                 if (!hasSessionListContent(s.id)) return false;
                                 if (listTab === "private" && s.isGroup) return false;
                                 if (listTab === "group" && !s.isGroup) return false;
+                                // 面具隔离：只显示绑定到当前面具的角色
+                                if (!s.isGroup && activeMaskId) {
+                                    try {
+                                        const binding = resolveBinding(loadBindingConfig(), s.contactId, "chat");
+                                        const boundMask = binding.userIdentityId || "";
+                                        if (boundMask && boundMask !== activeMaskId) return false;
+                                    } catch { /* ignore */ }
+                                }
                                 if (!keyword) return true;
                                 if (s.isGroup) return (s.groupName || "群聊").toLowerCase().includes(keyword);
                                 const name = s.alias || allChars.find(c => c.id === s.contactId)?.name || "";
@@ -316,7 +387,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                             })
                             .map(s => (
                                 <div key={s.id}>
-                                    <SessionItem session={s} onSelect={() => onSelectSession(s)} isPinned={!!s.isPinned} />
+                                    <SessionItem session={s} onSelect={() => openSession(s)} isPinned={!!s.isPinned} />
                                 </div>
                             ));
                             if (!showMascot && regularItems.length === 0) {
@@ -551,7 +622,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
 
                                         // 6. Open Chat
                                         setSessions(loadChatSessions());
-                                        onSelectSession(newSession);
+                                        openSession(newSession);
                                         setIsSearchModalOpen(false);
                                         setSearchQuery("");
                                         setSearchResult(undefined);
@@ -582,7 +653,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                     onSelect={(charId) => {
                         const session = createOrGetSession(charId);
                         setSessions(loadChatSessions());
-                        onSelectSession(session);
+                        openSession(session);
                         setShowContactPicker(false);
                     }}
                 />
@@ -659,7 +730,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                             status: "sent",
                         });
                         setSessions(loadChatSessions());
-                        onSelectSession(newSession);
+                        openSession(newSession);
                         setShowGroupCreate(false);
                     }}
                 />
@@ -668,6 +739,18 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
             {/* User Profile Panel */}
             {showUserProfile && (
                 <UserProfilePanel onClose={() => { setShowUserProfile(false); setIdentity(resolveUserIdentity()); }} className="absolute inset-0 z-[100]" />
+            )}
+            {showGodView && (
+                <GodViewSheet onClose={() => setShowGodView(false)} />
+            )}
+            {showSubSheet && (
+                <SubAccountSheet
+                    activeMaskId={activeMaskId}
+                    activeSubId={activeSubId}
+                    onSelectMask={maskId => { setActiveMaskId(maskId); kvSet("active_mask_id", maskId); setIdentity(resolveUserIdentity()); }}
+                    onSelectSub={subId => { setActiveSubId(subId); kvSet("active_sub_id", subId || ""); }}
+                    onClose={() => setShowSubSheet(false)}
+                />
             )}
         </div>
     );
