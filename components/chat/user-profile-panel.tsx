@@ -9,7 +9,6 @@ import {
     resolveUserIdentity,
     loadUserIdentities,
 } from "@/lib/settings-storage";
-import { kvGet } from "@/lib/kv-db";
 import { loadChatAppSettings, saveChatAppSettings } from "@/lib/chat-storage";
 import type { UserIdentity } from "@/components/settings/user-identity";
 import { getApiLogs, clearApiLogs, type DebugInfo } from "@/lib/chat-engine";
