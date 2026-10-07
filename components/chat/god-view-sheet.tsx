@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { loadCharacters } from "@/lib/character-storage";
 import { loadChatContacts, loadChatSessions } from "@/lib/chat-storage";
 import { recommendCardToCharacter } from "@/lib/recommend-card-engine";
+import { describeFlowError } from "@/lib/chunk-reload";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { WxContactSelectList } from "./wx-contact-select";
 import {
@@ -81,9 +82,11 @@ export function RecommendCardModal({ hostCharacterId, onClose }: { hostCharacter
       const hostSession = sessions.find(s => s.contactId === hostCharacterId && !s.isGroup);
       if (!hostSession) throw new Error("先打开和 TA 的聊天");
       const res = await recommendCardToCharacter(hostCharacterId, guestId, hostSession.id);
-      setResult(res.accepted ? `TA 加了对方：${res.reply}（已进上帝视角）` : `TA 没加：${res.reply}`);
+      setResult(res.accepted ? `已发送，双方直接聊上了（点会话里的记录卡围观）` : `TA 没加：${res.reply}`);
+      if (res.accepted) window.setTimeout(() => onClose(), 1500);
     } catch (error) {
-      setResult(error instanceof Error ? error.message : "推荐失败");
+      const text = describeFlowError(error, "推荐失败");
+      if (text) setResult(text);
     } finally {
       setBusyId(null);
     }
@@ -101,7 +104,7 @@ export function RecommendCardModal({ hostCharacterId, onClose }: { hostCharacter
           contacts={candidates.map(c => ({ id: c.id, name: c.screenName || c.name, avatar: (c.chatAvatar || c.avatar) as string | null }))}
           onSelect={guestId => void recommend(guestId)}
           disabled={busyId !== null}
-          footer={c => (busyId === c.id ? <small className="menu-desc">正在撮合…</small> : null)}
+          footer={c => (busyId === c.id ? <small className="menu-desc">正在发送…</small> : null)}
         />
         {result ? <div style={{ padding: "8px 16px" }}><small className="menu-desc">{result}</small></div> : null}
       </div>

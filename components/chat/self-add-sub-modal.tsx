@@ -3,6 +3,7 @@ import { kvGet } from "@/lib/kv-db";
 import { pushChatMessage } from "@/lib/chat-storage";
 import { getUserSubAccount } from "@/lib/sub-accounts";
 import { ensureSubSession } from "@/lib/sub-friend-engine";
+import { describeFlowError } from "@/lib/chunk-reload";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { SubAccountSheet } from "./sub-account-sheet";
 
@@ -46,7 +47,8 @@ export function SelfAddSubModal({ characterId, characterName, characterAvatar, o
         setResult(`已用${characterName || "对方"}的手机通过，切到「${picked.name}」就能聊了`);
         window.setTimeout(() => onDone(), 1200);
       } catch (error) {
-        setResult(error instanceof Error ? error.message : "加上失败，再试一次");
+        const text = describeFlowError(error, "加上失败，再试一次");
+        setResult(text || "正在刷新页面…");
       } finally {
         setBusy(false);
       }
