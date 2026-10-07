@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, type CSSProperties } from "react";
+import { useState, useEffect, useMemo, useRef, type CSSProperties } from "react";
 import CSSSchemeBar from "@/components/ui/css-scheme-picker";
 import {
     loadFollowUpConfig,
@@ -33,6 +33,7 @@ import { loadTimedWakeSchedules, makeTimedWakeId, removeTimedWakeSchedule, saveT
 import { IDLE_RECONNECT_MAX_CONSECUTIVE, loadIdleReconnectRules, removeIdleReconnectRule, upsertIdleReconnectRule, type IdleReconnectRule } from "@/lib/idle-reconnect-storage";
 import { addChatContact, createOrGetSession } from "@/lib/chat-storage";
 import { kvGet, kvSet, kvRemove } from "@/lib/kv-db";
+import { MaskSwitchSheet } from "./mask-switch-sheet";
 import { formatWalletAmount, getWalletBalance, loadWalletState, WALLET_UPDATED_EVENT } from "@/lib/wallet-storage";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import {
@@ -157,6 +158,8 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     const [showMomentsSettings, setShowMomentsSettings] = useState(false);
     const [showWalletPanel, setShowWalletPanel] = useState(false);
     const [identity, setIdentity] = useState<UserIdentity | null>(null);
+    const [showMaskSheet, setShowMaskSheet] = useState(false);
+    const avatarTimer = useRef<number | null>(null);
     const [notifEnabled, setNotifEnabled] = useState(false);
     const [notifHint, setNotifHint] = useState<string | null>(null);
     const [notifChecking, setNotifChecking] = useState(false);
@@ -324,8 +327,21 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                     
                     {/* User Info & Stats Block */}
                     <div className="flex items-center gap-5 px-6 pt-2 pb-4">
-                        {/* Avatar */}
-                        <div className="relative shrink-0">
+                        {/* Avatar（长按快捷切换面具） */}
+                        <div
+                            className="relative shrink-0"
+                            title="长按切换面具"
+                            onPointerDown={() => {
+                                if (avatarTimer.current) window.clearTimeout(avatarTimer.current);
+                                avatarTimer.current = window.setTimeout(() => {
+                                    avatarTimer.current = null;
+                                    setShowMaskSheet(true);
+                                }, 550);
+                            }}
+                            onPointerUp={() => { if (avatarTimer.current) { window.clearTimeout(avatarTimer.current); avatarTimer.current = null; } }}
+                            onPointerLeave={() => { if (avatarTimer.current) { window.clearTimeout(avatarTimer.current); avatarTimer.current = null; } }}
+                            onContextMenu={e => { e.preventDefault(); setShowMaskSheet(true); }}
+                        >
                             <div className="w-[84px] h-[84px] rounded-full overflow-hidden bg-[var(--c-card)] border-2 border-white/50 shadow-sm flex items-center justify-center relative"
                                  style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}>
                                 {identity?.avatarUrl ? (
@@ -618,6 +634,19 @@ function FollowUpSettingsEditor({ onBack }: { onBack: () => void }) {
                 </div>
 
             </div>
+            {showMaskSheet && (
+                <MaskSwitchSheet
+                    activeMaskId={kvGet("active_mask_id") || identity?.id || ""}
+                    onSelect={maskId => {
+                        kvSet("active_mask_id", maskId);
+                        kvSet("active_sub_id", "");
+                        window.dispatchEvent(new CustomEvent("chat-messages-updated"));
+                        window.dispatchEvent(new CustomEvent("weixin-messages-updated"));
+                        onClose();
+                    }}
+                    onClose={() => setShowMaskSheet(false)}
+                />
+            )}
         </PageShell>
     );
 }

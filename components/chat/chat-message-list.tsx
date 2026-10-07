@@ -26,8 +26,9 @@ import { kvGet, kvSet, registerKvMigration } from "@/lib/kv-db";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { SubAccountSheet } from "./sub-account-sheet";
 import { GodViewSheet } from "./god-view-sheet";
+import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import { getUserSubAccount, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
-import { loadBindingConfig, resolveBinding } from "@/lib/settings-storage";
+import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import {
     getMascotLastPreview,
     getMascotChatSnapshot,
@@ -365,14 +366,8 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                 if (!hasSessionListContent(s.id)) return false;
                                 if (listTab === "private" && s.isGroup) return false;
                                 if (listTab === "group" && !s.isGroup) return false;
-                                // 面具隔离：只显示绑定到当前面具的角色
-                                if (!s.isGroup && activeMaskId) {
-                                    try {
-                                        const binding = resolveBinding(loadBindingConfig(), s.contactId, "chat");
-                                        const boundMask = binding.userIdentityId || "";
-                                        if (boundMask && boundMask !== activeMaskId) return false;
-                                    } catch { /* ignore */ }
-                                }
+                                // 面具隔离：只显示当前面具的角色（绑定跟身份走，不同世界观互不串）
+                                if (!s.isGroup && !isCharacterInActiveMask(s.contactId, "chat")) return false;
                                 if (!keyword) return true;
                                 if (s.isGroup) return (s.groupName || "群聊").toLowerCase().includes(keyword);
                                 const name = s.alias || allChars.find(c => c.id === s.contactId)?.name || "";

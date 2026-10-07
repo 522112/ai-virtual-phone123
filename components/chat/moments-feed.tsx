@@ -13,6 +13,7 @@ import { PageShell } from "@/components/ui/page-shell";
 import { AlertCircle } from "lucide-react";
 import { kvGet, kvSet, registerKvMigration } from "@/lib/kv-db";
 import { onUserComment, MOMENT_PHOTO_GENERATION_FAILED_EVENT } from "@/lib/moments-engine";
+import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import { GeneratedImageErrorDialog } from "./generated-image-error-dialog";
 
 const COVER_ASSET_KEY = "moments_cover_asset_id";
@@ -110,10 +111,14 @@ export function MomentsFeed({ onCloseApp }: MomentsFeedProps) {
     const refreshPosts = useCallback(() => {
         const contactIds = new Set(loadChatContacts().map(c => c.characterId));
         const maskId = currentMaskId();
-        const all = getAllPosts().filter(p =>
-            (p.authorType === "user" && (!p.maskId || !maskId || p.maskId === maskId))
-            || contactIds.has(p.authorId),
-        );
+        const all = getAllPosts().filter(p => {
+            if (p.authorType === "user") {
+                return !p.maskId || !maskId || p.maskId === maskId;
+            }
+            // 角色动态也按面具过滤：只看当前面具的角色
+            if (!isCharacterInActiveMask(p.authorId, "moments")) return false;
+            return contactIds.has(p.authorId);
+        });
         // 置顶优先，再按时间
         all.sort((a, b) => {
             const pin = Number(b.pinned === true) - Number(a.pinned === true);
