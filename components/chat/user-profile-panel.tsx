@@ -282,6 +282,21 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     if (showWalletPanel) {
         return <WalletPanel onBack={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: false })); setShowWalletPanel(false); }} />;
     }
+    if (showMaskSheet) {
+        return (
+            <MaskSwitchSheet
+                activeMaskId={kvGet("active_mask_id") || identity?.id || ""}
+                onSelect={maskId => {
+                    kvSet("active_mask_id", maskId);
+                    kvSet("active_sub_id", "");
+                    window.dispatchEvent(new CustomEvent("chat-messages-updated"));
+                    window.dispatchEvent(new CustomEvent("weixin-messages-updated"));
+                    setShowMaskSheet(false);
+                }}
+                onClose={() => setShowMaskSheet(false)}
+            />
+        );
+    }
 
     return (
         <>
@@ -634,19 +649,6 @@ function FollowUpSettingsEditor({ onBack }: { onBack: () => void }) {
                 </div>
 
             </div>
-            {showMaskSheet && (
-                <MaskSwitchSheet
-                    activeMaskId={kvGet("active_mask_id") || identity?.id || ""}
-                    onSelect={maskId => {
-                        kvSet("active_mask_id", maskId);
-                        kvSet("active_sub_id", "");
-                        window.dispatchEvent(new CustomEvent("chat-messages-updated"));
-                        window.dispatchEvent(new CustomEvent("weixin-messages-updated"));
-                        onClose();
-                    }}
-                    onClose={() => setShowMaskSheet(false)}
-                />
-            )}
         </PageShell>
     );
 }

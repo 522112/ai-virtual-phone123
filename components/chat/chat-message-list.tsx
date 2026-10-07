@@ -26,7 +26,6 @@ import { kvGet, kvSet, registerKvMigration } from "@/lib/kv-db";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { SubAccountSheet } from "./sub-account-sheet";
 import { GodViewSheet } from "./god-view-sheet";
-import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import { getUserSubAccount, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
 import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import {
