@@ -5233,3 +5233,10 @@
   font-size: calc(11px * var(--app-text-scale, 1));
   font-weight: 500;
 }
+
+.nw-perchar-panel { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.nw-perchar-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--c-panel-border); border-radius: 12px; }
+.nw-perchar-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.nw-perchar-meta strong { font-size: 13px; color: var(--c-text-title); }
+.nw-perchar-meta em { font-style: normal; font-size: 11px; color: var(--c-text-secondary); }
+.nw-perchar-row .nw-interval-field input { width: 64px; }

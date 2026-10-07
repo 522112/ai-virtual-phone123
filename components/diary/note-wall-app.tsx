@@ -19,6 +19,11 @@ import {
   updateNoteWallNote,
 } from "@/lib/notewall-client";
 import { generateNoteWallCharacterNote, generateNoteWallCharacterReplies } from "@/lib/notewall-engine";
+import {
+  NOTEWALL_TIMER_SETTINGS_UPDATED_EVENT,
+  NOTEWALL_TIMER_UPDATED_EVENT,
+  refreshNoteWallTimerSettings,
+} from "@/lib/notewall-timer-service";
 import { getNoteWallLocalUserId, loadNoteWallTimerSettings, saveNoteWallTimerSettings } from "@/lib/notewall-local";
 import { recordNoteWallCommentEvent, recordNoteWallNoteEvent } from "@/lib/notewall-memory";
 import {
@@ -217,7 +222,6 @@ export function NoteWallApp({ onBack, onNotice }: NoteWallAppProps) {
   const [deleteCandidateComment, setDeleteCandidateComment] = useState<NoteWallComment | null>(null);
   const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
-  const timerRunningRef = useRef(false);
   const hasLoadedRef = useRef(false);
   const refreshingRef = useRef(false);
   const pullStartYRef = useRef<number | null>(null);
@@ -816,10 +820,6 @@ export function NoteWallApp({ onBack, onNotice }: NoteWallAppProps) {
     }
   }, [actorId, board, characters, notes, notify, refresh]);
 
-  const handleGenerateForCharacter = useCallback(async (characterId: string, trigger: "manual" | "timer" = "manual") => {
-    await handleGenerateForCharacters([characterId], trigger);
-  }, [handleGenerateForCharacters]);
-
   const handleReplyForCharacters = useCallback(async (characterIds: string[]) => {
     const uniqueIds = Array.from(new Set(characterIds.filter(Boolean)));
     if (uniqueIds.length === 0) return;
@@ -908,42 +908,22 @@ export function NoteWallApp({ onBack, onNotice }: NoteWallAppProps) {
     }
   }, [actorId, board, characters, notes, notify, refresh]);
 
-  const handleReplyForCharacter = useCallback(async (characterId: string) => {
-    await handleReplyForCharacters([characterId]);
-  }, [handleReplyForCharacters]);
-
-  const checkDueTimers = useCallback(async () => {
-    const scheduledCharacters = characters.length > 0 ? characters : loadCharacters();
-    const characterIds = scheduledCharacters.map(character => character.id).filter(Boolean);
-    if (timerRunningRef.current || characterIds.length === 0) return;
-    if (!timerSettings.enabled) return;
-    timerRunningRef.current = true;
-    try {
-      const now = Date.now();
-      for (const characterId of characterIds) {
-        const last = timerSettings.lastRunAtByCharacter[characterId];
-        const lastTime = last ? new Date(last).getTime() : 0;
-        const due = !lastTime || now - lastTime >= timerSettings.intervalMinutes * 60 * 1000;
-        if (due) {
-          await handleGenerateForCharacter(characterId, "timer");
-          await handleReplyForCharacter(characterId);
-          const stamp = new Date().toISOString();
-          setTimerSettings(prev => ({
-            ...prev,
-            lastRunAtByCharacter: { ...prev.lastRunAtByCharacter, [characterId]: stamp },
-          }));
-        }
-      }
-    } finally {
-      timerRunningRef.current = false;
-    }
-  }, [characters, handleGenerateForCharacter, handleReplyForCharacter, timerSettings]);
-
+  // 定时发帖/回帖由全局服务跑（App 开着就行，不用守在墙页）；这里只订阅刷新
   useEffect(() => {
-    const timer = window.setInterval(checkDueTimers, 60000);
-    if (!loading) checkDueTimers();
-    return () => window.clearInterval(timer);
-  }, [checkDueTimers, loading]);
+    const onTimerFired = () => {
+      setTimerSettings(loadNoteWallTimerSettings());
+      void refresh();
+    };
+    const onSettingsChanged = () => {
+      setTimerSettings(loadNoteWallTimerSettings());
+    };
+    window.addEventListener(NOTEWALL_TIMER_UPDATED_EVENT, onTimerFired);
+    window.addEventListener(NOTEWALL_TIMER_SETTINGS_UPDATED_EVENT, onSettingsChanged);
+    return () => {
+      window.removeEventListener(NOTEWALL_TIMER_UPDATED_EVENT, onTimerFired);
+      window.removeEventListener(NOTEWALL_TIMER_SETTINGS_UPDATED_EVENT, onSettingsChanged);
+    };
+  }, [refresh]);
 
   return (
     <section className={`note-wall-app ${noteDrag ? "is-note-dragging" : ""}`}>
@@ -1696,6 +1676,58 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
             </label>
           </div>
           <p className="nw-timer-hint">到点后会先写便签，再查看候选便签并选择 5 条回复。</p>
+        </div>
+        <div className="nw-perchar-panel">
+          <p className="nw-timer-hint">每个角色单独开关和间隔（开着 App 就会按各自间隔自动读墙、发帖、回帖）</p>
+          {characters.length === 0 ? <p className="nw-empty">暂无角色。</p> : null}
+          {characters.map(character => {
+            const per = settings.perCharacter[character.id];
+            const autoEnabled = per ? per.enabled : settings.enabled && (settings.characterIds.length === 0 || settings.characterIds.includes(character.id));
+            const autoInterval = per ? per.intervalMinutes : settings.intervalMinutes;
+            const stamp = settings.lastRunAtByCharacter[character.id];
+            return (
+              <div key={character.id} className="nw-perchar-row">
+                <span className="nw-character-avatar">
+                  {character.avatar ? <img src={character.avatar} alt="" /> : <Bot size={18} />}
+                </span>
+                <span className="nw-perchar-meta">
+                  <strong>{character.name}</strong>
+                  <em>{stamp ? `上次 ${formatTime(stamp)}` : "未运行"}</em>
+                </span>
+                <label className="nw-field nw-interval-field">
+                  <span>分钟</span>
+                  <input
+                    type="number"
+                    min={5}
+                    max={10080}
+                    value={autoInterval}
+                    onChange={event => onChange({
+                      ...settings,
+                      perCharacter: {
+                        ...settings.perCharacter,
+                        [character.id]: {
+                          enabled: autoEnabled,
+                          intervalMinutes: Math.max(5, Math.min(10080, Number(event.target.value) || 360)),
+                        },
+                      },
+                    })}
+                  />
+                </label>
+                <input
+                  type="checkbox"
+                  checked={autoEnabled}
+                  aria-label={`${character.name}自动`}
+                  onChange={event => onChange({
+                    ...settings,
+                    perCharacter: {
+                      ...settings.perCharacter,
+                      [character.id]: { enabled: event.target.checked, intervalMinutes: autoInterval },
+                    },
+                  })}
+                />
+              </div>
+            );
+          })}
         </div>
         <div className="nw-character-action-panel">
           <div className="nw-character-action-buttons">

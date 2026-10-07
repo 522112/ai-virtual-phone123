@@ -98,6 +98,8 @@ export type NoteWallTimerSettings = {
   intervalMinutes: number;
   characterIds: string[];
   lastRunAtByCharacter: Record<string, string>;
+  /** 按角色独立配置（新）：开关 + 间隔分钟；缺省走全局 enabled/intervalMinutes */
+  perCharacter: Record<string, { enabled: boolean; intervalMinutes: number }>;
 };
 
 export const NOTE_WALL_SIZE_PRESETS: Record<NoteWallSize, { width: number; height: number }> = {

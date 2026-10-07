@@ -10,6 +10,7 @@ export const DEFAULT_NOTE_WALL_TIMER_SETTINGS: NoteWallTimerSettings = {
   intervalMinutes: 360,
   characterIds: [],
   lastRunAtByCharacter: {},
+  perCharacter: {},
 };
 
 export function loadNoteWallTimerSettings(): NoteWallTimerSettings {
@@ -28,6 +29,17 @@ export function loadNoteWallTimerSettings(): NoteWallTimerSettings {
     const legacyReplyLastRunAtByCharacter = parsed.replyLastRunAtByCharacter && typeof parsed.replyLastRunAtByCharacter === "object"
       ? Object.fromEntries(Object.entries(parsed.replyLastRunAtByCharacter).map(([key, value]) => [key, String(value)]))
       : {};
+    const perCharacter: Record<string, { enabled: boolean; intervalMinutes: number }> = {};
+    if (parsed.perCharacter && typeof parsed.perCharacter === "object") {
+      for (const [key, value] of Object.entries(parsed.perCharacter)) {
+        if (!value || typeof value !== "object") continue;
+        const entry = value as { enabled?: unknown; intervalMinutes?: unknown };
+        perCharacter[String(key)] = {
+          enabled: Boolean(entry.enabled),
+          intervalMinutes: Math.max(5, Math.min(10080, Number(entry.intervalMinutes) || 360)),
+        };
+      }
+    }
     return {
       enabled: Boolean(parsed.enabled || parsed.replyEnabled),
       intervalMinutes: Math.max(5, Math.min(10080, Number(parsed.intervalMinutes ?? parsed.replyIntervalMinutes) || 360)),
@@ -35,6 +47,7 @@ export function loadNoteWallTimerSettings(): NoteWallTimerSettings {
         ? parsed.characterIds.map(String).filter(Boolean)
         : [],
       lastRunAtByCharacter: { ...legacyReplyLastRunAtByCharacter, ...lastRunAtByCharacter },
+      perCharacter,
     };
   } catch {
     return DEFAULT_NOTE_WALL_TIMER_SETTINGS;
