@@ -5245,3 +5245,7 @@
 .nw-perchar-panel { max-height: 38vh; overflow-y: auto; }
 .nw-now-btn { border: 1px solid rgba(67,54,35,.2); background: #34271d; color: #fffdf7; font-size: 12px; border-radius: 10px; padding: 6px 10px; cursor: pointer; flex-shrink: 0; }
 .nw-now-btn:disabled { opacity: .45; cursor: default; }
+
+.nw-perchar-row { flex-direction: column; align-items: stretch; }
+.nw-perchar-line { display: flex; align-items: center; gap: 10px; }
+.nw-perchar-line + .nw-perchar-line { margin-top: 8px; }

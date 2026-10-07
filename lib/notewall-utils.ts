@@ -60,6 +60,12 @@ function generateNoteWallId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${rand}`;
 }
 
+/** 便签墙署名一律用网名 */
+export function characterWallName(character: { name: string; screenName?: string | null }): string {
+  const net = typeof character.screenName === "string" ? character.screenName.trim() : "";
+  return net || character.name;
+}
+
 function cleanMultilineText(value: unknown, maxLength: number): string {
   return cleanText(value, maxLength)
     .replace(/\r\n?/g, "\n")

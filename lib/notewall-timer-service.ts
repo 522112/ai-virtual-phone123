@@ -16,7 +16,7 @@ import {
   saveNoteWallTimerSettings,
 } from "./notewall-local";
 import { recordNoteWallCommentEvent, recordNoteWallNoteEvent } from "./notewall-memory";
-import { findNoteWallPlacement } from "./notewall-utils";
+import { characterWallName, findNoteWallPlacement } from "./notewall-utils";
 import type { NoteWallNote } from "./notewall-types";
 
 const CHECK_INTERVAL_MS = 60_000;
@@ -61,21 +61,26 @@ function selectReplyCandidates(notes: NoteWallNote[]): NoteWallNote[] {
   return [...userNotes, ...remaining].slice(0, 30);
 }
 
-async function postForCharacter(character: Character, actorId: string): Promise<boolean> {
+async function postForCharacter(character: Character, actorId: string): Promise<"posted" | "capped" | "failed"> {
   const latest = await fetchNoteWall().catch(() => null);
-  if (!latest) return false;
+  if (!latest) return "failed";
+  const hourAgo = Date.now() - 3600 * 1000;
+  const ownRecent = latest.notes.filter(note =>
+    !note.deletedAt && note.authorId === character.id && Date.parse(note.createdAt) >= hourAgo,
+  ).length;
+  if (ownRecent >= 3) return "capped";
   let generated;
   try {
     generated = await generateNoteWallCharacterNote(character.id, latest.notes, "timer");
   } catch {
-    return false;
+    return "failed";
   }
   const placement = findNoteWallPlacement([...latest.notes], latest.board, generated.size);
   try {
     const created = await createNoteWallNote({
       authorType: "character",
       authorId: character.id,
-      authorName: generated.authorName || character.name,
+      authorName: generated.authorName || characterWallName(character),
       summary: generated.summary,
       body: generated.body,
       size: generated.size,
@@ -89,9 +94,9 @@ async function postForCharacter(character: Character, actorId: string): Promise<
       actorId,
     });
     recordNoteWallNoteEvent({ characterId: character.id, characterName: character.name, note: created });
-    return true;
+    return "posted";
   } catch {
-    return false;
+    return "failed";
   }
 }
 
@@ -115,7 +120,7 @@ async function replyForCharacter(character: Character, actorId: string): Promise
     noteId: reply.noteId,
     authorType: "character",
     authorId: character.id,
-    authorName: reply.authorName || character.name,
+    authorName: reply.authorName || characterWallName(character),
     body: reply.body,
     isAnonymous: reply.isAnonymous,
     actorId,
@@ -142,9 +147,13 @@ async function tick(): Promise<void> {
   try {
     for (const character of targets) {
       try {
-        const posted = await postForCharacter(character, actorId);
-        await replyForCharacter(character, actorId);
-        if (posted) createdCount += 1;
+        const postResult = await postForCharacter(character, actorId);
+        let outputCount = postResult === "posted" ? 1 : 0;
+        outputCount += await replyForCharacter(character, actorId);
+        if (outputCount === 0 && postResult !== "capped") {
+          outputCount += await replyForCharacter(character, actorId);
+        }
+        if (outputCount > 0) createdCount += outputCount;
         else failedCount += 1;
       } catch {
         failedCount += 1;
@@ -161,8 +170,61 @@ async function tick(): Promise<void> {
   dispatchUpdated(createdCount, failedCount);
 }
 
-export function startNoteWallTimerService(): void {
-  if (typeof window === "undefined" || timer !== null) return;
+/**
+ * 聊天有感而发：角色刚说完话，小概率把此刻感受写成便签。
+ * 只给开了自动的角色；一小时最多三条便签；失败静默。
+ */
+export async function maybePostChatMomentNote(characterId: string, chatExcerpt: string): Promise<void> {
+  try {
+    if (!characterId || !chatExcerpt.trim()) return;
+    const settings = loadNoteWallTimerSettings();
+    const per = settings.perCharacter[characterId];
+    const autoOn = per
+      ? per.enabled
+      : settings.enabled && (settings.characterIds.length === 0 || settings.characterIds.includes(characterId));
+    if (!autoOn) return;
+    const latest = await fetchNoteWall().catch(() => null);
+    if (!latest) return;
+    const hourAgo = Date.now() - 3600 * 1000;
+    const ownRecent = latest.notes.filter(note =>
+      !note.deletedAt && note.authorId === characterId && Date.parse(note.createdAt) >= hourAgo,
+    ).length;
+    if (ownRecent >= 3) return;
+    const character = loadCharacters().find(item => item.id === characterId);
+    if (!character) return;
+    const generated = await generateNoteWallCharacterNote(
+      characterId,
+      latest.notes,
+      "manual",
+      `你刚和用户聊了这几句（${chatExcerpt.slice(0, 300)}），如果有感就写一张便签，没感就写一张你日常会发的内容`,
+    ).catch(() => null);
+    if (!generated) return;
+    const placement = findNoteWallPlacement([...latest.notes], latest.board, generated.size);
+    const created = await createNoteWallNote({
+      authorType: "character",
+      authorId: character.id,
+      authorName: generated.authorName || characterWallName(character),
+      summary: generated.summary,
+      body: generated.body,
+      size: generated.size,
+      paper: generated.paper,
+      tape: generated.tape,
+      font: generated.font,
+      rawCss: generated.rawCss,
+      isAnonymous: generated.isAnonymous,
+      x: placement.x,
+      y: placement.y,
+      actorId: getNoteWallLocalUserId(),
+    }).catch(() => null);
+    if (!created) return;
+    recordNoteWallNoteEvent({ characterId: character.id, characterName: character.name, note: created });
+    dispatchUpdated(1, 0);
+  } catch {
+    /* 静默失败，不打扰聊天 */
+  }
+}
+
+export function startNoteWallTimerService(): void {  if (typeof window === "undefined" || timer !== null) return;
   void tick();
   timer = window.setInterval(() => void tick(), CHECK_INTERVAL_MS);
 }

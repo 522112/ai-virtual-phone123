@@ -3238,6 +3238,21 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             await Promise.allSettled(imageReplacementTasks);
             throwIfGenerationStopped(options);
         }
+        // 聊天有感：小概率让角色把此刻的感受写成一张便签（只给开了便签自动的角色，一小时最多三条）
+        try {
+            if (Math.random() < 0.2 && character?.id && !session.isGroup) {
+                const excerpt = messageDrafts
+                    .map(item => item.draft.content)
+                    .filter(text => text && !text.trim().startsWith("["))
+                    .join("\n")
+                    .slice(0, 300);
+                if (excerpt.trim()) {
+                    void import("@/lib/notewall-timer-service")
+                        .then(m => m.maybePostChatMomentNote(character.id, excerpt))
+                        .catch(() => {});
+                }
+            }
+        } catch { /* ignore */ }
         return { hasVisible: true, stateValues, triggerCall, hasDecline };
     };
 

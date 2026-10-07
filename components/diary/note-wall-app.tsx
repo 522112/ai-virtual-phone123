@@ -34,7 +34,7 @@ import {
   type NoteWallSize,
   type NoteWallTimerSettings,
 } from "@/lib/notewall-types";
-import { findNoteWallPlacement, sanitizeNoteWallCss } from "@/lib/notewall-utils";
+import { characterWallName, findNoteWallPlacement, sanitizeNoteWallCss } from "@/lib/notewall-utils";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 
 type NoteWallAppProps = {
@@ -246,7 +246,8 @@ export function NoteWallApp({ onBack, onNotice }: NoteWallAppProps) {
   const { account } = useAccount();
   const accountId = account.id;
   const userIdentity = useMemo(() => resolveUserIdentity(undefined, "diary"), []);
-  const userName = userIdentity?.name || "你";
+  const userName = userIdentity?.screenName?.trim() || userIdentity?.name || "你";
+  const userAuthorId = userIdentity?.id || actorId;
   const ownedCharacterIds = useMemo(() => new Set(characters.map(character => character.id)), [characters]);
   const activeNotes = useMemo(
     () => notes
@@ -440,7 +441,7 @@ export function NoteWallApp({ onBack, onNotice }: NoteWallAppProps) {
       const signature = draft.signature.trim();
       const created = await createNoteWallNote({
         authorType: "user",
-        authorId: actorId,
+        authorId: userAuthorId,
         authorName: signature || userName,
         summary: draft.summary,
         body: draft.body,
@@ -774,7 +775,7 @@ export function NoteWallApp({ onBack, onNotice }: NoteWallAppProps) {
           const created = await createNoteWallNote({
             authorType: "character",
             authorId: character.id,
-            authorName: generated.authorName || character.name,
+            authorName: generated.authorName || characterWallName(character),
             summary: generated.summary,
             body: generated.body,
             size: generated.size,
@@ -870,7 +871,7 @@ export function NoteWallApp({ onBack, onNotice }: NoteWallAppProps) {
           noteId: reply.noteId,
           authorType: "character",
           authorId: result.character.id,
-          authorName: reply.authorName || result.character.name,
+          authorName: reply.authorName || characterWallName(result.character),
           body: reply.body,
           isAnonymous: reply.isAnonymous,
           actorId,
@@ -1158,6 +1159,7 @@ export function NoteWallApp({ onBack, onNotice }: NoteWallAppProps) {
           note={activeNote}
           actorId={actorId}
           userName={userName}
+          userAuthorId={userAuthorId}
           onNotice={notify}
           onClose={() => setActiveNote(null)}
         />
@@ -1451,10 +1453,11 @@ function NoteComposer({ draft, userName, submitting, onChange, onClose, onSubmit
   );
 }
 
-function NoteDetail({ note, actorId, userName, onNotice, onClose }: {
+function NoteDetail({ note, actorId, userName, userAuthorId, onNotice, onClose }: {
   note: NoteWallNote;
   actorId: string;
   userName: string;
+  userAuthorId: string;
   onNotice: (message: string) => void;
   onClose: () => void;
 }) {
@@ -1497,7 +1500,7 @@ function NoteDetail({ note, actorId, userName, onNotice, onClose }: {
       const created = await createNoteWallComment({
         noteId: note.id,
         authorType: "user",
-        authorId: actorId,
+        authorId: userAuthorId,
         authorName: userName,
         body,
         isAnonymous: commentAnonymous,
@@ -1687,52 +1690,56 @@ function TimerSettingsPanel({ characters, settings, generatingCharacterIds, repl
             const stamp = settings.lastRunAtByCharacter[character.id];
             return (
               <div key={character.id} className="nw-perchar-row">
-                <span className="nw-character-avatar">
-                  {character.avatar ? <img src={character.avatar} alt="" /> : <Bot size={18} />}
-                </span>
-                <span className="nw-perchar-meta">
-                  <strong>{character.name}</strong>
-                  <em>{stamp ? `上次 ${formatTime(stamp)}` : "未运行"}</em>
-                </span>
-                <label className="nw-field nw-interval-field">
-                  <span>分钟</span>
+                <div className="nw-perchar-line">
+                  <span className="nw-character-avatar">
+                    {character.avatar ? <img src={character.avatar} alt="" /> : <Bot size={18} />}
+                  </span>
+                  <span className="nw-perchar-meta">
+                    <strong>{characterWallName(character)}</strong>
+                    <em>{stamp ? `上次 ${formatTime(stamp)}` : "未运行"}</em>
+                  </span>
                   <input
-                    type="number"
-                    min={5}
-                    max={10080}
-                    value={autoInterval}
+                    type="checkbox"
+                    checked={autoEnabled}
+                    aria-label={`${characterWallName(character)}自动`}
                     onChange={event => onChange({
                       ...settings,
                       perCharacter: {
                         ...settings.perCharacter,
-                        [character.id]: {
-                          enabled: autoEnabled,
-                          intervalMinutes: Math.max(5, Math.min(10080, Number(event.target.value) || 360)),
-                        },
+                        [character.id]: { enabled: event.target.checked, intervalMinutes: autoInterval },
                       },
                     })}
                   />
-                </label>
-                <input
-                  type="checkbox"
-                  checked={autoEnabled}
-                  aria-label={`${character.name}自动`}
-                  onChange={event => onChange({
-                    ...settings,
-                    perCharacter: {
-                      ...settings.perCharacter,
-                      [character.id]: { enabled: event.target.checked, intervalMinutes: autoInterval },
-                    },
-                  })}
-                />
-                <button
-                  type="button"
-                  className="nw-now-btn"
-                  disabled={busy}
-                  onClick={() => { void onGenerateMany([character.id], "manual"); void onReplyMany([character.id]); }}
-                >
-                  现在就发
-                </button>
+                </div>
+                <div className="nw-perchar-line">
+                  <label className="nw-field nw-interval-field">
+                    <span>固定时间（分钟）</span>
+                    <input
+                      type="number"
+                      min={5}
+                      max={10080}
+                      value={autoInterval}
+                      onChange={event => onChange({
+                        ...settings,
+                        perCharacter: {
+                          ...settings.perCharacter,
+                          [character.id]: {
+                            enabled: autoEnabled,
+                            intervalMinutes: Math.max(5, Math.min(10080, Number(event.target.value) || 360)),
+                          },
+                        },
+                      })}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="nw-now-btn"
+                    disabled={busy}
+                    onClick={() => { void onGenerateMany([character.id], "manual"); void onReplyMany([character.id]); }}
+                  >
+                    现在就发
+                  </button>
+                </div>
               </div>
             );
           })}

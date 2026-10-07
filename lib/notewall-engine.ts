@@ -162,12 +162,24 @@ export async function generateNoteWallCharacterNote(
   characterId: string,
   notes: NoteWallNote[],
   _trigger: "manual" | "timer" = "manual",
+  extraContext?: string,
 ): Promise<ParsedNoteWallAction> {
   const resolved = await resolveNoteWallGeneration(
     characterId,
     ["diary", "notewall"],
     formatNoteWallContext(notes, { characterId }),
   );
+
+  resolved.messages.push({
+    role: "system",
+    content: [
+      "你是便签墙上的一个真人用户，不是 AI 助手。按你的人设写便签：提问、吐槽、求助、教学、分享、感慨都可以，类型越杂越像真人。",
+      "可以引用你的长期记忆和核心记忆里的事，别写成客服腔；字数随意，长短都行。",
+      "署名用你的网名。",
+      "墙上有匿名的便签和评论：你认不出匿名的是谁，不许猜测身份、不许点破、不许拿现实细节去对号入座。",
+      extraContext ? `此刻的由头：${extraContext}` : "",
+    ].filter(Boolean).join("\n"),
+  });
 
   const raw = await sendLLMRequest(
     resolved.apiConfig,
@@ -191,6 +203,15 @@ export async function generateNoteWallCharacterReplies(
     ["diary", "notewall_reply"],
     formatNoteWallReplyContext(candidates, { characterId }),
   );
+
+  resolved.messages.push({
+    role: "system",
+    content: [
+      "你是便签墙上的真人用户，按人设回帖：至少回一条，感兴趣的多回几条也行；只回你真的会有话说的帖子。",
+      "可以引用你的记忆；署名用你的网名。",
+      "匿名的帖子和评论你认不出是谁，不许猜测身份、不许点破。",
+    ].join("\n"),
+  });
 
   const raw = await sendLLMRequest(
     resolved.apiConfig,
