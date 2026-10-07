@@ -51,20 +51,24 @@ export async function requestSubFriend(
   const apiConfig = configs.find(c => c.apiKey) || configs[0];
   if (!apiConfig) throw new Error("还没有可用的 API 配置");
 
-  const raw = await sendLLMRequest(
-    apiConfig,
-    null,
-    [
-      { role: "system", content: `你是${character.name}。人设：${(character.persona || "").slice(0, 1000)}` },
-      {
-        role: "user",
-        content: `有个陌生人请求加你微信。对方资料——网名：${sub.name}；微信号：${sub.wechatId}；自我介绍：${sub.persona || "（无）"}；验证消息：「${verifyMessage.slice(0, 200)}」。\n按你的人设决定：通过还是拒绝？你对陌生人什么态度？验证消息有没有打动你？\n只输出 JSON：{"accept":true|false,"reply":"给对方的一句话（通过就是打招呼，拒绝就是理由，不超过40字）"}`,
-      },
-    ],
-    [],
-    { characterName: character.name, userName: sub.name },
-    { appId: "sub-friend", appTags: ["sub-friend"] },
-  );
+  // 对方（LLM 按人设判定）可能半天不回：90 秒超时，直接给一句可显示的原因，不卡死验证页
+  const raw = await Promise.race([
+    sendLLMRequest(
+      apiConfig,
+      null,
+      [
+        { role: "system", content: `你是${character.name}。人设：${(character.persona || "").slice(0, 1000)}` },
+        {
+          role: "user",
+          content: `有个陌生人请求加你微信。对方资料——网名：${sub.name}；微信号：${sub.wechatId}；自我介绍：${sub.persona || "（无）"}；验证消息：「${verifyMessage.slice(0, 200)}」。\n按你的人设决定：通过还是拒绝？你对陌生人什么态度？验证消息有没有打动你？\n只输出 JSON：{"accept":true|false,"reply":"给对方的一句话（通过就是打招呼，拒绝就是理由，不超过40字）"}`,
+        },
+      ],
+      [],
+      { characterName: character.name, userName: sub.name },
+      { appId: "sub-friend", appTags: ["sub-friend"] },
+    ),
+    new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error("对方长时间没有回应（网络超时），点发送再试一次")), 90000)),
+  ]);
   let accept = false;
   let reply = "对方没有回应";
   try {

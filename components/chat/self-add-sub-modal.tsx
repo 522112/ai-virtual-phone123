@@ -18,30 +18,61 @@ export function SelfAddSubModal({ characterId, characterName, characterAvatar, o
   const [pickedSubId, setPickedSubId] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [result, setResult] = useState("");
+  const [busy, setBusy] = useState(false);
   const picked = pickedSubId ? getUserSubAccount(pickedSubId) : null;
 
   const confirm = () => {
+    if (busy) return;
     if (!pickedSubId || !picked) {
       setResult("先选一个小号账号");
       return;
     }
+    setBusy(true);
+    setResult("");
     void import("@/lib/sub-friend-engine").then(m => {
-      const session = m.ensureSubSession(characterId, pickedSubId);
-      pushChatMessage({
-        sessionId: session.id,
-        role: "system",
-        content: `[你在手机上通过了 ${picked.name} 的好友申请]`,
-        status: "sent",
-      });
-      setResult(`已用${characterName || "对方"}的手机通过，切到「${picked.name}」就能聊了`);
-      window.setTimeout(() => onDone(), 900);
+      try {
+        const session = m.ensureSubSession(characterId, pickedSubId);
+        pushChatMessage({
+          sessionId: session.id,
+          role: "system",
+          content: `[你在手机上通过了 ${picked.name} 的好友申请]`,
+          status: "sent",
+        });
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: session.id } }));
+          window.dispatchEvent(new CustomEvent("weixin-messages-updated"));
+        }
+        setResult(`已用${characterName || "对方"}的手机通过，切到「${picked.name}」就能聊了`);
+        window.setTimeout(() => onDone(), 1200);
+      } catch (error) {
+        setResult(error instanceof Error ? error.message : "加上失败，再试一次");
+      } finally {
+        setBusy(false);
+      }
+    }).catch(error => {
+      setResult(error instanceof Error ? error.message : "加上失败，再试一次");
+      setBusy(false);
     });
   };
 
   return (
     <div className="journal-sheet-overlay" onClick={onClose}>
       <div className="journal-sheet" onClick={e => e.stopPropagation()}>
-        <div className="journal-sheet-title">帮小号加人</div>
+        <div className="journal-sheet-title" style={{ position: "relative", textAlign: "center" }}>
+          帮小号加人
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭"
+            style={{
+              position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)",
+              border: 0, background: "none", fontSize: 20, lineHeight: 1,
+              color: "var(--c-text-secondary)", cursor: "pointer", padding: 4,
+            }}
+          >
+            ×
+          </button>
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <small className="menu-desc">用对方手机直接通过，跳过验证</small>
           <div style={{ display: "flex", gap: 12, alignItems: "center", background: "var(--c-card, #fff)", border: "1px solid rgba(0,0,0,0.08)", borderRadius: 16, padding: "12px 14px" }}>
@@ -66,10 +97,17 @@ export function SelfAddSubModal({ characterId, characterName, characterAvatar, o
               <small className="menu-desc">{picked ? (picked.persona ? picked.persona.slice(0, 24) : "没设人设") : "点这里从卡片里选一个"}</small>
             </span>
           </button>
-          {result ? <small className="menu-desc">{result}</small> : null}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" className="ui-btn ui-btn-success" disabled={!pickedSubId} onClick={confirm}>直接加上</button>
-            <button type="button" className="journal-sheet-cancel" onClick={onClose}>关闭</button>
+          {result ? <small className="menu-desc" style={{ textAlign: "center" }}>{result}</small> : null}
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <button
+              type="button"
+              className="ui-btn ui-btn-success"
+              style={{ minWidth: 160 }}
+              disabled={!pickedSubId || busy}
+              onClick={confirm}
+            >
+              {busy ? "正在加上…" : "添加"}
+            </button>
           </div>
         </div>
       </div>

@@ -306,7 +306,13 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                                                 if (subId) {
                                                     // 小号模式：只进该小号的独立会话
                                                     void import("@/lib/sub-friend-engine").then(m => {
-                                                        onSelectSession(m.ensureSubSession(char.id, subId));
+                                                        try {
+                                                            onSelectSession(m.ensureSubSession(char.id, subId));
+                                                        } catch (error) {
+                                                            console.warn("[Contacts] Open sub session failed:", error);
+                                                        }
+                                                    }).catch(error => {
+                                                        console.warn("[Contacts] Open sub session failed:", error);
                                                     });
                                                     return;
                                                 }

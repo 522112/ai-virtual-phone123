@@ -225,7 +225,13 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
                     onClick={() => {
                         if (activeSubId) {
                             void import("@/lib/sub-friend-engine").then(m => {
-                                onSelectSession(m.ensureSubSession(characterId, activeSubId));
+                                try {
+                                    onSelectSession(m.ensureSubSession(characterId, activeSubId));
+                                } catch (error) {
+                                    showNotice(error instanceof Error ? error.message : "打开失败");
+                                }
+                            }).catch(error => {
+                                showNotice(error instanceof Error ? error.message : "打开失败");
                             });
                             return;
                         }
