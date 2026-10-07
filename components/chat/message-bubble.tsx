@@ -52,6 +52,8 @@ interface MessageBubbleProps {
     onActionSelect?: (text: string) => void;
     onRelationshipAction?: (msg: ChatMessage, action: "accept" | "decline" | "open") => void;
     onListenInviteAction?: (msg: ChatMessage, action: "accept" | "decline" | "open" | "cancel") => void;
+    onContactCardClick?: (contactId: string) => void;
+    onRoleChatOpen?: (sessionId: string) => void;
     displayContent?: string;
     defaultTranslationExpanded?: boolean;
 }
@@ -97,7 +99,7 @@ function PluginKindBubble({ msg, kind }: { msg: ChatMessage; kind: string }) {
  * Renders a message bubble based on its mediaType.
  * Falls back to ReactMarkdown for plain text messages.
  */
-export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charName, userName, onSystemMessage, groupSize, onShowDetail, characterId, onMusicPlay, onActionSelect, onRelationshipAction, onListenInviteAction, displayContent, defaultTranslationExpanded = false }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charName, userName, onSystemMessage, groupSize, onShowDetail, characterId, onMusicPlay, onActionSelect, onRelationshipAction, onListenInviteAction, onContactCardClick, onRoleChatOpen, displayContent, defaultTranslationExpanded = false }: MessageBubbleProps) {
     if (isForwardedChatRecord(msg)) {
         return <ForwardCardBubble msg={msg} displayContent={displayContent} onOpen={() => onShowDetail?.(msg)} />;
     }
@@ -115,7 +117,9 @@ export const MessageBubble = memo(function MessageBubble({ msg, onUpdate, charNa
         case "relationship_space":
             return <RelationshipInviteBubble msg={msg} charName={charName} userName={userName} onAction={onRelationshipAction} />;
         case "contact_card":
-            return <ContactCardBubble msg={msg} characterId={characterId} />;
+            return <ContactCardBubble msg={msg} characterId={characterId} onCardClick={onContactCardClick} />;
+        case "role_chat_record":
+            return <RoleChatRecordBubble msg={msg} onOpen={onRoleChatOpen} />;
         case "payment_request":
             return <PaymentRequestBubble msg={msg} charName={charName} userName={userName} onShowDetail={onShowDetail} />;
         case "app_card":
@@ -1441,7 +1445,7 @@ function normalizeAppCardLayout(value: unknown): NormalizedAppCardLayout {
 // 未建档（点击进入现场生成档案流程——AI 幻觉转建档）。
 // 名字实时按推荐人同世界解析，建档后所有同名旧名片自动可添加。
 
-function ContactCardBubble({ msg, characterId }: { msg: ChatMessage; characterId?: string }) {
+function ContactCardBubble({ msg, characterId, onCardClick }: { msg: ChatMessage; characterId?: string; onCardClick?: (contactId: string) => void }) {
     const contactName = msg.mediaData?.contactCardName || msg.mediaData?.label || "";
     const [showGenerateFlow, setShowGenerateFlow] = useState(false);
     const [resolveTick, setResolveTick] = useState(0);
@@ -1460,6 +1464,11 @@ function ContactCardBubble({ msg, characterId }: { msg: ChatMessage; characterId
     function handleClick(e: React.MouseEvent) {
         e.stopPropagation();
         if (!contactName) return;
+        // 配置了回调：一律走回调，不弹任何加好友/建档页面
+        if (onCardClick) {
+            if (resolved.character) onCardClick(resolved.character.id);
+            return;
+        }
         if (resolved.character && resolved.isContact) {
             // 已是好友：直接打开与 TA 的会话
             const session = createOrGetSession(resolved.character.id);
@@ -1476,24 +1485,16 @@ function ContactCardBubble({ msg, characterId }: { msg: ChatMessage; characterId
 
     return (
         <>
-            <div className="chat-contact-card" onClick={handleClick} role="button">
-                <div className="chat-contact-card-main">
-                    <div className="chat-contact-card-avatar">
-                        {resolved.character?.avatar
-                            ? <img src={resolved.character.avatar} alt="" />
-                            : <CharAvatarFallbackInline name={contactName} />}
-                    </div>
-                    <div className="chat-contact-card-info">
-                        <div className="chat-contact-card-name">{contactName || "联系人"}</div>
-                        <div className="chat-contact-card-sub">
-                            {resolved.character
-                                ? `微信号: ${resolved.character.wechatID || resolved.character.id.slice(0, 10)}`
-                                : "点击查看"}
-                        </div>
-                    </div>
-                    {resolved.isContact && <span className="chat-contact-card-badge">已添加</span>}
+            <div className="wx-card-bubble" onClick={handleClick} role="button">
+                <div className="wx-card-avatar" style={resolved.character?.avatar ? undefined : { background: "linear-gradient(135deg, #F5B8A8, #E88D7A)" }}>
+                    {resolved.character?.avatar
+                        ? <img src={resolved.character.avatar} alt="" />
+                        : (contactName || "?").slice(0, 1)}
                 </div>
-                <div className="chat-contact-card-footer">个人名片</div>
+                <div className="wx-card-info">
+                    <div className="wx-card-name">{contactName || "联系人"}</div>
+                    <div className="wx-card-tag">个人名片</div>
+                </div>
             </div>
             {showGenerateFlow && characterId && typeof document !== "undefined" && createPortal(
                 <ContactCardGenerateFlow
@@ -1508,6 +1509,32 @@ function ContactCardBubble({ msg, characterId }: { msg: ChatMessage; characterId
                 document.body,
             )}
         </>
+    );
+}
+
+/** 角色互聊记录入口卡：显示双方头像+标题，点击进专属只读围观页 */
+function RoleChatRecordBubble({ msg, onOpen }: { msg: ChatMessage; onOpen?: (sessionId: string) => void }) {
+    const sessionId = msg.mediaData?.roleChatSessionId || "";
+    const title = msg.mediaData?.roleChatTitle || msg.content || "聊天记录";
+    const chars = useMemo(() => loadCharacters(), []);
+    const a = chars.find(c => c.id === msg.mediaData?.roleChatAId);
+    const b = chars.find(c => c.id === msg.mediaData?.roleChatBId);
+    return (
+        <div
+            className="wx-rr-bubble"
+            role="button"
+            onClick={e => {
+                e.stopPropagation();
+                if (sessionId && onOpen) onOpen(sessionId);
+            }}
+        >
+            <div className="wx-rr-title">{title}</div>
+            <div className="wx-rr-avatars">
+                {a?.avatar ? <img src={a.avatar} alt="" /> : <span>{(a?.name || "?").slice(0, 1)}</span>}
+                {b?.avatar ? <img src={b.avatar} alt="" /> : <span>{(b?.name || "?").slice(0, 1)}</span>}
+            </div>
+            <div className="wx-rr-sub">点击查看他们的聊天</div>
+        </div>
     );
 }
 

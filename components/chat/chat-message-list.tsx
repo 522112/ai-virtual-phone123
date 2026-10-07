@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useSyncExternalStore } from "react";
+import { pinyin } from "pinyin-pro";
 import { ChevronLeft } from "lucide-react";
 import { loadChatSessions, loadChatContacts, ChatSession, createOrGetSession, createGroupSession, pushChatMessage, addChatContact, loadChatMessages, saveChatSessions, getLastVisibleSessionMessage, getChatMessagePreview } from "@/lib/chat-storage";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
@@ -912,6 +913,17 @@ function MascotSessionItem({
     );
 }
 
+function getPickerInitial(name: string): string {
+    if (!name) return "#";
+    const first = name.charAt(0);
+    if (/[a-zA-Z]/.test(first)) return first.toUpperCase();
+    try {
+        const py = pinyin(first, { toneType: "none", type: "array" }) as string[];
+        if (py.length > 0 && /[a-zA-Z]/.test(py[0].charAt(0))) return py[0].charAt(0).toUpperCase();
+    } catch { /* ignore */ }
+    return "#";
+}
+
 function ContactPicker({ onClose, onSelect }: { onClose: () => void; onSelect: (charId: string) => void }) {
     const contacts = loadChatContacts();
     const chars = loadCharacters().map(overlayCharacterForDisplay);
@@ -920,30 +932,94 @@ function ContactPicker({ onClose, onSelect }: { onClose: () => void; onSelect: (
         .map(c => ({ ...c, char: chars.find(ch => ch.id === c.characterId) }))
         .filter(c => c.char) as (typeof contacts[number] & { char: Character })[];
 
+    const groups = React.useMemo(() => {
+        const map = new Map<string, { char: Character }[]>();
+        for (const c of enrichedContacts) {
+            const letter = getPickerInitial(c.char.name || "");
+            if (!map.has(letter)) map.set(letter, []);
+            map.get(letter)!.push(c);
+        }
+        const letters = [...map.keys()].sort((a, b) => {
+            if (a === "#") return 1;
+            if (b === "#") return -1;
+            return a.localeCompare(b);
+        });
+        for (const letter of letters) {
+            map.get(letter)!.sort((x, y) => (x.char.name || "").localeCompare(y.char.name || "", "zh"));
+        }
+        return letters.map(letter => ({ letter, items: map.get(letter)! }));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    const [activeLetter, setActiveLetter] = useState<string | null>(null);
+    const groupRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+
+    const jumpToLetter = (letter: string) => {
+        setActiveLetter(letter);
+        const el = groupRefs.current[letter];
+        if (el && typeof el.scrollIntoView === "function") {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        window.setTimeout(() => setActiveLetter(current => (current === letter ? null : current)), 800);
+    };
+
+    const indexLetters = React.useMemo(() => {
+        const present = new Set(groups.map(g => g.letter));
+        return [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", "#"].filter(l => present.has(l));
+    }, [groups]);
+
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-dialog" onClick={e => e.stopPropagation()}>
-                <span className="modal-header-title">选择联系人</span>
+            <div className="wx-pick-dialog" onClick={e => e.stopPropagation()}>
+                <div className="wx-pick-nav">
+                    <button type="button" className="wx-pick-back" onClick={onClose} aria-label="返回">‹</button>
+                    <span className="wx-pick-title">选择联系人</span>
+                    <span className="wx-pick-nav-right" />
+                </div>
                 {enrichedContacts.length === 0 ? (
-                    <span className="menu-desc">暂无联系人，请先添加好友</span>
+                    <div className="wx-pick-empty">暂无联系人，请先添加好友</div>
                 ) : (
-                    <div className="chat-contact-list">
-                        {enrichedContacts.map(c => (
-                            <div
-                                key={c.characterId}
-                                className="chat-contact-item"
-                                onClick={() => onSelect(c.characterId)}
-                            >
-                                <div className="chat-contact-avatar">
-                                    {c.char.avatar ? (
-                                        <img src={c.char.avatar} alt="" />
-                                    ) : (
-                                        <ChatFallbackAvatar />
-                                    )}
+                    <div className="wx-pick-body">
+                        <div className="wx-pick-list">
+                            {groups.map(group => (
+                                <div key={group.letter}>
+                                    <div
+                                        className="wx-pick-section"
+                                        ref={el => { groupRefs.current[group.letter] = el; }}
+                                    >
+                                        {group.letter}
+                                    </div>
+                                    {group.items.map(c => (
+                                        <div
+                                            key={c.characterId}
+                                            className="wx-pick-item"
+                                            onClick={() => onSelect(c.characterId)}
+                                        >
+                                            <div className="wx-pick-avatar">
+                                                {c.char.avatar ? (
+                                                    <img src={c.char.avatar} alt="" />
+                                                ) : (
+                                                    <span>{(c.char.name || "?").charAt(0)}</span>
+                                                )}
+                                            </div>
+                                            <div className="wx-pick-info">
+                                                <div className="wx-pick-name">{c.char.name}</div>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                                <span className="chat-contact-name">{c.char.name}</span>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
+                        <div className="wx-pick-index">
+                            {indexLetters.map(letter => (
+                                <span
+                                    key={letter}
+                                    className={activeLetter === letter ? "active" : undefined}
+                                    onClick={e => { e.stopPropagation(); jumpToLetter(letter); }}
+                                >
+                                    {letter}
+                                </span>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>

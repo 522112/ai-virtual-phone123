@@ -19,7 +19,9 @@ import { formatOfflineTurnXml as formatOfflineTurnXmlShared, buildOfflinePromptH
 import { getStatusRegionConfig, isCustomStatusRegionActive } from "@/lib/chat-status-region";
 import { CustomStatusFrame } from "@/components/chat/custom-status-frame";
 import { sendBrowserNotification } from "@/lib/browser-notification";
-import { dispatchChatMessageNotice } from "@/lib/chat-notification-events";
+import { dispatchChatMessageNotice, CHAT_OPEN_SESSION_EVENT } from "@/lib/chat-notification-events";
+import { ContactProfilePage } from "@/components/chat/contact-profile-page";
+import { RoleChatViewPage } from "@/components/chat/role-chat-view-page";
 import { shouldSendChatInputOnEnter } from "@/lib/chat-input-keyboard";
 import { useChatBottomReserve } from "./use-chat-bottom-reserve";
 import ReactMarkdown from "react-markdown";
@@ -1187,6 +1189,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const [showBusinessCard, setShowBusinessCard] = useState(false);
     const [showRecommendCard, setShowRecommendCard] = useState(false);
     const [showSelfAddSub, setShowSelfAddSub] = useState(false);
+    const [profileCharacterId, setProfileCharacterId] = useState<string | null>(null);
+    const [roleChatSessionId, setRoleChatSessionId] = useState<string | null>(null);
     // 单击进名片 / 双击拍一拍：单击延迟 260ms，防双击误触
     const avatarTapTimer = useRef<number | null>(null);
     // 对方个人主页浮层：单击消息区对方头像打开（微信式主页+仅 TA 朋友圈）
@@ -6219,6 +6223,23 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             {showRecommendCard && !session.isGroup && (
                 <RecommendCardModal hostCharacterId={session.contactId} onClose={() => setShowRecommendCard(false)} />
             )}
+            {roleChatSessionId && (
+                <div style={{ position: "absolute", inset: 0, zIndex: 9999, background: "var(--c-page-body-bg)" }}>
+                    <RoleChatViewPage sessionId={roleChatSessionId} onBack={() => setRoleChatSessionId(null)} />
+                </div>
+            )}
+            {profileCharacterId && (
+                <div style={{ position: "absolute", inset: 0, zIndex: 9999, background: "var(--c-page-body-bg)" }}>
+                    <ContactProfilePage
+                        characterId={profileCharacterId}
+                        onBack={() => setProfileCharacterId(null)}
+                        onSelectSession={next => {
+                            setProfileCharacterId(null);
+                            window.dispatchEvent(new CustomEvent(CHAT_OPEN_SESSION_EVENT, { detail: { sessionId: next.id } }));
+                        }}
+                    />
+                </div>
+            )}
             {showSelfAddSub && !session.isGroup && !session.subId && (
                 <SelfAddSubModal
                     characterId={session.contactId}
@@ -6836,6 +6857,8 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                                                 onActionSelect={(text) => chatTextInputRef.current?.appendText(text)}
                                                 onRelationshipAction={handleRelationshipAction}
                                                 onListenInviteAction={handleListenInviteAction}
+                                                onContactCardClick={contactId => setProfileCharacterId(contactId)}
+                                                onRoleChatOpen={openSessionId => setRoleChatSessionId(openSessionId)}
                                                 defaultTranslationExpanded={session.collapseBilingualTranslation !== false ? false : true}
                                             />
                                         </div>

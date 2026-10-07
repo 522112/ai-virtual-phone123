@@ -141,6 +141,7 @@ export type ChatMessage = {
         | "change_space_cover"
         | "relationship_space"
         | "contact_card"
+        | "role_chat_record"
         | "listen_invite"
         | "app_card"
         | "tool_notice"
@@ -167,6 +168,10 @@ export type ChatMessage = {
         pokeSender?: string;      // 拍一拍发起人名字
         pokeTarget?: string;      // 拍一拍目标名字
         contactCardName?: string; // 名片被推荐人名字（渲染时按推荐人同世界实时解析，未建档也可成卡）
+        roleChatSessionId?: string; // 角色互聊专属会话 id（点击进只读围观页）
+        roleChatTitle?: string; // 角色互聊记录标题
+        roleChatAId?: string;
+        roleChatBId?: string;
         senderName?: string;      // 转账发起人显示名（群聊）
         recipientId?: string;     // 转账收款人角色 ID
         recipientName?: string;   // 转账收款人显示名
@@ -355,6 +360,7 @@ const MEDIA_PREVIEW_MAP: Record<string, string> = {
     poke: "[拍了拍你]", sticker: "[表情]", quote: "[引用]", dice: "[掷骰子]",
     gift: "[礼物]",
     contact_card: "[名片]",
+    role_chat_record: "[聊天记录]",
     payment_request: "[代付请求]",
     music: "[音乐]",
     music_share: "[音乐分享]",
