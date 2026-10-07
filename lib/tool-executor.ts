@@ -40,7 +40,6 @@ import {
 } from "./chat-storage";
 import { loadCharacters } from "./character-storage";
 import { resolveUserIdentity } from "./settings-storage";
-import { loadCharacters } from "./character-storage";
 import {
     deleteCalendarScheduleItem,
     loadCalendarWeekPlan,
