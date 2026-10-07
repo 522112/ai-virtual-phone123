@@ -31,10 +31,14 @@ export function MaskSwitchSheet({ activeMaskId, onSelect, onClose }: Props) {
   }, []);
 
   return (
-    <div className="journal-sheet-overlay" onClick={onClose}>
-      <div className="journal-sheet" onClick={e => e.stopPropagation()} style={{ maxHeight: "82vh", overflowY: "auto" }}>
+    <div
+      className="journal-sheet-overlay"
+      onClick={onClose}
+      style={{ background: "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
+    >
+      <div className="journal-sheet" onClick={e => e.stopPropagation()} style={{ height: "62vh", maxHeight: "62vh", display: "flex", flexDirection: "column" }}>
         <div className="journal-sheet-title">切换面具（不同世界观互不串）</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, overflowY: "auto", flex: 1, paddingBottom: 4 }}>
           {identities.length === 0 ? <p className="journal-empty">还没有面具，去设置里创建一个</p> : identities.map(identity => {
             const active = identity.id === activeMaskId;
             return (

@@ -46,6 +46,9 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
   const [name, setName] = useState("");
   const [persona, setPersona] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [swipedId, setSwipedId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const touchStartX = React.useRef(0);
 
   const refresh = () => {
     const mask = loadUserIdentities().find(i => i.id === activeMaskId);
@@ -132,10 +135,14 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
   };
 
   return (
-    <div className="journal-sheet-overlay" onClick={onClose}>
-      <div className="journal-sheet" onClick={e => e.stopPropagation()} style={{ maxHeight: "82vh", overflowY: "auto" }}>
+    <div
+      className="journal-sheet-overlay"
+      onClick={onClose}
+      style={{ background: "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
+    >
+      <div className="journal-sheet" onClick={e => e.stopPropagation()} style={{ height: "62vh", maxHeight: "62vh", display: "flex", flexDirection: "column" }}>
         <div className="journal-sheet-title">切换身份 · {maskName}</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, overflowY: "auto", flex: 1, paddingBottom: 4 }}>
           <small className="menu-desc">小号就是一个新号：聊天/好友/朋友圈从零开始，对方只认识这个号</small>
           <button type="button" style={cardStyle(!activeSubId)} onClick={() => pick(null)}>
             <span style={avatarStyle}>
@@ -149,10 +156,52 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
               <small className="menu-desc" style={{ display: "block", marginTop: 2 }}>主号 · {maskBio || "用本面具身份聊天"}</small>
             </span>
           </button>
-          {subs.map(sub => (
-            <div key={sub.id} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
-                <button type="button" style={{ ...cardStyle(sub.id === activeSubId), flex: 1 }} onClick={() => pick(sub.id)}>
+          {subs.map(sub => {
+            const swiped = swipedId === sub.id;
+            const confirming = confirmDeleteId === sub.id;
+            return (
+            <div key={sub.id} style={{ position: "relative", overflow: "hidden", borderRadius: 16 }}>
+              <span
+                style={{
+                  position: "absolute", top: 0, right: 0, bottom: 0, width: 84,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirming) {
+                      deleteUserSubAccount(sub.id);
+                      setConfirmDeleteId(null);
+                      setSwipedId(null);
+                      if (activeSubId === sub.id) pick(null);
+                      else refresh();
+                    } else {
+                      setConfirmDeleteId(sub.id);
+                    }
+                  }}
+                  style={{
+                    border: 0, background: confirming ? "#e8354b" : "#ff7a59", color: "#fff",
+                    fontSize: 12, borderRadius: 10, padding: "8px 10px", cursor: "pointer", marginRight: 8,
+                  }}
+                >
+                  {confirming ? "确认删除" : "删除"}
+                </button>
+              </span>
+              <div
+                style={{ ...cardStyle(sub.id === activeSubId), transform: swiped ? "translateX(-84px)" : "translateX(0)", transition: "transform 0.18s ease" }}
+                onTouchStart={e => { touchStartX.current = e.touches[0].clientX; }}
+                onTouchMove={e => {
+                  const dx = e.touches[0].clientX - touchStartX.current;
+                  if (dx < -40 && swipedId !== sub.id) { setSwipedId(sub.id); setConfirmDeleteId(null); }
+                  if (dx > 40 && swipedId === sub.id) { setSwipedId(null); setConfirmDeleteId(null); }
+                }}
+              >
+                <button
+                  type="button"
+                  style={{ flex: 1, minWidth: 0, display: "flex", gap: 12, alignItems: "center", background: "none", border: 0, cursor: "pointer", textAlign: "left", padding: 0 }}
+                  onClick={() => { if (swiped) { setSwipedId(null); setConfirmDeleteId(null); return; } pick(sub.id); }}
+                >
                   <span style={avatarStyle}>
                     {sub.avatar ? <img src={sub.avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ChatFallbackAvatar />}
                   </span>
@@ -166,13 +215,17 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
                     </small>
                   </span>
                 </button>
-                <span style={{ display: "flex", flexDirection: "column", gap: 4, justifyContent: "center" }}>
-                  <button type="button" onClick={() => openEditor(sub)} style={{ border: "1px solid rgba(0,0,0,0.1)", background: "var(--c-card, #fff)", borderRadius: 10, fontSize: 11, padding: "6px 8px", cursor: "pointer" }}>编辑</button>
-                  <button type="button" onClick={() => { deleteUserSubAccount(sub.id); if (activeSubId === sub.id) pick(null); }} style={{ border: 0, background: "none", color: "#e8354b", fontSize: 11, cursor: "pointer" }}>删除</button>
-                </span>
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); openEditor(sub); }}
+                  style={{ border: "1px solid rgba(0,0,0,0.12)", background: "var(--c-card, #fff)", borderRadius: 10, fontSize: 11, padding: "6px 10px", cursor: "pointer", flexShrink: 0 }}
+                >
+                  编辑
+                </button>
               </div>
             </div>
-          ))}
+            );
+          })}
           {editingId !== null ? (
             <div className="g-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <input value={name} maxLength={30} onChange={e => setName(e.target.value)} placeholder="网名（对方看到的名字）" className="ui-input" />

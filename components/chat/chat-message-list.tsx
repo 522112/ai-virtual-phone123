@@ -27,7 +27,7 @@ import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { SubAccountSheet, ACTIVE_SUB_CHANGED_EVENT } from "./sub-account-sheet";
 import { GodViewSheet } from "./god-view-sheet";
 import { UserBusinessCard } from "./user-business-card";
-import { getUserSubAccount, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
+import { getUserSubAccount, loadUserSubAccounts, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
 import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import {
     getMascotLastPreview,
@@ -114,6 +114,10 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
     const [subVerifyMsg, setSubVerifyMsg] = useState("");
     const [subAddBusy, setSubAddBusy] = useState(false);
     const [subAddResult, setSubAddResult] = useState("");
+    const [showSelfAddSub, setShowSelfAddSub] = useState(false);
+    const [selfAddCharId, setSelfAddCharId] = useState("");
+    const [selfAddSubId, setSelfAddSubId] = useState("");
+    const [selfAddResult, setSelfAddResult] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResult, setSearchResult] = useState<Character | null | undefined>(undefined);
     // undefined: not searched yet, null: searched and not found, Character: found
@@ -349,6 +353,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                         {/* Dropout '+' Menu */}
                         {showPlusMenu && (
                             <div className="g-dropdown absolute top-[40px] right-0 py-2 px-0 w-[140px] z-[100]">
+                                {activeSubId ? null : (<>
                                 <MenuOption
                                     icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>}
                                     label="发起聊天"
@@ -365,6 +370,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                         setShowGroupCreate(true);
                                     }}
                                 />
+                                </>)}
                                 <MenuOption
                                     icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>}
                                     label="添加好友"
@@ -385,6 +391,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                         setGreetingText(identity?.name ? `我是${identity.name}` : "你好");
                                     }}
                                 />
+                                {activeSubId ? null : (<>
                                 <MenuOption
                                     icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>}
                                     label="上帝视角"
@@ -393,6 +400,18 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                         setShowGodView(true);
                                     }}
                                 />
+                                <MenuOption
+                                    icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"></rect><path d="M12 8v8M8 12h8"></path></svg>}
+                                    label="帮小号加人"
+                                    onClick={() => {
+                                        setShowPlusMenu(false);
+                                        setShowSelfAddSub(true);
+                                        setSelfAddCharId("");
+                                        setSelfAddSubId("");
+                                        setSelfAddResult("");
+                                    }}
+                                />
+                                </>)}
                             </div>
                         )}
                     </span>
@@ -860,6 +879,55 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
             )}
             {showGodView && (
                 <GodViewSheet onClose={() => setShowGodView(false)} />
+            )}
+            {showSelfAddSub && !activeSubId && (
+                <div className="journal-sheet-overlay" onClick={() => setShowSelfAddSub(false)}>
+                    <div className="journal-sheet" onClick={e => e.stopPropagation()}>
+                        <div className="journal-sheet-title">帮小号加人 · 直接用角色手机加你的小号</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            <small className="menu-desc">角色连续拒绝时用：跳过验证，对方手机直接通过，切到小号就能聊</small>
+                            <select value={selfAddCharId} onChange={e => setSelfAddCharId(e.target.value)} className="ui-input">
+                                <option value="">选角色（当前面具）</option>
+                                {loadCharacters().filter(c => isCharacterInActiveMask(c.id, "chat")).map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                            <select value={selfAddSubId} onChange={e => setSelfAddSubId(e.target.value)} className="ui-input">
+                                <option value="">选你的小号</option>
+                                {loadUserSubAccounts(activeMaskId).map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                            {selfAddResult ? <small className="menu-desc">{selfAddResult}</small> : null}
+                            <div style={{ display: "flex", gap: 8 }}>
+                                <button
+                                    type="button"
+                                    className="ui-btn ui-btn-success"
+                                    disabled={!selfAddCharId || !selfAddSubId}
+                                    onClick={() => {
+                                        void import("@/lib/sub-friend-engine").then(m => {
+                                            const session = m.ensureSubSession(selfAddCharId, selfAddSubId);
+                                            const sub = getUserSubAccount(selfAddSubId);
+                                            void import("@/lib/chat-storage").then(cs => {
+                                                cs.pushChatMessage({
+                                                    sessionId: session.id,
+                                                    role: "system",
+                                                    content: `[你在手机上通过了 ${sub?.name || "小号"} 的好友申请]`,
+                                                    status: "sent",
+                                                });
+                                                setSessions(loadChatSessions());
+                                            });
+                                            setSelfAddResult("已加上，切到该小号就能聊了");
+                                        });
+                                    }}
+                                >
+                                    直接加上
+                                </button>
+                                <button type="button" className="journal-sheet-cancel" onClick={() => setShowSelfAddSub(false)}>关闭</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
             {showSubSheet && (
                 <SubAccountSheet

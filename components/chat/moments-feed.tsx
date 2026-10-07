@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useLayoutEffect, useRef } from "react";
+import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { getAllPosts, deleteMomentPost, getUnreadMomentsNotifications, saveMomentsLastSeen, addMomentComment } from "@/lib/moments-storage";
 import { loadChatContacts } from "@/lib/chat-storage";
 import { resolveUserIdentity } from "@/lib/settings-storage";
+import { getActiveSub } from "./sub-account-sheet";
 import { saveChatImageToIndexedDB, getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
 import type { MomentComment, MomentPost } from "@/lib/moments-types";
 import { MomentPostCard } from "./moment-post-card";
@@ -61,7 +62,16 @@ export function MomentsFeed({ onCloseApp }: MomentsFeedProps) {
     const [coverUrl, setCoverUrl] = useState<string | null>(null);
     const coverInputRef = useRef<HTMLInputElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const userIdentity = resolveUserIdentity(undefined, "chat");
+    const userIdentity = useMemo(() => {
+        const sub = getActiveSub();
+        if (sub) {
+            return {
+                name: sub.name,
+                avatarUrl: sub.avatar || undefined,
+            };
+        }
+        return resolveUserIdentity(undefined, "chat");
+    }, [posts.length]);
     const [signature, setSignature] = useState(() => {
         if (typeof window !== "undefined") {
             return kvGet(maskKey("moments_signature", currentMaskId())) || kvGet("moments_signature") || "make every day count";
