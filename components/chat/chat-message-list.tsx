@@ -30,6 +30,7 @@ import { GodViewSheet } from "./god-view-sheet";
 import { UserBusinessCard } from "./user-business-card";
 import { getUserSubAccount, loadUserSubAccounts, SUB_ACCOUNTS_UPDATED_EVENT } from "@/lib/sub-accounts";
 import { ensureSubSession, requestSubFriend } from "@/lib/sub-friend-engine";
+import { describeFlowError } from "@/lib/chunk-reload";
 import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import {
     getMascotLastPreview,
@@ -674,7 +675,8 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                                                         setSubAddResult(`对方拒绝了：${result.reply}`);
                                                     }
                                                 } catch (error) {
-                                                    setSubAddResult(error instanceof Error ? error.message : "发送失败，点发送再试一次");
+                                                    const text = describeFlowError(error, "发送失败，点发送再试一次");
+                                                    setSubAddResult(text || "正在刷新页面…");
                                                 } finally {
                                                     setSubAddBusy(false);
                                                 }
