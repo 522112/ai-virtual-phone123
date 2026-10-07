@@ -16,23 +16,23 @@ function escapeHtml(text: string): string {
 }
 
 function formatHistory(session: ListenTogetherSession): string {
-  const tracks = session.tracks.map(item => `?${item.title}?${item.artist ? ` - ${item.artist}` : ""}`);
+  const tracks = session.tracks.map(item => `《${item.title}》${item.artist ? ` - ${item.artist}` : ""}`);
   return [
-    "???????",
-    `??????????????????${session.characterName}???????`,
-    `?? ${formatListenDuration(session)}`,
-    tracks.length ? `???${tracks.join("?")}` : "?????????",
+    "【一起听记录】",
+    `用户把一次一起听发给你看。这是用户和${session.characterName}一起听过的歌。`,
+    `共 ${formatListenDuration(session)}`,
+    tracks.length ? `听过：${tracks.join("、")}` : "那次还没记下歌名。",
   ].join("\n");
 }
 
 export function buildListenTogetherCardHtml(session: ListenTogetherSession, opts?: { characterAvatar?: string; userAvatar?: string }): string {
   const duration = formatListenDuration(session);
   const cover = session.tracks.find(item => item.coverUrl)?.coverUrl || "";
-  const playlistName = session.playlist?.name || `?${escapeHtml(session.characterName)}????`;
+  const playlistName = session.playlist?.name || `和${escapeHtml(session.characterName)}的一起听`;
   const tracks = session.tracks.slice(0, 4);
   const trackHtml = tracks.length
-    ? tracks.map(item => `<div style="margin-top:4px;font-size:11px;line-height:1.45;opacity:0.86;">${escapeHtml(item.title)}${item.artist ? ` ? ${escapeHtml(item.artist)}` : ""}</div>`).join("")
-    : `<div style="margin-top:4px;font-size:11px;opacity:0.6;">??????</div>`;
+    ? tracks.map(item => `<div style="margin-top:4px;font-size:11px;line-height:1.45;opacity:0.86;">${escapeHtml(item.title)}${item.artist ? ` · ${escapeHtml(item.artist)}` : ""}</div>`).join("")
+    : `<div style="margin-top:4px;font-size:11px;opacity:0.6;">没有记下歌名</div>`;
   const avatars = (opts?.characterAvatar || opts?.userAvatar)
     ? `<div style="display:flex;align-items:center;margin-top:10px;">${opts?.userAvatar ? `<img src="${opts.userAvatar}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid #2c2833;" />` : ""}${opts?.characterAvatar ? `<img src="${opts.characterAvatar}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid #2c2833;margin-left:-8px;" />` : ""}<span style="margin-left:8px;font-size:10px;opacity:0.6;">${playlistName}</span></div>`
     : "";
@@ -43,7 +43,7 @@ export function buildListenTogetherCardHtml(session: ListenTogetherSession, opts
   return `
 <section style="width:100%;max-width:230px;box-sizing:border-box;margin:0;padding:14px;background:linear-gradient(160deg,#262130,#141318 60%,#1d1826);color:#f4efe8;border-radius:14px;border:1px solid rgba(255,255,255,0.09);font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;box-shadow:0 8px 28px rgba(0,0,0,0.45);">
   <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;letter-spacing:0.14em;opacity:0.55;">
-    <span>?? ???</span>
+    <span>🎧 一起听</span>
     <span>${escapeHtml(duration)}</span>
   </div>
   <div style="display:flex;gap:10px;align-items:center;margin-top:10px;">
@@ -190,9 +190,9 @@ export function sendListenTogetherRefuse(input: {
   addChatContact(input.characterId);
   const chat = createOrGetSession(input.characterId);
   const parts = input.texts
-    .map(item => sanitizeListenTogetherText(item, [input.characterName, "?", "??"]))
+    .map(item => sanitizeListenTogetherText(item, [input.characterName, "我", "用户"]))
     .filter(Boolean);
-  if (parts.length === 0) parts.push("???????????");
+  if (parts.length === 0) parts.push("这会儿不太方便一起听。");
   const messageIds = parts.map(text => pushChatMessage({
     sessionId: chat.id,
     role: "assistant",
@@ -301,8 +301,8 @@ export function revealListenTogetherOutcome(input: {
   const chat = createOrGetSession(invite.characterId);
   const existing = loadChatMessages(chat.id, 200).find(m => m.id === input.messageId)?.mediaData || {};
   updateMessageMediaData(input.messageId, { ...existing, inviteId: invite.id, status: input.accept ? "accepted" : "declined" });
-  const parts = input.peerTexts.map(item => sanitizeListenTogetherText(item, [invite.characterName, "??", "???"])).filter(Boolean);
-  if (parts.length === 0) parts.push(input.accept ? "????????????" : "????????????????");
+  const parts = input.peerTexts.map(item => sanitizeListenTogetherText(item, [invite.characterName, "我", "用户"])).filter(Boolean);
+  if (parts.length === 0) parts.push(input.accept ? "好呀，一起听。" : "这次先不听了。");
   parts.forEach(text => pushChatMessage({ sessionId: chat.id, role: "assistant", content: text, senderName: invite.characterName, senderCharacterId: invite.characterId }));
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId: chat.id } }));
