@@ -54,10 +54,11 @@ function sessionActivityTime(session: ChatSession): number {
 }
 
 function duplicateKey(session: ChatSession): string | null {
-    if (!session.isGroup) return `direct:${session.contactId}`;
+    // 主号/小号/面具各自独立：绝不跨身份合并（小号会话与主号同角色也绝不是重复）
+    if (!session.isGroup) return `direct:${session.subId || "main"}:${session.contactId}`;
     const members = [...(session.participantIds || [])].sort();
     if (members.length === 0) return null;
-    return `group:${session.isSpectator ? "1" : "0"}:${members.join(",")}`;
+    return `group:${session.maskId || "legacy"}:${session.isSpectator ? "1" : "0"}:${members.join(",")}`;
 }
 
 export function findDuplicateSessionGroups(): DuplicateSessionGroup[] {
