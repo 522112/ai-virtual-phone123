@@ -20,6 +20,9 @@ type Props = {
   onSelectSub: (subId: string | null) => void;
   onClose: () => void;
   onNotice?: (msg: string) => void;
+  /** 只选择不切换：点卡片只回传，不改当前身份（给“帮小号加人”用） */
+  selectOnly?: boolean;
+  onPickSub?: (subId: string | null) => void;
 };
 
 function readFileAsDataUrl(file: File): Promise<string | null> {
@@ -37,7 +40,7 @@ function dispatchSubChanged(subId: string | null): void {
 }
 
 /** 聊天主页长按：只切当前面具的小号（+新增）。面具切换去“我的”页面长按头像。 */
-export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClose, onNotice }: Props) {
+export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClose, onNotice, selectOnly, onPickSub }: Props) {
   const [maskName, setMaskName] = useState("");
   const [maskAvatar, setMaskAvatar] = useState<string | null>(null);
   const [maskBio, setMaskBio] = useState("");
@@ -48,6 +51,7 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
   const [avatar, setAvatar] = useState<string | null>(null);
   const [swipedId, setSwipedId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showAvatarPick, setShowAvatarPick] = useState(false);
   const touchStartX = React.useRef(0);
 
   const refresh = () => {
@@ -66,6 +70,10 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
   }, [activeMaskId]);
 
   const pick = (subId: string | null) => {
+    if (selectOnly) {
+      onPickSub?.(subId);
+      return;
+    }
     onSelectSub(subId);
     dispatchSubChanged(subId);
     onClose();
@@ -141,9 +149,10 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
       style={{ background: "rgba(255,255,255,0.55)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
     >
       <div className="journal-sheet" onClick={e => e.stopPropagation()} style={{ height: "62vh", maxHeight: "62vh", display: "flex", flexDirection: "column" }}>
-        <div className="journal-sheet-title">切换身份 · {maskName}</div>
+        <div className="journal-sheet-title">{selectOnly ? "选择小号" : `切换身份 · ${maskName}`}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, overflowY: "auto", flex: 1, paddingBottom: 4 }}>
           <small className="menu-desc">小号就是一个新号：聊天/好友/朋友圈从零开始，对方只认识这个号</small>
+          {!selectOnly && (
           <button type="button" style={cardStyle(!activeSubId)} onClick={() => pick(null)}>
             <span style={avatarStyle}>
               {maskAvatar ? <img src={maskAvatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ChatFallbackAvatar />}
@@ -156,6 +165,7 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
               <small className="menu-desc" style={{ display: "block", marginTop: 2 }}>主号 · {maskBio || "用本面具身份聊天"}</small>
             </span>
           </button>
+          )}
           {subs.map(sub => {
             const swiped = swipedId === sub.id;
             const confirming = confirmDeleteId === sub.id;
@@ -164,7 +174,7 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
               <span
                 style={{
                   position: "absolute", top: 0, right: 0, bottom: 0, width: 84,
-                  display: "flex", alignItems: "center", justifyContent: "center",
+                  display: selectOnly ? "none" : "flex", alignItems: "center", justifyContent: "center",
                 }}
               >
                 <button
@@ -218,7 +228,7 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
                 <button
                   type="button"
                   onClick={e => { e.stopPropagation(); openEditor(sub); }}
-                  style={{ border: "1px solid rgba(0,0,0,0.12)", background: "var(--c-card, #fff)", borderRadius: 10, fontSize: 11, padding: "6px 10px", cursor: "pointer", flexShrink: 0 }}
+                  style={{ border: "1px solid rgba(0,0,0,0.12)", background: "var(--c-card, #fff)", borderRadius: 10, fontSize: 11, padding: "6px 10px", cursor: "pointer", flexShrink: 0, display: selectOnly ? "none" : undefined }}
                 >
                   编辑
                 </button>
@@ -226,40 +236,98 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
             </div>
             );
           })}
-          {editingId !== null ? (
-            <div className="g-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {!selectOnly && editingId !== null ? (
+            <div className="g-card" style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "stretch" }}>
+              <button
+                type="button"
+                onClick={() => setShowAvatarPick(true)}
+                style={{
+                  alignSelf: "center", width: 84, height: 84, borderRadius: 18, overflow: "hidden",
+                  border: "2px dashed rgba(0,0,0,0.2)", background: "rgba(0,0,0,0.04)",
+                  display: "grid", placeItems: "center", cursor: "pointer", padding: 0,
+                }}
+                aria-label="选择头像"
+              >
+                {avatar ? (
+                  <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  <span style={{ fontSize: 11, color: "var(--c-text-secondary)" }}>选头像</span>
+                )}
+              </button>
               <input value={name} maxLength={30} onChange={e => setName(e.target.value)} placeholder="网名（对方看到的名字）" className="ui-input" />
               <textarea value={persona} rows={3} onChange={e => setPersona(e.target.value)} placeholder="人设（可选，不填对方就在聊天中认识你；绝不会暴露你是大号）" className="ui-textarea" />
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <label style={{ border: "1px solid var(--c-panel-border)", borderRadius: 10, padding: "7px 10px", fontSize: 12, cursor: "pointer" }}>
-                  {avatar ? "换头像" : "传头像"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    style={{ display: "none" }}
-                    onChange={async e => {
-                      const file = e.target.files?.[0];
-                      if (file) setAvatar(await readFileAsDataUrl(file));
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                {avatar ? (
-                  <span style={{ width: 30, height: 30, borderRadius: 8, overflow: "hidden" }}>
-                    <img src={avatar} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  </span>
-                ) : null}
-                <span style={{ flex: 1 }} />
+              <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
                 <button type="button" onClick={saveEditor} className="ui-btn ui-btn-success">保存</button>
                 <button type="button" onClick={() => setEditingId(null)} style={{ border: 0, background: "none", fontSize: 12, cursor: "pointer" }}>取消</button>
               </div>
             </div>
-          ) : (
+          ) : !selectOnly ? (
             <button type="button" style={{ ...cardStyle(false), borderStyle: "dashed", justifyContent: "center", color: "var(--c-text-secondary)" }} onClick={() => openEditor(null)}>
-              ＋ 开个新小号（像 QQ 新号）
+              ＋ 添加账号
             </button>
-          )}
+          ) : null}
+          {showAvatarPick ? (
+            <SubAvatarPicker
+              current={avatar}
+              onPick={url => { setAvatar(url); setShowAvatarPick(false); }}
+              onClose={() => setShowAvatarPick(false)}
+            />
+          ) : null}
         </div>
+        <button type="button" className="journal-sheet-cancel" onClick={onClose}>关闭</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 小号头像：从资源库图库里选（沿用“有图都支持图库”的规则）。
+ */
+function SubAvatarPicker({ current, onPick, onClose }: { current: string | null; onPick: (url: string) => void; onClose: () => void }) {
+  const [urls, setUrls] = useState<string[]>([]);
+  useEffect(() => {
+    void import("@/lib/resource-library").then(m => {
+      try {
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const scope of m.listResourceScopes()) {
+          for (const item of m.listResources(scope)) {
+            const url = m.resourceDisplayUrl(item);
+            if (!url || seen.has(url)) continue;
+            seen.add(url);
+            out.push(url);
+          }
+        }
+        setUrls(out.slice(0, 120));
+      } catch {
+        setUrls([]);
+      }
+    });
+  }, []);
+  return (
+    <div className="journal-sheet-overlay" onClick={onClose}>
+      <div className="journal-sheet" onClick={e => e.stopPropagation()} style={{ height: "56vh", maxHeight: "56vh", display: "flex", flexDirection: "column" }}>
+        <div className="journal-sheet-title">从图库选头像</div>
+        {urls.length === 0 ? (
+          <p className="journal-empty">图库还没有图片，先去资源库上传</p>
+        ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, overflowY: "auto", flex: 1, paddingBottom: 4 }}>
+          {urls.map(url => (
+            <button
+              key={url}
+              type="button"
+              onClick={() => onPick(url)}
+              style={{
+                border: url === current ? "2px solid #07c160" : "1px solid rgba(0,0,0,0.1)",
+                borderRadius: 12, overflow: "hidden", padding: 0, cursor: "pointer",
+                aspectRatio: "1", background: "rgba(0,0,0,0.04)",
+              }}
+            >
+              <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            </button>
+          ))}
+        </div>
+        )}
         <button type="button" className="journal-sheet-cancel" onClick={onClose}>关闭</button>
       </div>
     </div>
