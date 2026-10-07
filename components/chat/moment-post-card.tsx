@@ -21,7 +21,7 @@ import { splitBilingualText } from "@/lib/bilingual-text";
 import { retryMomentGeneratedPhoto } from "@/lib/generated-image-retry";
 import { hasCharacterReferenceImage } from "@/lib/image-generation-service";
 import { GeneratedImageErrorDialog } from "./generated-image-error-dialog";
-import { Trash2, MoreHorizontal, MapPin, Heart, MessageCircle, Pencil } from "lucide-react";
+import { Trash2, MoreHorizontal, MapPin, Heart, MessageCircle, Pencil, Pin } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui";
 
 type Props = {
@@ -337,6 +337,19 @@ export function MomentPostCard({ post, onUpdate, onRequestDelete, onOpenCommentC
                             <Pencil size={14} strokeWidth={1.75} />
                             <span>编辑动态</span>
                         </button>
+                        {post.authorType === "user" ? (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    updateMomentPost(post.id, { pinned: post.pinned === true ? false : true });
+                                    setShowPostActions(false);
+                                    onUpdate();
+                                }}
+                            >
+                                <Pin size={14} strokeWidth={1.75} />
+                                <span>{post.pinned === true ? "取消置顶" : "置顶动态"}</span>
+                            </button>
+                        ) : null}
                         {onRequestDelete && (
                             <button
                                 type="button"

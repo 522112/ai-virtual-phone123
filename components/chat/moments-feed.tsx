@@ -19,6 +19,15 @@ const COVER_ASSET_KEY = "moments_cover_asset_id";
 registerKvMigration(COVER_ASSET_KEY);
 registerKvMigration("moments_signature");
 
+const maskKey = (base: string, maskId?: string) => (maskId ? `${base}_${maskId}` : base);
+const currentMaskId = () => {
+    try {
+        return resolveUserIdentity(undefined, "chat")?.id;
+    } catch {
+        return undefined;
+    }
+};
+
 const MOMENTS_INITIAL_POST_COUNT = 10;
 const MOMENTS_LOAD_MORE_COUNT = 10;
 
@@ -53,7 +62,7 @@ export function MomentsFeed({ onCloseApp }: MomentsFeedProps) {
     const userIdentity = resolveUserIdentity(undefined, "chat");
     const [signature, setSignature] = useState(() => {
         if (typeof window !== "undefined") {
-            return kvGet("moments_signature") || "make every day count (●ˇ∀ˇ●)";
+            return kvGet(maskKey("moments_signature", currentMaskId())) || kvGet("moments_signature") || "make every day count";
         }
         return "make every day count (●ˇ∀ˇ●)";
     });
@@ -62,7 +71,7 @@ export function MomentsFeed({ onCloseApp }: MomentsFeedProps) {
     const handleSignatureSubmit = (val: string) => {
         const trimmed = val.trim() || "make every day count (●ˇ∀ˇ●)";
         setSignature(trimmed);
-        kvSet("moments_signature", trimmed);
+        kvSet(maskKey("moments_signature", currentMaskId()), trimmed);
         setEditingSignature(false);
     };
 
@@ -100,7 +109,18 @@ export function MomentsFeed({ onCloseApp }: MomentsFeedProps) {
 
     const refreshPosts = useCallback(() => {
         const contactIds = new Set(loadChatContacts().map(c => c.characterId));
-        setPosts(getAllPosts().filter(p => p.authorType === "user" || contactIds.has(p.authorId)));
+        const maskId = currentMaskId();
+        const all = getAllPosts().filter(p =>
+            (p.authorType === "user" && (!p.maskId || !maskId || p.maskId === maskId))
+            || contactIds.has(p.authorId),
+        );
+        // 置顶优先，再按时间
+        all.sort((a, b) => {
+            const pin = Number(b.pinned === true) - Number(a.pinned === true);
+            if (pin !== 0) return pin;
+            return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+        });
+        setPosts(all);
         setUnreadNotifs(getUnreadMomentsNotifications());
     }, []);
 
@@ -299,8 +319,8 @@ export function MomentsFeed({ onCloseApp }: MomentsFeedProps) {
         };
         window.addEventListener(MOMENT_PHOTO_GENERATION_FAILED_EVENT, photoFailureHandler);
 
-        // Load saved cover image
-        const savedId = kvGet(COVER_ASSET_KEY);
+        // Load saved cover image（按面具隔离）
+        const savedId = kvGet(maskKey(COVER_ASSET_KEY, currentMaskId())) || kvGet(COVER_ASSET_KEY);
         if (savedId) {
             getChatImageFromIndexedDB(savedId).then(url => {
                 if (url) setCoverUrl(url);
@@ -359,7 +379,7 @@ export function MomentsFeed({ onCloseApp }: MomentsFeedProps) {
                 URL.revokeObjectURL(objectUrl);
                 if (!blob) return;
                 saveChatImageToIndexedDB(blob).then(assetId => {
-                    kvSet(COVER_ASSET_KEY, assetId);
+                    kvSet(maskKey(COVER_ASSET_KEY, currentMaskId()), assetId);
                     getChatImageFromIndexedDB(assetId).then(url => {
                         if (url) setCoverUrl(url);
                     });

@@ -48,6 +48,7 @@ import { buildCalendarScheduleMarker } from "./calendar-storage";
 import { getWeekStartIso } from "./calendar-utils";
 import { getCustomStickerNames, getCustomStickerExample } from "./custom-sticker-storage";
 import { previewMessagesForApi, sendLLMRequest } from "./chat-engine";
+import { describeResourcesForPrompt, getResource, resourceDisplayUrl } from "./resource-library";
 import { bgSetInterval } from "./bg-timer";
 import { sendBrowserNotification } from "./browser-notification";
 import { buildTwoLevelMomentThreads } from "./moments-comment-threading";
@@ -287,29 +288,39 @@ async function resolveAssemblerInput(
 
 // ── AI Post Generation ──
 
-async function triggerAIPost(characterId: string): Promise<void> {
+async function triggerAIPost(characterId: string, opts?: { backdateDays?: number; historyFlavor?: boolean }): Promise<MomentPost | null> {
     isGenerating = true;
     // Always update schedule first to prevent retry storms on failure
-    updateScheduleAfterPost(characterId);
+    if (!opts?.backdateDays) updateScheduleAfterPost(characterId);
     try {
         const resolved = await resolveAssemblerInput(characterId, "post");
-        if (!resolved) return;
+        if (!resolved) return null;
 
         const { input, apiConfig, preset, character } = resolved;
         if (!apiConfig) {
             console.warn("[Moments] No API config for", character.name);
-            return;
+            return null;
         }
 
         // Assemble prompt via shared pipeline
         const llmMessages = assemblePromptPayload(input);
 
+        // 资源库素材：按人设和备注选配图
+        const resourceCatalog = describeResourcesForPrompt(characterId);
+        if (resourceCatalog) {
+            llmMessages.push({ role: "user", content: resourceCatalog } as LLMMessage);
+        }
+
         // Append trigger instruction
         llmMessages.push({
             role: "user",
-            content: "请发一条朋友圈。",
+            content: opts?.historyFlavor
+                ? "请补一条以前的朋友圈（认识现在这位朋友之前的生活，可以完全和 TA 无关）。有合适的资源库图片就输出 [资源图:资源id]，没有就输出 [照片：画面描述]，都没有就不带图。"
+                : resourceCatalog
+                    ? "请发一条朋友圈。配图优先从上面的资源库按备注选一张并输出 [资源图:资源id]；没有合适的再输出 [照片：画面描述] 让系统生成；都不需要就不带图。"
+                    : "请发一条朋友圈。",
             _debugMeta: { marker: "moments_trigger" },
-        });
+        } as LLMMessage);
 
         const responseText = await callLLM(
             apiConfig,
@@ -320,7 +331,7 @@ async function triggerAIPost(characterId: string): Promise<void> {
             input.appTags,
             input.userIdentity?.name,
         );
-        if (!responseText) return;
+        if (!responseText) return null;
 
         // Extract cross-engine actions before moments-specific parsing
         const { cleanText: postText, actions } = parseActionTags(responseText);
@@ -330,7 +341,7 @@ async function triggerAIPost(characterId: string): Promise<void> {
         }
 
         const parsed = parseMomentPostResponse(postText);
-        if (!parsed) return;
+        if (!parsed) return null;
 
         // 内容去重：生图前先判重，命中直接丢弃（防止同一内容经多路径重复入库）
         if (findRecentDuplicateMomentPost({
@@ -340,28 +351,40 @@ async function triggerAIPost(characterId: string): Promise<void> {
             photoDescription: parsed.photoDescription,
         })) {
             console.warn(`[Moments] SKIP duplicate AI post from ${character.name}`);
-            return;
+            return null;
         }
 
         const contacts = loadChatContacts();
         const visibility = contacts.map(c => c.characterId);
+
+        let resourcePhotoUrl: string | undefined;
+        if (parsed.resourcePhotoId) {
+            const hit = getResource(parsed.resourcePhotoId);
+            if (hit && hit.kind === "image") resourcePhotoUrl = resourceDisplayUrl(hit);
+        }
 
         // 先入库再生图：帖子立即可见，生图慢/超时/页面被杀都不会丢帖
         const post = addMomentPost({
             authorType: "character",
             authorId: characterId,
             content: parsed.content,
-            photoDescription: parsed.photoDescription,
+            photoDescription: resourcePhotoUrl ? undefined : parsed.photoDescription,
             photoUseReferenceImage: parsed.photoUseReferenceImage === true,
-            photoGenerationStatus: parsed.photoDescription ? "pending" : undefined,
+            photoGenerationStatus: resourcePhotoUrl ? "generated" : parsed.photoDescription ? "pending" : undefined,
+            photoUrl: resourcePhotoUrl,
             visibility,
         });
         if (!post) {
             console.warn(`[Moments] SKIP duplicate AI post from ${character.name}`);
-            return;
+            return null;
+        }
+        if (opts?.backdateDays) {
+            const past = new Date(Date.now() - opts.backdateDays * 86400000).toISOString();
+            updateMomentPost(post.id, { createdAt: past });
+            post.createdAt = past;
         }
 
-        if (parsed.photoDescription) {
+        if (!resourcePhotoUrl && parsed.photoDescription) {
             attachMomentPhotoInBackground(post.id, parsed.photoDescription, characterId, parsed.photoUseReferenceImage === true);
         }
 
@@ -373,9 +396,22 @@ async function triggerAIPost(characterId: string): Promise<void> {
         dispatchMomentsUpdated();
         // Character's post → NPC reactions (not other main characters)
         generateNPCReactions(post, character);
+        return post;
 
     } finally {
         isGenerating = false;
+    }
+}
+
+export async function refreshMomentsForCharacter(characterId: string): Promise<void> {
+    try {
+        const existing = loadMomentPosts().filter(p => p.authorType === "character" && p.authorId === characterId);
+        if (existing.length > 0) return;
+        for (const days of [9, 5, 2]) {
+            await triggerAIPost(characterId, { backdateDays: days, historyFlavor: true }).catch(() => null);
+        }
+        await triggerAIPost(characterId).catch(() => null);
+    } catch {
     }
 }
 
@@ -1149,6 +1185,7 @@ export function parseMomentPostResponse(rawText: string): {
     content: string;
     photoDescription?: string;
     photoUseReferenceImage?: boolean;
+    resourcePhotoId?: string;
 } | null {
     const blockMatch = rawText.match(/\[朋友圈\]\s*([\s\S]*?)\s*\[\/朋友圈\]/);
     const text = blockMatch ? blockMatch[1] : rawText;
@@ -1165,6 +1202,7 @@ export function parseMomentPostResponse(rawText: string): {
             : false;
 
     const content = text
+        .replace(/\[资源图[:：]\s*([A-Za-z0-9_-]+)\s*\]/g, "")
         .replace(/\[照片[:：]\s*(?:使用参考图|不使用参考图)\s*[:：]\s*[\s\S]*?\]/g, "")
         .replace(/\[照片[:：]\s*[\s\S]*?\]/g, "")
         .replace(/\[朋友圈\]|\[\/朋友圈\]/g, "")
@@ -1172,7 +1210,13 @@ export function parseMomentPostResponse(rawText: string): {
 
     if (!content) return null;
 
-    return { content, photoDescription, photoUseReferenceImage };
+    const resourcePhotoMatch = text.match(/\[资源图[:：]\s*([A-Za-z0-9_-]+)\s*\]/);
+    return {
+        content,
+        photoDescription,
+        photoUseReferenceImage,
+        resourcePhotoId: resourcePhotoMatch ? resourcePhotoMatch[1] : undefined,
+    };
 }
 
 // ── Helpers ──

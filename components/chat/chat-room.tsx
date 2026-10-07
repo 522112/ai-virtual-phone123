@@ -6206,7 +6206,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                 <CharacterBusinessCard characterId={session.contactId} sessionId={session.id} onClose={() => setShowBusinessCard(false)} onOpenHomepage={setPeerHomeCharId} />
             )}
             {peerHomeCharId && (
-                <PeerHomepage characterId={peerHomeCharId} onClose={() => setPeerHomeCharId(null)} />
+                <PeerHomepage
+                    characterId={peerHomeCharId}
+                    onClose={() => setPeerHomeCharId(null)}
+                    onMessage={() => setPeerHomeCharId(null)}
+                    onVoiceCall={() => { setPeerHomeCharId(null); setCallInitiator("user"); setShowVoiceCall(true); }}
+                />
             )}
             {/* Message List */}
             <div

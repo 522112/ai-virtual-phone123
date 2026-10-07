@@ -169,6 +169,7 @@ export function MomentsCompose({ onClose, onPublished }: Props) {
         const post = addMomentPost({
             authorType: "user",
             authorId: "user",
+            maskId: resolveUserIdentity(undefined, "chat")?.id,
             content,
             photoUrl: photoAssetId ? `asset://${photoAssetId}` : undefined,
             photoDescription: photoDesc.trim() || undefined,

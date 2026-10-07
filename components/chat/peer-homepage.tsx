@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Camera, ChevronLeft, ChevronRight, Pin } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, ChevronLeft, ChevronRight, MessageCircle, Phone, Pin, Video } from "lucide-react";
 import { loadCharacters, saveCharacters } from "@/lib/character-storage";
 import { getAllPosts } from "@/lib/moments-storage";
+import { refreshMomentsForCharacter } from "@/lib/moments-engine";
 import type { Character } from "@/lib/character-types";
 import type { MomentPost } from "@/lib/moments-types";
 import { derivePeerCoverTheme, pickPersonaPinnedPost } from "@/lib/peer-homepage-style";
@@ -13,6 +14,9 @@ import { MomentPostCard } from "./moment-post-card";
 type PeerHomepageProps = {
     characterId: string;
     onClose: () => void;
+    onMessage?: () => void;
+    onVoiceCall?: () => void;
+    onVideoCall?: () => void;
 };
 
 function fileToCoverDataUrl(file: File): Promise<string> {
@@ -32,13 +36,14 @@ function formatDay(iso: string): string {
 }
 
 /** 微信风个人主页：点头像进来，先看主页，点朋友圈只看 TA 的动态。 */
-export function PeerHomepage({ characterId, onClose }: PeerHomepageProps) {
+export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onVideoCall }: PeerHomepageProps) {
     const [character, setCharacter] = useState<Character | null>(
         () => loadCharacters().find(c => c.id === characterId) || null,
     );
     const [tab, setTab] = useState<"home" | "moments">("home");
     const [coverBusy, setCoverBusy] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
+    const [refreshing, setRefreshing] = useState(false);
     const coverInputRef = useRef<HTMLInputElement>(null);
 
     const posts = useMemo<MomentPost[]>(() => {
@@ -49,7 +54,7 @@ export function PeerHomepage({ characterId, onClose }: PeerHomepageProps) {
         } catch {
             return [];
         }
-    }, [characterId, tab]);
+    }, [characterId, tab, refreshing]);
 
     const pinned = useMemo<MomentPost | null>(() => {
         if (posts.length === 0) return null;
@@ -79,6 +84,26 @@ export function PeerHomepage({ characterId, onClose }: PeerHomepageProps) {
     const refresh = () => {
         setCharacter(loadCharacters().find(c => c.id === characterId) || null);
     };
+
+    // 首次进入自动刷新：没动态就按人设补几条（含加好友前的内容）
+    useEffect(() => {
+        let cancelled = false;
+        try {
+            const existing = getAllPosts().filter(p => p.authorType === "character" && p.authorId === characterId);
+            if (existing.length > 0) return;
+        } catch {
+            return;
+        }
+        setRefreshing(true);
+        void refreshMomentsForCharacter(characterId)
+            .catch(() => {})
+            .finally(() => {
+                if (cancelled) return;
+                setRefreshing(false);
+                refresh();
+            });
+        return () => { cancelled = true; };
+    }, [characterId]);
 
     const flash = (text: string) => {
         setNotice(text);
@@ -167,7 +192,9 @@ export function PeerHomepage({ characterId, onClose }: PeerHomepageProps) {
                             <button type="button" className="peer-home-row peer-home-moments-entry" onClick={() => setTab("moments")}>
                                 <span className="peer-home-label">朋友圈</span>
                                 <span className="peer-home-thumbs">
-                                    {previewPhotos.length === 0 ? (
+                                    {refreshing ? (
+                                        <span className="peer-home-empty">正在按人设刷新…</span>
+                                    ) : previewPhotos.length === 0 ? (
                                         <span className="peer-home-empty">暂无动态</span>
                                     ) : (
                                         previewPhotos.map(p => (
@@ -179,6 +206,23 @@ export function PeerHomepage({ characterId, onClose }: PeerHomepageProps) {
                                 </span>
                                 <ChevronRight size={18} className="peer-home-go" />
                             </button>
+                        </div>
+                        <div className="peer-home-actions">
+                            {onMessage ? (
+                                <button type="button" className="peer-home-action-btn" onClick={onMessage}>
+                                    <MessageCircle size={18} /> 发消息
+                                </button>
+                            ) : null}
+                            {onVoiceCall ? (
+                                <button type="button" className="peer-home-action-btn" onClick={onVoiceCall}>
+                                    <Phone size={18} /> 音视频通话
+                                </button>
+                            ) : null}
+                            {onVideoCall && !onVoiceCall ? (
+                                <button type="button" className="peer-home-action-btn" onClick={onVideoCall}>
+                                    <Video size={18} /> 视频通话
+                                </button>
+                            ) : null}
                         </div>
                     </>
                 ) : (

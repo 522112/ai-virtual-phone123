@@ -5,6 +5,10 @@ export type MomentPost = {
     id: string;                     // "moment_timestamp_random"
     authorType: "user" | "character";
     authorId: string;               // characterId or "user"
+    /** 用户面具 id：不同面具有不同的主页和朋友圈；角色帖为空 */
+    maskId?: string;
+    /** 用户置顶自己的动态 */
+    pinned?: boolean;
     content: string;
     photoUrl?: string;              // user-uploaded base64 image
     photoDescription?: string;      // AI-generated photo description (for placeholder rendering)
