@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { loadCharacters } from "@/lib/character-storage";
 import { loadChatContacts } from "@/lib/chat-storage";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import { WxContactSelectList } from "./wx-contact-select";
 import {
   deleteGodViewRecord,
   loadGodViewRecords,
@@ -90,29 +91,20 @@ export function RecommendCardModal({ hostCharacterId, onClose }: { hostCharacter
   };
 
   return (
-    <div className="journal-sheet-overlay" onClick={onClose}>
-      <div className="journal-sheet" onClick={e => e.stopPropagation()}>
-        <div className="journal-sheet-title">推荐好友名片给 TA</div>
-        <div className="journal-clip-list">
-          {candidates.length === 0 ? <p className="journal-empty">还没有其他联系人</p> : candidates.map(c => (
-            <div key={c.id} className="journal-clip-row">
-              <button
-                type="button"
-                style={{ flex: 1, display: "flex", gap: 8, alignItems: "center", background: "none", border: 0, cursor: "pointer", textAlign: "left", padding: 0 }}
-                disabled={busyId !== null}
-                onClick={() => void recommend(c.id)}
-              >
-                <span style={{ width: 30, height: 30, borderRadius: 15, overflow: "hidden", flexShrink: 0, background: "rgba(0,0,0,.06)", display: "grid", placeItems: "center" }}>
-                  {(c.chatAvatar || c.avatar) ? <img src={(c.chatAvatar || c.avatar) as string} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ChatFallbackAvatar />}
-                </span>
-                <span>{c.screenName || c.name}</span>
-              </button>
-              {busyId === c.id ? <small className="menu-desc">等 TA 决定…</small> : null}
-            </div>
-          ))}
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="wx-pick-dialog" onClick={e => e.stopPropagation()}>
+        <div className="wx-pick-nav">
+          <button type="button" className="wx-pick-back" onClick={onClose} aria-label="返回">‹</button>
+          <span className="wx-pick-title">推荐好友名片给 TA</span>
+          <span className="wx-pick-nav-right" />
         </div>
-        {result ? <small className="menu-desc">{result}</small> : null}
-        <button type="button" className="journal-sheet-cancel" onClick={onClose}>关闭</button>
+        <WxContactSelectList
+          contacts={candidates.map(c => ({ id: c.id, name: c.screenName || c.name, avatar: (c.chatAvatar || c.avatar) as string | null }))}
+          onSelect={guestId => void recommend(guestId)}
+          disabled={busyId !== null}
+          footer={c => (busyId === c.id ? <small className="menu-desc">正在撮合…</small> : null)}
+        />
+        {result ? <div style={{ padding: "8px 16px" }}><small className="menu-desc">{result}</small></div> : null}
       </div>
     </div>
   );

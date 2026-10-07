@@ -5,7 +5,6 @@ import { sendLLMRequest } from "./chat-engine";
 import { loadApiConfigs } from "./settings-storage";
 import { createCharacterSubAccount } from "./sub-accounts";
 import { findBestResourceImage, resourceDisplayUrl } from "./resource-library";
-import { generateGodViewDialog } from "./god-view";
 
 /**
  * 角色小号：由主人格按人设决定开不开、叫什么、网上是什么人设；
@@ -49,8 +48,8 @@ export async function createCharacterSubByPersona(characterId: string) {
 }
 
 /**
- * 给角色推荐好友名片：角色按人设决定加不加；
- * 通过后生成一段双方聊天，放进上帝视角（双方都不知情）。
+ * 给角色推荐好友名片：不需要对方同意，默认双方直接聊上；
+ * 名片发出后生成双方私聊（人设决定谁先开口），用户会话里留系统消息入口进上帝视角。
  */
 export async function recommendCardToCharacter(
   hostCharacterId: string,
@@ -60,9 +59,6 @@ export async function recommendCardToCharacter(
   const host = loadCharacters().find(c => c.id === hostCharacterId);
   const guest = loadCharacters().find(c => c.id === guestCharacterId);
   if (!host || !guest) throw new Error("角色不存在");
-  const configs = loadApiConfigs();
-  const apiConfig = configs.find(c => c.apiKey) || configs[0];
-  if (!apiConfig) throw new Error("还没有可用的 API 配置");
 
   pushChatMessage({
     sessionId,
@@ -73,30 +69,8 @@ export async function recommendCardToCharacter(
     status: "sent",
   });
 
-  const raw = await sendLLMRequest(
-    apiConfig,
-    null,
-    [
-      { role: "system", content: `你是${host.name}。人设：${(host.persona || "").slice(0, 1000)}` },
-      {
-        role: "user",
-        content: `有人给你推荐了一张好友名片：${guest.name}（人设：${(guest.persona || "").slice(0, 500)}）。\n按你的人设决定：加不加这个好友？感兴趣就加，没兴趣就拒绝。\n只输出 JSON：{"accept":true|false,"reply":"你对推荐人的回应，不超过40字","topic":"如果加了，你想先和TA聊什么话题，不超过30字"}`,
-      },
-    ],
-    [],
-    { characterName: host.name },
-    { appId: "recommend-card", appTags: ["recommend-card"] },
-  );
-  let accept = false;
-  let reply = "TA 没有回应";
-  let topic = "随便聊聊";
-  try {
-    const parsed = JSON.parse(String(raw).replace(/```[\s\S]*?```/g, "").match(/\{[\s\S]*\}/)?.[0] || "{}") as { accept?: boolean; reply?: string; topic?: string };
-    accept = parsed.accept === true;
-    if (typeof parsed.reply === "string" && parsed.reply.trim()) reply = parsed.reply.trim().slice(0, 80);
-    if (typeof parsed.topic === "string" && parsed.topic.trim()) topic = parsed.topic.trim().slice(0, 40);
-  } catch { /* ignore */ }
-
+  const topic = "刚加了好友，随便聊聊";
+  const reply = `已把${guest.name}推给${host.name}，他们直接聊上了`;
   pushChatMessage({
     sessionId,
     role: "assistant",
@@ -106,16 +80,11 @@ export async function recommendCardToCharacter(
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("chat-messages-updated", { detail: { sessionId } }));
   }
-  if (accept) {
-    try {
-      // 角色互聊：人设决定谁先开口，落专属会话+双方记忆，用户会话里留系统消息入口
-      const { generateRoleRoleDialog, pushRoleChatEntry } = await import("./role-chat");
-      const dialog = await generateRoleRoleDialog(hostCharacterId, guestCharacterId, topic);
-      pushRoleChatEntry(sessionId, dialog.sessionId, dialog.title, hostCharacterId, guestCharacterId);
-    } catch { /* 互聊生成失败不影响加好友结果 */ }
-    try {
-      await generateGodViewDialog(hostCharacterId, guestCharacterId, topic);
-    } catch { /* 上帝视角生成失败不影响加好友结果 */ }
-  }
-  return { accepted: accept, reply };
+  try {
+    // 角色互聊：人设决定谁先开口，落专属会话+双方记忆，用户会话里留系统消息入口
+    const { generateRoleRoleDialog, pushRoleChatEntry } = await import("./role-chat");
+    const dialog = await generateRoleRoleDialog(hostCharacterId, guestCharacterId, topic);
+    pushRoleChatEntry(sessionId, dialog.sessionId, dialog.title, hostCharacterId, guestCharacterId);
+  } catch { /* 互聊生成失败不影响推荐结果 */ }
+  return { accepted: true, reply };
 }
