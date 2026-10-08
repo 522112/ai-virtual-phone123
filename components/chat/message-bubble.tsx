@@ -1464,9 +1464,13 @@ function ContactCardBubble({ msg, characterId, onCardClick }: { msg: ChatMessage
     function handleClick(e: React.MouseEvent) {
         e.stopPropagation();
         if (!contactName) return;
-        // 配置了回调：一律走回调，不弹任何加好友/建档页面
-        if (onCardClick) {
-            if (resolved.character) onCardClick(resolved.character.id);
+        // 名片是模板：任何号都能点；已建档走回调开名片页，没建档走建档/加好友流程
+        if (onCardClick && resolved.character) {
+            onCardClick(resolved.character.id);
+            return;
+        }
+        if (!resolved.character) {
+            if (characterId) setShowGenerateFlow(true);
             return;
         }
         if (resolved.character && resolved.isContact) {
@@ -1486,9 +1490,9 @@ function ContactCardBubble({ msg, characterId, onCardClick }: { msg: ChatMessage
     return (
         <>
             <div className="wx-card-bubble" onClick={handleClick} role="button">
-                <div className="wx-card-avatar" style={resolved.character?.avatar ? undefined : { background: "linear-gradient(135deg, #F5B8A8, #E88D7A)" }}>
-                    {resolved.character?.avatar
-                        ? <img src={resolved.character.avatar} alt="" />
+                <div className="wx-card-avatar" style={(resolved.character?.avatar || msg.mediaData?.contactCardAvatar) ? undefined : { background: "linear-gradient(135deg, #F5B8A8, #E88D7A)" }}>
+                    {(resolved.character?.avatar || msg.mediaData?.contactCardAvatar)
+                        ? <img src={resolved.character?.avatar || msg.mediaData?.contactCardAvatar || ""} alt="" />
                         : (contactName || "?").slice(0, 1)}
                 </div>
                 <div className="wx-card-info">

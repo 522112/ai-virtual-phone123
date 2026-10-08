@@ -170,6 +170,7 @@ export type ChatMessage = {
         pokeSender?: string;      // 拍一拍发起人名字
         pokeTarget?: string;      // 拍一拍目标名字
         contactCardName?: string; // 名片被推荐人名字（渲染时按推荐人同世界实时解析，未建档也可成卡）
+        contactCardAvatar?: string | null; // 名片头像直传（小号/未建档也能显示）
         roleChatSessionId?: string; // 角色互聊专属会话 id（点击进只读围观页）
         roleChatTitle?: string; // 角色互聊记录标题
         roleChatAId?: string;

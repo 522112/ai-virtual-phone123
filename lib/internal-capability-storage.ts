@@ -1909,6 +1909,18 @@ const ROLE_SUB_SUBTOOLS: InternalToolDefinition[] = [
             required: ["name"],
         }),
     },
+    {
+        name: "小号加好友",
+        description: "用你的小号向用户（或用户小号）发起好友申请，对方在联系人“新的朋友”里看到验证消息，能同意能拒绝，结果记进你的记忆。",
+        parameterSchema: JSON.stringify({
+            type: "object",
+            properties: {
+                sub: { type: "string", description: "用哪个小号去加，不填用第一个" },
+                verifyMsg: { type: "string", description: "验证消息，不填用默认" },
+            },
+        }),
+    },
+
 ];
 
 /* ---------- 现实桥套装：固定子工具 + 用户自定义数据项动态生成 ---------- */

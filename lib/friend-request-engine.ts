@@ -214,3 +214,104 @@ function parseAddFriendResponse(text: string): { action: "add" | "abandon"; mess
     // Give up if we can't parse
     return { action: "abandon" };
 }
+
+/** 角色小号的好友申请结果：写进共享长期记忆，角色下次聊天能感知到。 */
+async function rememberSubOutcome(ownerCharacterId: string, content: string): Promise<void> {
+    try {
+        const { saveMemoryEntry } = await import("./memory-storage");
+        const now = new Date().toISOString();
+        await saveMemoryEntry({
+            id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            characterId: ownerCharacterId,
+            sourceApp: "chat",
+            type: "long_term",
+            content,
+            importance: 0.9,
+            createdAt: now,
+            updatedAt: now,
+        });
+    } catch { /* ignore */ }
+}
+
+/**
+ * 用户接受角色小号的好友申请：小号转正——按马甲建档成正式角色，加联系人、开会话。
+ * 角色通过共享记忆感知“被接受了”。
+ */
+export async function handleAcceptSubFriendRequest(req: {
+    id: string; ownerCharacterId?: string; subId?: string; subName?: string; subAvatar?: string | null; message: string;
+}): Promise<ChatSession> {
+    const { loadCharacters, saveCharacters, createCharacter } = await import("./character-storage");
+    const { loadCharacterSubAccounts } = await import("./sub-accounts");
+    const { clearRequestById, dispatchFriendRequestUpdated } = await import("./friend-request-storage");
+
+    const ownerId = req.ownerCharacterId || "";
+    const owner = loadCharacters().find(c => c.id === ownerId);
+    const ownerName = owner?.name || "对方";
+    const subRecord = loadCharacterSubAccounts(ownerId).find(s => s.id === req.subId);
+    const subName = req.subName || subRecord?.name || "小号";
+    const persona = subRecord?.persona || `我是${ownerName}的小号${subName}。`;
+
+    const created = createCharacter({
+        name: subName,
+        avatar: req.subAvatar || subRecord?.avatar || null,
+        persona,
+        screenName: subName,
+    });
+    const chars = loadCharacters();
+    chars.push(created);
+    saveCharacters(chars);
+
+    addChatContact(created.id);
+    const session = createOrGetSession(created.id);
+    const userName = resolveUserIdentity(created.id, "chat")?.name ?? "用户";
+    pushChatMessage({
+        sessionId: session.id,
+        role: "system",
+        content: `${userName}通过了${subName}（${ownerName}的小号）的好友申请`,
+    });
+
+    clearRequestById(req.id);
+    dispatchFriendRequestUpdated();
+
+    const sessions = loadChatSessions();
+    const sessIdx = sessions.findIndex(s => s.id === session.id);
+    if (sessIdx !== -1) {
+        sessions[sessIdx].autoReplied = true;
+        saveChatSessions(sessions);
+    }
+    if (typeof window !== "undefined") {
+        kvSet(PENDING_REPLY_PREFIX + session.id, "1");
+    }
+
+    await rememberSubOutcome(ownerId, `我的小号「${subName}」申请加用户好友，用户接受了，TA 已经转正成正式联系人。`);
+    return session;
+}
+
+/**
+ * 用户拒绝角色小号的好友申请：主人格会话留系统消息 + 共享记忆，角色能感知被拒绝。
+ */
+export async function handleRejectSubFriendRequest(req: {
+    id: string; ownerCharacterId?: string; subName?: string; message: string;
+}): Promise<void> {
+    const { updateFriendRequestStatus, dispatchFriendRequestUpdated } = await import("./friend-request-storage");
+    const ownerId = req.ownerCharacterId || "";
+    const owner = loadCharacters().find(c => c.id === ownerId);
+    const ownerName = owner?.name || "对方";
+    const subName = req.subName || "小号";
+    const userName = resolveUserIdentity(ownerId, "chat")?.name ?? "用户";
+
+    updateFriendRequestStatus(req.id, "rejected");
+    dispatchFriendRequestUpdated();
+
+    const sessions = loadChatSessions();
+    const session = sessions.find(s => !s.isGroup && s.contactId === ownerId);
+    if (session) {
+        pushChatMessage({
+            sessionId: session.id,
+            role: "system",
+            content: `${userName}拒绝了${subName}（${ownerName}的小号）的好友申请`,
+        });
+    }
+
+    await rememberSubOutcome(ownerId, `我的小号「${subName}」申请加用户好友，被用户拒绝了。`);
+}

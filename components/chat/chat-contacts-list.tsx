@@ -19,7 +19,7 @@ import {
     dispatchFriendRequestUpdated,
     type FriendRequest,
 } from "@/lib/friend-request-storage";
-import { handleAcceptFriendRequest, triggerRejectReaction } from "@/lib/friend-request-engine";
+import { handleAcceptFriendRequest, handleAcceptSubFriendRequest, handleRejectSubFriendRequest, triggerRejectReaction } from "@/lib/friend-request-engine";
 import { PageShell } from "@/components/ui/page-shell";
 import { pinyin } from "pinyin-pro";
 import { kvSet } from "@/lib/kv-db";
@@ -171,7 +171,7 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
     const handleAccept = async (req: FriendRequest) => {
         setIsProcessing(true);
         try {
-            const session = await handleAcceptFriendRequest(req.characterId, req.message);
+            const session = req.kind === "character_sub" ? await handleAcceptSubFriendRequest(req) : await handleAcceptFriendRequest(req.characterId, req.message);
             setSelectedRequest(null);
             setShowRequestList(false);
             refresh();
@@ -186,12 +186,14 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
     const handleReject = async (req: FriendRequest) => {
         setIsProcessing(true);
         try {
-            updateFriendRequestStatus(req.id, "rejected");
-            dispatchFriendRequestUpdated();
+            if (req.kind === "character_sub") {
+                await handleRejectSubFriendRequest(req);
+            } else {
+                updateFriendRequestStatus(req.id, "rejected");
+                dispatchFriendRequestUpdated();
+                triggerRejectReaction(req.characterId).catch(() => {});
+            }
             setSelectedRequest(null);
-
-            // Trigger AI's next attempt (fire-and-forget)
-            triggerRejectReaction(req.characterId).catch(() => {});
             refresh();
         } finally {
             setIsProcessing(false);
@@ -200,6 +202,15 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
 
     const getCharForRequest = (req: FriendRequest) =>
         chars.find(c => c.id === req.characterId);
+    const getRequestDisplay = (req: FriendRequest): { name: string; avatar: string | null; tag?: string } => {
+        if (req.kind === "character_sub") {
+            const owner = chars.find(c => c.id === (req.ownerCharacterId || req.characterId));
+            return { name: req.subName || "小号", avatar: req.subAvatar || null, tag: owner ? `${owner.name}的小号` : "小号" };
+        }
+        const char = getCharForRequest(req);
+        return { name: char?.name || "未知角色", avatar: char?.avatar || null };
+    };
+
 
     return (
         <div className="relative flex-1 h-full">
@@ -373,7 +384,7 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                         ) : (
                             <div className="freq-list">
                                 {pendingRequests.map(req => {
-                                    const char = getCharForRequest(req);
+                                    const shown = getRequestDisplay(req);
                                     return (
                                         <div
                                             key={req.id}
@@ -381,17 +392,17 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                                             onClick={() => setSelectedRequest(req)}
                                         >
                                             <div className="freq-avatar">
-                                                {char?.avatar ? (
-                                                    <img src={char.avatar} alt="" />
+                                                {shown.avatar ? (
+                                                    <img src={shown.avatar} alt="" />
                                                 ) : (
                                                     <div className="freq-avatar-fallback">
-                                                        {(char?.name || "?")[0]}
+                                                        {(shown.name || "?")[0]}
                                                     </div>
                                                 )}
                                             </div>
                                             <div className="flex-1 overflow-hidden">
                                                 <div className="menu-label font-medium truncate">
-                                                    {char?.name || "未知角色"}
+                                                    {shown.name}
                                                 </div>
                                                 <div className="ts-12 text-[var(--c-text)] truncate mt-[2px]">
                                                     {req.message}
@@ -414,24 +425,24 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
 
             {/* Friend Request Detail Modal */}
             {selectedRequest && (() => {
-                const char = getCharForRequest(selectedRequest);
+                const shown = getRequestDisplay(selectedRequest);
                 return (
                     <div className="modal-overlay" onClick={() => !isProcessing && setSelectedRequest(null)}>
                         <div className="modal-dialog freq-dialog" onClick={e => e.stopPropagation()}>
                             {/* Avatar */}
                             <div className="freq-detail-avatar">
-                                {char?.avatar ? (
-                                    <img src={char.avatar} alt="" />
+                                {shown.avatar ? (
+                                    <img src={shown.avatar} alt="" />
                                 ) : (
                                     <div className="freq-avatar-fallback" style={{ fontSize: "calc(28px*var(--app-text-scale,1))" }}>
-                                        {(char?.name || "?")[0]}
+                                        {(shown.name || "?")[0]}
                                     </div>
                                 )}
                             </div>
 
                             {/* Name */}
                             <div className="ts-17 font-semibold text-center text-[var(--c-text)]">
-                                {char?.name || "未知角色"}
+                                {shown.name}
                             </div>
 
                             {/* Message */}
