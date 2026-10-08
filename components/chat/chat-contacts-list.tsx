@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue, useSyncExternalStore } from "react";
-import { loadChatContacts, loadChatSessions, ChatContact, createOrGetSession, ChatSession, addChatContact, pushChatMessage, loadChatMessages } from "@/lib/chat-storage";
+import { loadChatContacts, loadScopedContacts, loadChatSessions, ChatContact, createOrGetSession, ChatSession, addChatContact, pushChatMessage, loadChatMessages } from "@/lib/chat-storage";
 import { getActiveSubId } from "./sub-account-sheet";
 import { ensureSubSession } from "@/lib/sub-friend-engine";
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
@@ -109,18 +109,8 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
         const latestChars = loadCharacters().map(overlayCharacterForDisplay);
         setChars(latestChars);
         setIdentity(resolveUserIdentity());
-        const rawContacts = loadChatContacts();
-        const subId = getActiveSubId();
-        // 小号=新号：小号模式联系人只显示该小号加过的人
-        let scoped = rawContacts;
-        if (subId) {
-            try {
-                const subSessionChars = new Set(
-                    loadChatSessions().filter(s => s.subId === subId && !s.isGroup).map(s => s.contactId),
-                );
-                scoped = rawContacts.filter(c => subSessionChars.has(c.characterId));
-            } catch { /* ignore */ }
-        }
+        // 小号=新号：联系人按身份隔离，主号/小号互不可见
+        const scoped = loadScopedContacts(getActiveSubId());
         const enriched = scoped.map(c => ({
             ...c,
             char: latestChars.find(ch => ch.id === c.characterId)

@@ -65,6 +65,6 @@ export async function removeCharacterChatReferences(characterId: string): Promis
         saveChatSessions(nextSessions);
     }
 
-    removeChatContact(characterId);
+    removeChatContact(characterId, "*");
     privateSessionIds.forEach(removeChatSessionCompletely);
 }

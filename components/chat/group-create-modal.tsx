@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { loadChatContacts } from "@/lib/chat-storage";
+import { loadScopedContacts } from "@/lib/chat-storage";
 import { loadCharacters } from "@/lib/character-storage";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { Character } from "@/lib/character-types";
@@ -19,7 +19,7 @@ export function GroupCreateModal({ onClose, onCreate }: GroupCreateModalProps) {
     const [groupName, setGroupName] = useState("");
     const [isSpectator, setIsSpectator] = useState(false);
 
-    const contacts = loadChatContacts();
+    const contacts = loadScopedContacts(null);
     const chars = loadCharacters();
 
     const enriched = contacts

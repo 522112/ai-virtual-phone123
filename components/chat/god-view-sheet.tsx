@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { loadCharacters } from "@/lib/character-storage";
-import { loadChatContacts, loadChatSessions } from "@/lib/chat-storage";
+import { loadChatSessions, loadScopedContacts } from "@/lib/chat-storage";
+import { getActiveSubId } from "./sub-account-sheet";
 import { recommendCardToCharacter } from "@/lib/recommend-card-engine";
 import { describeFlowError } from "@/lib/chunk-reload";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
@@ -64,7 +65,7 @@ export function GodViewSheet({ onClose }: { onClose: () => void }) {
 }
 
 export function RecommendCardModal({ hostCharacterId, onClose }: { hostCharacterId: string; onClose: () => void }) {
-  const [contacts] = useState(() => loadChatContacts());
+  const [contacts] = useState(() => loadScopedContacts(getActiveSubId()));
   const [characters] = useState(() => loadCharacters());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [result, setResult] = useState("");

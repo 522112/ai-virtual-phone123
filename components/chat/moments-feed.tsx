@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { getAllPosts, deleteMomentPost, getUnreadMomentsNotifications, saveMomentsLastSeen, addMomentComment } from "@/lib/moments-storage";
-import { loadChatContacts } from "@/lib/chat-storage";
+import { loadChatContacts, loadScopedContacts } from "@/lib/chat-storage";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { getActiveSub } from "./sub-account-sheet";
 import { saveChatImageToIndexedDB, getChatImageFromIndexedDB } from "@/lib/chat-asset-storage";
@@ -120,9 +120,9 @@ export function MomentsFeed({ onCloseApp }: MomentsFeedProps) {
     useEffect(() => stopLoadMoreAnchorTracking, [stopLoadMoreAnchorTracking]);
 
     const refreshPosts = useCallback(() => {
-        const contactIds = new Set(loadChatContacts().map(c => c.characterId));
         const maskId = currentMaskId();
         const subId = getActiveSubId();
+        const contactIds = new Set(loadScopedContacts(subId).map(c => c.characterId));
         const all = getAllPosts().filter(p => {
             if (p.authorType === "user") {
                 // 小号=新号：小号只看自己的动态；主号看本面具主号动态（老无戳动态归主号）

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { loadCharacters } from "@/lib/character-storage";
-import { loadChatContacts } from "@/lib/chat-storage";
+import { loadScopedContacts } from "@/lib/chat-storage";
 import { addMomentPost } from "@/lib/moments-storage";
 import { onUserPost } from "@/lib/moments-engine";
 import { resolveUserIdentity } from "@/lib/settings-storage";
@@ -31,7 +31,7 @@ export function MomentsCompose({ onClose, onPublished }: Props) {
     const [showVisibility, setShowVisibility] = useState(false);
 
     const [visibility, setVisibility] = useState<Record<string, boolean>>(() => {
-        const contacts = loadChatContacts();
+        const contacts = loadScopedContacts(getActiveSubId());
         const chars = loadCharacters();
         const map: Record<string, boolean> = {};
         contacts.forEach(c => {
@@ -44,7 +44,7 @@ export function MomentsCompose({ onClose, onPublished }: Props) {
     const fileRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    const contacts = loadChatContacts();
+    const contacts = loadScopedContacts(getActiveSubId());
     const chars = loadCharacters();
 
     const enrichedContacts = contacts

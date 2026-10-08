@@ -14,7 +14,7 @@ import { loadApiConfigs } from "./settings-storage";
  * 小号打开某角色聊天：只找该小号的会话，没有就新建——绝不复用主号会话。
  */
 export function ensureSubSession(characterId: string, subId: string): ChatSession {
-  addChatContact(characterId);
+  addChatContact(characterId, subId);
   const sessions = loadChatSessions();
   const existing = sessions.find(s => s.contactId === characterId && s.subId === subId && !s.isGroup);
   if (existing) return existing;
@@ -81,7 +81,7 @@ export async function requestSubFriend(
     return { accepted: false, reply };
   }
 
-  addChatContact(character.id);
+  addChatContact(character.id, sub.id);
   const sessions = loadChatSessions();
   let session = sessions.find(s => s.contactId === character.id && s.subId === sub.id && !s.isGroup);
   let isNew = false;

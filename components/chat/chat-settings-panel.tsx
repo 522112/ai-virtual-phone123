@@ -11,6 +11,7 @@ import {
     loadChatSessions,
     loadChatMessages,
     loadChatContacts,
+    loadScopedContacts,
     getChatMessagePreview,
     pushChatMessage,
     removeChatContact,
@@ -662,7 +663,7 @@ export function ChatSettingsPanel({
         setRosterVersion(v => v + 1);
     };
     const inviteCandidates = session.isGroup
-        ? loadChatContacts()
+        ? loadScopedContacts(null)
             .map(c => characters.find(ch => ch.id === c.characterId))
             .filter((c): c is NonNullable<typeof c> => Boolean(c && !(session.participantIds || []).includes(c.id)))
         : [];
@@ -1736,7 +1737,7 @@ export function ChatSettingsPanel({
                     confirmLabel="删除"
                     cancelLabel="取消"
                     onConfirm={() => {
-                        removeChatContact(session.contactId);
+                        removeChatContact(session.contactId, session.subId);
                         // Fire-and-forget: AI reacts to being deleted
                         triggerDeleteFriendReaction(session.contactId).catch(() => {});
                         setShowConfirmDelete(false);
