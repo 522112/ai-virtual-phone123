@@ -162,16 +162,18 @@ export function WxMomentDetail({ postId, onBack, onChanged }: { postId: string; 
   );
 }
 
-/** 微信风动态行（P2 列表用）：头像+名+正文+缩略图，点击进详情 */
-export function WxMomentRow({ post, onOpen }: { post: MomentPost; onOpen: (postId: string) => void }) {
+/** 微信风动态行：正文+缩略图，点击进详情；compact 时不显示头像和名字（好友朋友圈页用）。 */
+export function WxMomentRow({ post, onOpen, compact }: { post: MomentPost; onOpen: (postId: string) => void; compact?: boolean }) {
   const author = useAuthorOf(post);
   return (
     <div className="wx-moment-row" onClick={() => onOpen(post.id)}>
-      <span className="wx-moment-avatar">
-        {author.avatar ? <img src={author.avatar} alt="" /> : <ChatFallbackAvatar />}
-      </span>
+      {compact ? null : (
+        <span className="wx-moment-avatar">
+          {author.avatar ? <img src={author.avatar} alt="" /> : <ChatFallbackAvatar />}
+        </span>
+        )}
       <div className="wx-moment-main">
-        <div className="wx-moment-name">{author.name}</div>
+        {compact ? null : <div className="wx-moment-name">{author.name}</div>}
         <div className="wx-moment-text">{post.content}</div>
         {post.photoUrl || post.photoDescription ? (
           <div className="wx-moment-thumbrow">

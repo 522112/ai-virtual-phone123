@@ -8935,3 +8935,8 @@ button.peer-home-row { cursor: pointer; }
 
 .peer-home-signline{padding:2px 16px 12px;font-size:13px;color:var(--c-text-secondary);text-align:right}
 
+
+.char-card-head-back{display:flex;align-items:center;padding:6px 4px 2px}
+.char-card-back{border:0;background:none;font-size:26px;line-height:1;color:var(--c-text-title);cursor:pointer;padding:0 8px 0 2px}
+.peer-home-signline{padding:2px 16px 12px;font-size:13px;color:var(--c-text-secondary);text-align:right}
+

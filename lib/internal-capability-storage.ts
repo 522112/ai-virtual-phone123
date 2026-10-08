@@ -21,6 +21,7 @@ export const REALITY_BRIDGE_CAPABILITY_ID = "reality_bridge_send";
 export const RESOURCE_LIBRARY_CAPABILITY_ID = "resource_library";
 export const FORWARD_CHAT_CAPABILITY_ID = "forward_chat_record";
 export const ROLE_SIDE_CHAT_CAPABILITY_ID = "role_side_chat";
+export const ROLE_SUB_CAPABILITY_ID = "role_sub";
 
 export type InternalToolDefinition = {
     name: string;
@@ -1699,6 +1700,15 @@ const BUILTIN_INTERNAL_CAPABILITIES: InternalCapabilityConfig[] = [
         createdAt: 0,
         updatedAt: 0,
     },
+    {
+        id: ROLE_SUB_CAPABILITY_ID,
+        name: "角色小号",
+        description: "你的马甲号：想开就开一个小号去试探用户、重新接近用户、或给用户推荐朋友（名片）。小号开了就是独立身份，用马甲名跟人打交道。",
+        enabled: true,
+        mode: "auto",
+        createdAt: 0,
+        updatedAt: 0,
+    },
 ];
 
 export function loadInternalCapabilities(): InternalCapabilityConfig[] {
@@ -1852,8 +1862,54 @@ export function getInternalCapabilityToolDefinition(capability: InternalCapabili
             usageGuide: ROLE_SIDE_CHAT_USAGE_GUIDE,
         };
     }
+    if (capability.id === ROLE_SUB_CAPABILITY_ID) {
+        return {
+            name: capability.name,
+            description: capability.description,
+            parameterSchema: ROLE_SUB_PARAMETER_SCHEMA,
+            usageGuide: ROLE_SUB_USAGE_GUIDE,
+        };
+    }
     return null;
 }
+
+
+
+const ROLE_SUB_USAGE_GUIDE = [
+    "你的马甲号，想开就开：比如开个小号去试探用户、用户删了你之后用小号重新接近、或给用户推荐朋友。",
+    "开小号：name 写马甲名字（不填按你的人设自动起），persona 写这个小号的人设（不填自动编），purpose 写你开小号想干嘛。开了之后用马甲身份跟人打交道，对方不知道是你。",
+    "推荐好友：name 写对方名字（通讯录里的角色或 NPC 都行，NPC 再补一句 persona），topic 写你为什么推荐。调用后用户那边收到一张名片，对方不是好友也能点名片加好友。",
+].join("\n");
+
+const ROLE_SUB_PARAMETER_SCHEMA = "{}";
+
+const ROLE_SUB_SUBTOOLS: InternalToolDefinition[] = [
+    {
+        name: "开小号",
+        description: "开一个你的马甲小号（名字/人设可指定，不填自动按你的人设编）。",
+        parameterSchema: JSON.stringify({
+            type: "object",
+            properties: {
+                name: { type: "string", description: "马甲名字，不填自动起" },
+                persona: { type: "string", description: "小号人设，不填自动编" },
+                purpose: { type: "string", description: "开小号想干嘛" },
+            },
+        }),
+    },
+    {
+        name: "推荐好友名片",
+        description: "给用户推荐一位朋友（角色或 NPC），用户收到名片，非好友也能加好友。",
+        parameterSchema: JSON.stringify({
+            type: "object",
+            properties: {
+                name: { type: "string", description: "对方名字" },
+                persona: { type: "string", description: "NPC 简单人设；通讯录里的角色不填" },
+                topic: { type: "string", description: "推荐理由" },
+            },
+            required: ["name"],
+        }),
+    },
+];
 
 /* ---------- 现实桥套装：固定子工具 + 用户自定义数据项动态生成 ---------- */
 
@@ -1958,6 +2014,9 @@ export function getInternalCapabilitySubToolDefinition(
     if (capability.id === ROLE_SIDE_CHAT_CAPABILITY_ID) {
         return ROLE_SIDE_CHAT_SUBTOOLS.find(tool => tool.name === name) ?? null;
     }
+    if (capability.id === ROLE_SUB_CAPABILITY_ID) {
+        return ROLE_SUB_SUBTOOLS.find(tool => tool.name === name) ?? null;
+    }
     return null;
 }
 
@@ -1993,6 +2052,9 @@ export function getInternalCapabilitySubToolDefinitions(
     }
     if (capability.id === ROLE_SIDE_CHAT_CAPABILITY_ID) {
         return ROLE_SIDE_CHAT_SUBTOOLS;
+    }
+    if (capability.id === ROLE_SUB_CAPABILITY_ID) {
+        return ROLE_SUB_SUBTOOLS;
     }
     return [];
 }

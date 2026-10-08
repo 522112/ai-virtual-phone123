@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { loadCharacters, saveCharacters } from "@/lib/character-storage";
 import { getAllPosts } from "@/lib/moments-storage";
 import { generateMomentsBackfill } from "@/lib/moments-backfill";
@@ -138,44 +138,7 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                     <span className="peer-home-topbar-title">朋友圈</span>
                 </div>
 
-                        <div className="peer-home-cover" style={coverStyle}>
-                            <button
-                                type="button"
-                                className="peer-home-cover-btn"
-                                disabled={coverBusy}
-                                onClick={() => coverInputRef.current?.click()}
-                                aria-label="鏇存崲灏侀潰"
-                            >
-                                <Camera size={16} />
-                                {coverBusy ? "澶勭悊涓" : "鎹㈠皝闈"}
-                            </button>
-                            <button
-                                type="button"
-                                className="peer-home-cover-btn"
-                                style={{ right: 108 }}
-                                onClick={() => setCoverLinkOpen(v => !v)}
-                                aria-label="鐢ㄩ摼鎺ユ崲灏侀潰"
-                            >
-                                閾炬帴
-                            </button>
-                            {coverLinkOpen ? (
-                                <div style={{ position: "absolute", top: "calc(var(--page-header-safe-top, 48px) + 38px)", right: 12, left: 12, zIndex: 2, display: "flex", gap: 6 }}>
-                                    <input
-                                        value={coverLinkUrl}
-                                        onChange={e => setCoverLinkUrl(e.target.value)}
-                                        placeholder="绮樿创灏侀潰鍥剧墖閾炬帴"
-                                        style={{ flex: 1, borderRadius: 10, border: 0, padding: "8px 10px", fontSize: 13 }}
-                                    />
-                                    <button
-                                        type="button"
-                                        disabled={!coverLinkUrl.trim().startsWith("http")}
-                                        onClick={() => { patchCharacter({ momentsCover: coverLinkUrl.trim() }); flash("灏侀潰宸叉洿鎹"); setCoverLinkOpen(false); setCoverLinkUrl(""); }}
-                                        style={{ borderRadius: 10, border: 0, padding: "8px 12px", fontSize: 13, cursor: "pointer" }}
-                                    >
-                                        纭畾
-                                    </button>
-                                </div>
-                            ) : null}
+                        <div className="peer-home-cover" style={coverStyle} onClick={() => coverInputRef.current?.click()} role="button" aria-label="更换封面">
                             <input
                                 ref={coverInputRef}
                                 type="file"
@@ -197,7 +160,7 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                         <div className="peer-home-signline">{signature}</div>
                         <div className="peer-home-feed-list">
                             {(pinned ? [pinned, ...restPosts] : restPosts).map(post => (
-                                <WxMomentRow key={post.id} post={post} onOpen={postId => setOpenPostId(postId)} />
+                                <WxMomentRow key={post.id} post={post} onOpen={postId => setOpenPostId(postId)} compact />
                             ))}
                             {posts.length === 0 && (
                                 <div className="peer-home-empty-feed">
