@@ -8932,3 +8932,6 @@ button.peer-home-row { cursor: pointer; }
 .wx-moment-inputbar button{border:0;border-radius:8px;background:#07c160;color:#fff;font-size:14px;padding:9px 16px;cursor:pointer}
 .wx-moment-inputbar button:disabled{background:#bbb}
 
+
+.peer-home-signline{padding:2px 16px 12px;font-size:13px;color:var(--c-text-secondary);text-align:right}
+
