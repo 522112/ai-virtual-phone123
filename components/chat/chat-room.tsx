@@ -19,6 +19,7 @@ import { formatOfflineTurnXml as formatOfflineTurnXmlShared, buildOfflinePromptH
 import { getStatusRegionConfig, isCustomStatusRegionActive } from "@/lib/chat-status-region";
 import { CustomStatusFrame } from "@/components/chat/custom-status-frame";
 import { sendBrowserNotification } from "@/lib/browser-notification";
+import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import { dispatchChatMessageNotice, CHAT_OPEN_SESSION_EVENT } from "@/lib/chat-notification-events";
 import { ContactProfilePage } from "@/components/chat/contact-profile-page";
 import { RoleChatViewPage } from "@/components/chat/role-chat-view-page";
@@ -5976,6 +5977,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             };
         });
         const fromContacts = loadScopedContacts(session.subId || null)
+            .filter(contact => isCharacterInActiveMask(contact.characterId, "chat"))
             .filter(contact => contact.characterId !== session.contactId && !seen.has(contact.characterId))
             .map(contact => {
                 const character = chars.find(c => c.id === contact.characterId);

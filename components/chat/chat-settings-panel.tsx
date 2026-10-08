@@ -33,6 +33,7 @@ import {
     pruneExpiredGroupMutes,
     type GroupAdminAction,
 } from "@/lib/group-admin";
+import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import { clearChatOfflineTurns } from "@/lib/chat-offline-storage";
 import { notifyCharacterOfUserRemarkChange } from "@/lib/contact-remarks";
 import { removeChatSessionCompletely } from "@/lib/chat-session-remove";
@@ -664,6 +665,7 @@ export function ChatSettingsPanel({
     };
     const inviteCandidates = session.isGroup
         ? loadScopedContacts(null)
+            .filter(c => isCharacterInActiveMask(c.characterId, "chat"))
             .map(c => characters.find(ch => ch.id === c.characterId))
             .filter((c): c is NonNullable<typeof c> => Boolean(c && !(session.participantIds || []).includes(c.id)))
         : [];

@@ -140,7 +140,18 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
     const refreshDisplayIdentity = () => {
         try {
             const maskId = kvGet("active_mask_id") || "";
-            const subId = kvGet("active_sub_id") || null;
+            let subId = kvGet("active_sub_id") || null;
+            // 小号归属面具：小号不是当前面具的，直接清掉，绝不复用上个面具的小号
+            if (subId) {
+                const subCheck = getUserSubAccount(subId);
+                if (!subCheck || (subCheck.maskId || "") !== (maskId || "")) {
+                    subId = null;
+                    try {
+                        kvSet("active_sub_id", "");
+                        window.dispatchEvent(new CustomEvent(ACTIVE_SUB_CHANGED_EVENT));
+                    } catch { /* ignore */ }
+                }
+            }
             setActiveMaskId(maskId);
             setActiveSubId(subId);
             if (subId) {
@@ -913,6 +924,7 @@ function ContactPicker({ onClose, onSelect }: { onClose: () => void; onSelect: (
     const items = contacts
         .map(c => ({ ...c, char: chars.find(ch => ch.id === c.characterId) }))
         .filter(c => c.char)
+        .filter(c => isCharacterInActiveMask(c.characterId, "chat"))
         .map(c => ({ id: c.characterId, name: c.char!.name || "未命名", avatar: c.char!.avatar || null }));
 
     return (
