@@ -2450,18 +2450,31 @@ async function executeRoleSubTool(call: ToolCall, context?: ToolExecutionContext
                     }
                 } catch { /* ignore */ }
             }
-            const dup = loadFriendRequests().some(r =>
-                r.status === "pending" && r.kind === "character_sub" && r.subId === sub.id);
-            if (dup) return fail(`小号「${sub.name}」已经申请过了，等用户通过`);
+            const tLowered = (typeof args.target === "string" ? args.target.trim().slice(0, 30) : "").toLowerCase();
+            const toMain = !tLowered || ["TO_MAIN_MARKER"].includes(tLowered);
+            let targetSubId: string | null = null;
+            let targetSubName: string | null = null;
+            if (!toMain) {
+                const { loadUserSubAccounts } = await import("./sub-accounts");
+                const mine = loadUserSubAccounts();
+                const hit = mine.find(s => s.id.toLowerCase() === tLowered || (s.name || "").toLowerCase() === tLowered);
+                if (!hit) return fail("FAIL_MARKER");
+                targetSubId = hit.id;
+                targetSubName = hit.name;
+            }
+            const dup = loadFriendRequests().some(r => r.status === "pending" && r.kind === "character_sub" && r.subId === sub.id && (r.targetSubId || null) === targetSubId);
+            if (dup) return fail("DUP_MARKER");
             addSubFriendRequest({
                 ownerCharacterId: me.id,
                 subId: sub.id,
                 subName: sub.name,
                 subAvatar: avatar,
-                message: verifyMsg || `我是${me.name}的小号${sub.name}，通过一下`,
+                message: "MSG_MARKER",
+                targetSubId,
+                targetSubName,
             });
-            try {
                 const { dispatchFriendRequestUpdated } = await import("./friend-request-storage");
+            try {
                 dispatchFriendRequestUpdated();
             } catch { /* ignore */ }
             const reply = `已用小号「${sub.name}」向用户发起好友申请（验证消息：${verifyMsg || "默认"}），对方在联系人“新的朋友”里能看到，能同意也能拒绝；结果会记进你的记忆，你下次聊天就知道了。`;

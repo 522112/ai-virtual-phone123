@@ -17,7 +17,10 @@ export type FriendRequest = {
     subId?: string;
     subName?: string;
     subAvatar?: string | null;
+    // 加谁：targetSubId 为空=用户大号，否则=用户指定小号（由角色人设决定）
     ownerCharacterId?: string;
+    targetSubId?: string | null;
+    targetSubName?: string | null;
 };
 
 const STORAGE_KEY = "ai_phone_friend_requests_v1";
@@ -54,7 +57,8 @@ export function addFriendRequest(characterId: string, message: string, round: nu
 }
 
 /** 角色小号向用户/用户小号发起好友申请：主人格+马甲记录，接受=小号转正。 */
-export function addSubFriendRequest(input: { ownerCharacterId: string; subId: string; subName: string; subAvatar?: string | null; message: string }): FriendRequest {
+export function addSubFriendRequest(input: { ownerCharacterId: string; subId: string; subName: string; subAvatar?: string | null; message: string; targetSubId?: string | null; targetSubName?: string | null }): FriendRequest {
+    // 加谁：targetSubId 为空=用户大号，否则=用户指定小号（由角色人设决定）
     const all = loadFriendRequests();
     const req: FriendRequest = {
         id: `freq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -68,6 +72,8 @@ export function addSubFriendRequest(input: { ownerCharacterId: string; subId: st
         subName: input.subName,
         subAvatar: input.subAvatar || null,
         ownerCharacterId: input.ownerCharacterId,
+        targetSubId: input.targetSubId || null,
+        targetSubName: input.targetSubName || null,
     };
     all.push(req);
     saveFriendRequests(all);

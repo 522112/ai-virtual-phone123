@@ -202,13 +202,14 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
 
     const getCharForRequest = (req: FriendRequest) =>
         chars.find(c => c.id === req.characterId);
+    const getRequestTargetLabel = (req: FriendRequest): string | null => (req.kind === "character_sub" ? (req.targetSubId ? `给我的小号 ${req.targetSubName || ""}`.trim() : "给我（大号）") : null);
     const getRequestDisplay = (req: FriendRequest): { name: string; avatar: string | null; tag?: string } => {
         if (req.kind === "character_sub") {
             const owner = chars.find(c => c.id === (req.ownerCharacterId || req.characterId));
-            return { name: req.subName || "小号", avatar: req.subAvatar || null, tag: owner ? `${owner.name}的小号` : "小号" };
+            return { name: req.subName || "MARKER_SUB", avatar: req.subAvatar || null, tag: owner ? "MARKER_TAG" : "MARKER_SUB" };
         }
         const char = getCharForRequest(req);
-        return { name: char?.name || "未知角色", avatar: char?.avatar || null };
+        return { name: char?.name || "MARKER_UNKNOWN", avatar: char?.avatar || null };
     };
 
 
@@ -405,7 +406,8 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                                                     {shown.name}
                                                 </div>
                                                 <div className="ts-12 text-[var(--c-text)] truncate mt-[2px]">
-                                                    {req.message}
+                                                        {req.message}
+                                                        {req.kind === "character_sub" && getRequestTargetLabel(req) ? ` · ${getRequestTargetLabel(req)}` : ""}
                                                 </div>
                                             </div>
                                         </div>
@@ -426,6 +428,7 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
             {/* Friend Request Detail Modal */}
             {selectedRequest && (() => {
                 const shown = getRequestDisplay(selectedRequest);
+                const targetLabel = getRequestTargetLabel(selectedRequest);
                 return (
                     <div className="modal-overlay" onClick={() => !isProcessing && setSelectedRequest(null)}>
                         <div className="modal-dialog freq-dialog" onClick={e => e.stopPropagation()}>
@@ -449,7 +452,11 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
                             <div className="freq-detail-msg">
                                 {selectedRequest.message}
                             </div>
-
+                                {targetLabel ? (
+                                    <div className="ts-12 text-center text-[var(--c-text)]">
+                                        {targetLabel}
+                                    </div>
+                                ) : null}
                             {/* Actions */}
                             <div className="flex gap-3 w-full">
                                 <button
