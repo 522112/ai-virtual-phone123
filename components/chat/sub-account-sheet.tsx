@@ -9,7 +9,7 @@ import {
   type UserSubAccount,
 } from "@/lib/sub-accounts";
 import { loadUserIdentities } from "@/lib/settings-storage";
-import { kvGet } from "@/lib/kv-db";
+import { kvGet, kvSet } from "@/lib/kv-db";
 
 export const ACTIVE_SUB_CHANGED_EVENT = "active-sub-changed";
 
@@ -286,7 +286,18 @@ export function SubAccountSheet({ activeMaskId, activeSubId, onSelectSub, onClos
 export function getActiveSubId(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return kvGet("active_sub_id") || null;
+    const id = kvGet("active_sub_id") || null;
+    if (!id) return null;
+    // 小号归属面具：不是当前面具的小号直接视为无，绝不复用上个面具的小号
+    try {
+      const sub = getUserSubAccount(id);
+      const maskId = kvGet("active_mask_id") || "";
+      if (!sub || (sub.maskId || "") !== (maskId || "")) {
+        kvSet("active_sub_id", "");
+        return null;
+      }
+    } catch { /* ignore */ }
+    return id;
   } catch {
     return null;
   }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { loadScopedContacts } from "@/lib/chat-storage";
+import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import { loadCharacters } from "@/lib/character-storage";
 import { resolveUserIdentity } from "@/lib/settings-storage";
 import { Character } from "@/lib/character-types";
@@ -19,7 +20,8 @@ export function GroupCreateModal({ onClose, onCreate }: GroupCreateModalProps) {
     const [groupName, setGroupName] = useState("");
     const [isSpectator, setIsSpectator] = useState(false);
 
-    const contacts = loadScopedContacts(null);
+    const contacts = loadScopedContacts(null)
+        .filter(c => isCharacterInActiveMask(c.characterId, "chat"));
     const chars = loadCharacters();
 
     const enriched = contacts

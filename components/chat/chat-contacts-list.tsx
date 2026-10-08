@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, useDeferredVa
 import { loadChatContacts, loadScopedContacts, loadChatSessions, ChatContact, createOrGetSession, ChatSession, addChatContact, pushChatMessage, loadChatMessages } from "@/lib/chat-storage";
 import { getActiveSubId } from "./sub-account-sheet";
 import { ensureSubSession } from "@/lib/sub-friend-engine";
+import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import { resolveUserIdentity, USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import { PENDING_REPLY_PREFIX } from "@/lib/friend-request-engine";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
@@ -109,8 +110,10 @@ export function ChatContactsList({ onCloseApp, onSelectSession, onSelectMascot, 
         const latestChars = loadCharacters().map(overlayCharacterForDisplay);
         setChars(latestChars);
         setIdentity(resolveUserIdentity());
-        // 小号=新号：联系人按身份隔离，主号/小号互不可见
-        const scoped = loadScopedContacts(getActiveSubId());
+        // 小号=新号：联系人按身份隔离，主号/小号互不可见；
+        // 面具独立：只显示当前面具绑定的角色
+        const scoped = loadScopedContacts(getActiveSubId())
+            .filter(c => isCharacterInActiveMask(c.characterId, "chat"));
         const enriched = scoped.map(c => ({
             ...c,
             char: latestChars.find(ch => ch.id === c.characterId)

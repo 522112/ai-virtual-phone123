@@ -4,6 +4,7 @@ import { loadChatSessions, loadScopedContacts } from "@/lib/chat-storage";
 import { getActiveSubId } from "./sub-account-sheet";
 import { recommendCardToCharacter } from "@/lib/recommend-card-engine";
 import { describeFlowError } from "@/lib/chunk-reload";
+import { isCharacterInActiveMask } from "@/lib/mask-scope";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
 import { WxContactSelectList } from "./wx-contact-select";
 import {
@@ -72,7 +73,8 @@ export function RecommendCardModal({ hostCharacterId, onClose }: { hostCharacter
 
   const candidates = contacts
     .map(c => characters.find(ch => ch.id === c.characterId))
-    .filter((c): c is NonNullable<typeof c> => !!c && c.id !== hostCharacterId);
+    .filter((c): c is NonNullable<typeof c> => !!c && c.id !== hostCharacterId)
+    .filter(c => isCharacterInActiveMask(c.id, "chat"));
 
   const recommend = async (guestId: string) => {
     if (busyId) return;
