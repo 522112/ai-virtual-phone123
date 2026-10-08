@@ -21,7 +21,7 @@ import { ChatPluginManager } from "./chat-plugin-manager";
 import { ChatPluginPageBoundary } from "./chat-plugin-page-boundary";
 import { WalletPanel } from "./wallet-panel";
 import { loadMomentsConfig, saveMomentsConfig, DEFAULT_MOMENTS_CONFIG, type MomentsInteractionConfig, getAllPosts } from "@/lib/moments-storage";
-import { loadChatContacts } from "@/lib/chat-storage";
+import { loadChatContacts, loadScopedContacts } from "@/lib/chat-storage";
 import { loadCharacters } from "@/lib/character-storage";
 import { triggerImmediatePost } from "@/lib/moments-engine";
 import type { Character } from "@/lib/character-types";
@@ -204,7 +204,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
 
         // Fetch dynamic user stats
         try {
-            const contactsCount = loadChatContacts().length;
+            const contactsCount = loadScopedContacts(null).length;
             const userPostsCount = getAllPosts().filter(p => p.authorType === "user").length;
             setUserStats({
                 chats: contactsCount,
@@ -893,7 +893,7 @@ function InlineMomentsSettings({ onBack }: { onBack: () => void }) {
     const [posting, setPosting] = useState(false);
     const [showAutoPostList, setShowAutoPostList] = useState(false);
 
-    const contacts = loadChatContacts();
+    const contacts = loadScopedContacts(null);
     const chars = loadCharacters();
     const enriched = contacts
         .map(c => ({ ...c, char: chars.find(ch => ch.id === c.characterId) }))

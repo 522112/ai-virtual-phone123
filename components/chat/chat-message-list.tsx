@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useSyncExternalStore } from "react";
 import { WxContactSelectList } from "./wx-contact-select";
 import { ChevronLeft } from "lucide-react";
-import { loadChatSessions, loadChatContacts, ChatSession, createOrGetSession, createGroupSession, pushChatMessage, addChatContact, loadChatMessages, saveChatSessions, getLastVisibleSessionMessage, getChatMessagePreview } from "@/lib/chat-storage";
+import { loadChatSessions, loadChatContacts, loadScopedContacts, ChatSession, createOrGetSession, createGroupSession, pushChatMessage, addChatContact, loadChatMessages, saveChatSessions, getLastVisibleSessionMessage, getChatMessagePreview } from "@/lib/chat-storage";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { Character } from "@/lib/character-types";
 import { COUPLE_AVATARS_UPDATED_EVENT, overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
@@ -211,19 +211,9 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
     };
 
     // 用小号开聊：空会话（没内容）第一次打开时打上小号戳；已有内容的会话不动
+    // 小号=新号：绝不占用主号会话——主号会话直接进自己的，小号走独立会话
     const openSession = (session: ChatSession) => {
-        let next = session;
-        if (activeSubId && !session.isGroup && !session.subId && !hasSessionListContent(session.id)) {
-            const all = loadChatSessions();
-            const idx = all.findIndex(s => s.id === session.id);
-            if (idx !== -1) {
-                next = { ...session, subId: activeSubId };
-                all[idx] = next;
-                saveChatSessions(all);
-                setSessions(all);
-            }
-        }
-        onSelectSession(next);
+        onSelectSession(session);
     };
     const mascotSettings = useSyncExternalStore(subscribeMascotSettings, getMascotSettingsSnapshot, getMascotSettingsSnapshot);
     const mascotChat = useSyncExternalStore(subscribeMascotChat, getMascotChatSnapshot, getMascotChatSnapshot);
@@ -425,7 +415,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                 </div>
                 <div className="px-5 pt-2 flex flex-col">
                     {(() => {
-                            const contactIds = new Set(loadChatContacts().map(c => c.characterId));
+                            const contactIds = new Set(loadScopedContacts(activeSubId).map(c => c.characterId));
                             const allChars = loadCharacters();
                             const keyword = listFilter.trim().toLowerCase();
                             const showMascot = mascotSettings.chatEnabled
@@ -538,7 +528,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
 
                             {/* 备选：已有角色卡但还不在联系人里，点击直接填入号码 */}
                             {(() => {
-                                const contactIds = new Set(loadChatContacts().map(c => c.characterId));
+                                const contactIds = new Set(loadScopedContacts(activeSubId).map(c => c.characterId));
                                 const candidates = loadCharacters().filter(c => !contactIds.has(c.id));
                                 if (candidates.length === 0 && mascotSettings.chatEnabled) return null;
                                 return (
@@ -763,7 +753,7 @@ export function ChatMessageList({ onCloseApp, activeSession, onSelectSession, on
                 <ContactPicker
                     onClose={() => setShowContactPicker(false)}
                     onSelect={(charId) => {
-                        const session = createOrGetSession(charId);
+                        const session = activeSubId ? ensureSubSession(charId, activeSubId) : createOrGetSession(charId);
                         setSessions(loadChatSessions());
                         openSession(session);
                         setShowContactPicker(false);

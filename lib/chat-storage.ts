@@ -31,6 +31,8 @@ export type ChatContact = {
     characterId: string; // links to global character in character-storage.ts
     nickname?: string;
     addedAt: string; // ISO date
+    /** 所属身份：主号为空，各小号为 subId；小号=新面具，联系人互不可见 */
+    subId?: string;
 };
 
 export type ChatSession = {
@@ -717,7 +719,8 @@ function isPreferredContact(candidate: ChatContact, current: ChatContact): boole
 
 function normalizeChatContacts(contacts: ChatContact[]): NormalizedList<ChatContact> {
     const normalized: ChatContact[] = [];
-    const indexByCharacter = new Map<string, number>();
+    // 同一角色在主号/各小号下各算一条，互不覆盖
+    const indexByScopeCharacter = new Map<string, number>();
     let changed = false;
 
     for (const contact of contacts) {
@@ -727,9 +730,10 @@ function normalizeChatContacts(contacts: ChatContact[]): NormalizedList<ChatCont
             continue;
         }
         const item = characterId === contact.characterId ? contact : { ...contact, characterId };
-        const existingIndex = indexByCharacter.get(characterId);
+        const scopeKey = `${item.subId || "main"}:${characterId}`;
+        const existingIndex = indexByScopeCharacter.get(scopeKey);
         if (existingIndex === undefined) {
-            indexByCharacter.set(characterId, normalized.length);
+            indexByScopeCharacter.set(scopeKey, normalized.length);
             normalized.push(item);
             if (item !== contact) changed = true;
             continue;
@@ -848,29 +852,40 @@ function saveRemovedContactIds(ids: Set<string>): void {
     kvSet(REMOVED_CONTACTS_KEY, JSON.stringify([...ids]));
 }
 
-function markContactRemoved(characterId: string): void {
+function tombstoneKey(characterId: string, subId?: string): string {
+    return `${subId || "main"}:${characterId}`;
+}
+
+function markContactRemoved(characterId: string, subId?: string): void {
     if (!characterId) return;
     const ids = loadRemovedContactIds();
-    if (ids.has(characterId)) return;
-    ids.add(characterId);
+    const key = tombstoneKey(characterId, subId);
+    if (ids.has(key)) return;
+    // 老数据是裸 characterId：删主号联系人时顺带兼容（小号墓碑独立，不受影响）
+    ids.add(key);
     saveRemovedContactIds(ids);
 }
 
-function unmarkContactRemoved(characterId: string): void {
+function unmarkContactRemoved(characterId: string, subId?: string): void {
     if (!characterId) return;
     const ids = loadRemovedContactIds();
-    if (!ids.delete(characterId)) return;
+    let changed = false;
+    if (ids.delete(tombstoneKey(characterId, subId))) changed = true;
+    if (!subId && ids.delete(characterId)) changed = true;
+    if (!changed) return;
     saveRemovedContactIds(ids);
 }
 
 function restoreContactsForPrivateSessions(contacts: ChatContact[], sessions: ChatSession[]): NormalizedList<ChatContact> {
     const characterIds = new Set(loadCharacters().map(character => character.id));
     const removedByUser = loadRemovedContactIds();
+    const isRemoved = (contactId: string, subId?: string): boolean =>
+        removedByUser.has(tombstoneKey(contactId, subId)) || (!subId && removedByUser.has(contactId));
     const privateSessionsWithMessages = sessions.filter(session =>
         !session.isGroup
         && session.contactId
         && characterIds.has(session.contactId)
-        && !removedByUser.has(session.contactId)
+        && !isRemoved(session.contactId, session.subId)
         && Boolean(getLastVisibleSessionMessage(session.id))
     );
     if (privateSessionsWithMessages.length === 0 || contacts.length >= privateSessionsWithMessages.length) {
@@ -880,19 +895,21 @@ function restoreContactsForPrivateSessions(contacts: ChatContact[], sessions: Ch
         return { items: contacts, changed: false };
     }
 
-    const contactIds = new Set(contacts.map(contact => contact.characterId));
+    const scopedIds = new Set(contacts.map(contact => `${contact.subId || "main"}:${contact.characterId}`));
     const restored: ChatContact[] = [...contacts];
     let changed = false;
 
     for (const session of privateSessionsWithMessages) {
-        if (contactIds.has(session.contactId)) continue;
+        const scopeKey = `${session.subId || "main"}:${session.contactId}`;
+        if (scopedIds.has(scopeKey)) continue;
         const safeId = session.contactId.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80) || Date.now().toString(36);
         restored.push({
-            id: `contact_recovered_${safeId}`,
+            id: `contact_recovered_${session.subId || "main"}_${safeId}`,
             characterId: session.contactId,
+            ...(session.subId ? { subId: session.subId } : {}),
             addedAt: session.updatedAt || new Date().toISOString(),
         });
-        contactIds.add(session.contactId);
+        scopedIds.add(scopeKey);
         changed = true;
     }
 
@@ -1137,8 +1154,7 @@ export function loadChatContacts(): ChatContact[] {
     return _contactsCache;
 }
 
-export function saveChatContacts(contacts: ChatContact[]) {
-    const normalized = normalizeChatContacts(contacts);
+export function saveChatContacts(contacts: ChatContact[]) {    const normalized = normalizeChatContacts(contacts);
     _contactsCache = normalized.items;
     if (!_hydrated && typeof window !== "undefined") {
         console.warn("[ChatStorage] saveChatContacts before hydration; using additive write to avoid replacing existing contacts.");
@@ -1148,16 +1164,21 @@ export function saveChatContacts(contacts: ChatContact[]) {
     dbReplaceContacts(normalized.items);
 }
 
-export function addChatContact(characterId: string): ChatContact | null {
-    // 任何一条"重新加上好友"的路径都会走到这里（通过好友申请、搜索添加、
+/** 按身份取联系人：主号只看主号的，小号只看自己的，互不可见 */
+export function loadScopedContacts(subId: string | null): ChatContact[] {
+    return loadChatContacts().filter(c => (c.subId || null) === (subId || null));
+}
+
+export function addChatContact(characterId: string, subId?: string): ChatContact | null {    // 任何一条"重新加上好友"的路径都会走到这里（通过好友申请、搜索添加、
     // 后台引擎重新建联系），统一在这里解除删除状态，不会漏。
-    unmarkContactRemoved(characterId);
+    unmarkContactRemoved(characterId, subId);
     const contacts = loadChatContacts();
-    if (contacts.find(c => c.characterId === characterId)) return null; // already exists
+    if (contacts.find(c => c.characterId === characterId && (c.subId || null) === (subId || null))) return null; // already exists
 
     const newContact: ChatContact = {
         id: `contact_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         characterId,
+        ...(subId ? { subId } : {}),
         addedAt: new Date().toISOString()
     };
     saveChatContacts([...contacts, newContact]);
@@ -1173,10 +1194,16 @@ export function addChatContact(characterId: string): ChatContact | null {
     return newContact;
 }
 
-export function removeChatContact(characterId: string) {
+export function removeChatContact(characterId: string, subId?: string) {
     const contacts = loadChatContacts();
-    saveChatContacts(contacts.filter(c => c.characterId !== characterId));
-    markContactRemoved(characterId);
+    // subId 为 "*" 时清掉该角色在所有身份下的联系人（角色被删除时用）
+    if (subId === "*") {
+        saveChatContacts(contacts.filter(c => c.characterId !== characterId));
+        markContactRemoved(characterId);
+        return;
+    }
+    saveChatContacts(contacts.filter(c => !(c.characterId === characterId && (c.subId || null) === (subId || null))));
+    markContactRemoved(characterId, subId);
 }
 
 // ── CRUD for Sessions ─────────────────────────
