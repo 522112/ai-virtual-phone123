@@ -6,11 +6,12 @@ import { loadCharacters } from "@/lib/character-storage";
 import { loadChatSessions, saveChatSessions } from "@/lib/chat-storage";
 import {
   CONTACT_REMARKS_UPDATED_EVENT,
-  getCharacterRecentMoments,
   getCharacterRemark,
   notifyCharacterOfUserRemarkChange,
 } from "@/lib/contact-remarks";
+import { getAllPosts } from "@/lib/moments-storage";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import { MomentTextThumb } from "./moment-text-thumb";
 import { overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
 import {
   createCharacterSubAccount,
@@ -36,17 +37,6 @@ const L = {
   noRemark: "暂无",
 };
 
-function formatMomentTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return "";
-  const diff = Date.now() - t;
-  const days = Math.floor(diff / 86400000);
-  if (days >= 1) return `${days}${L.daysAgo}`;
-  const hours = Math.floor(diff / 3600000);
-  if (hours >= 1) return `${hours}${L.hoursAgo}`;
-  return L.justNow;
-}
-
 type Props = {
   characterId: string;
   sessionId?: string;
@@ -60,7 +50,7 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenH
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState(false);
   const [theirRemark, setTheirRemark] = useState(() => getCharacterRemark(characterId));
-  const [moments, setMoments] = useState(() => getCharacterRecentMoments(characterId));
+  const [moments, setMoments] = useState(() => getAllPosts().filter(p => p.authorType === "character" && p.authorId === characterId));
   const [notice, setNotice] = useState("");
   const [charSubs, setCharSubs] = useState<CharacterSubAccount[]>(() => loadCharacterSubAccounts(characterId));
   const [subBusy, setSubBusy] = useState(false);
@@ -74,14 +64,14 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenH
     setAlias(current);
     setDraft(current);
     setTheirRemark(getCharacterRemark(characterId));
-    setMoments(getCharacterRecentMoments(characterId));
+    setMoments(getAllPosts().filter(p => p.authorType === "character" && p.authorId === characterId));
     // 对方备注初始生成（按人设+记忆，后续对方可改）
     if (!getCharacterRemark(characterId)) {
       void import("@/lib/character-remark-engine").then(m => m.ensureInitialCharacterRemark(characterId)).catch(() => {});
     }
     const onRemark = () => {
       setTheirRemark(getCharacterRemark(characterId));
-      setMoments(getCharacterRecentMoments(characterId));
+      setMoments(getAllPosts().filter(p => p.authorType === "character" && p.authorId === characterId));
     };
     window.addEventListener(CONTACT_REMARKS_UPDATED_EVENT, onRemark);
     return () => window.removeEventListener(CONTACT_REMARKS_UPDATED_EVENT, onRemark);
@@ -108,6 +98,17 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenH
   if (!character) return null;
   const shown = overlayCharacterForDisplay(character);
   const wechatId = character.wechatID || character.id.slice(-8);
+  const region = character.profileRegion || "中国大陆";
+  const displayName = alias || character.screenName || character.name;
+  // 预览只收有图动态（实图或文字图），纯文字不占位
+  const thumbPosts = moments.filter(m => m.photoUrl || m.photoDescription).slice(0, 4);
+
+  const openMoments = () => {
+    if (onOpenHomepage) {
+      onOpenHomepage(characterId);
+      onClose();
+    }
+  };
 
   return (
     <div className="char-card-overlay" onClick={onClose}>
@@ -118,14 +119,14 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenH
             <X size={18} />
           </button>
         </div>
-        <div className="char-card-profile">
-          <div className="char-card-avatar">
+        <div className="wx-profile-head">
+          <span className="wx-profile-avatar">
             {shown.avatar ? <img src={shown.avatar} alt="" /> : <ChatFallbackAvatar />}
-          </div>
-          <div className="char-card-idblock">
-            <strong>{alias || character.screenName || character.name}</strong>
-            <span>{L.nickname}：{character.screenName || character.name}</span>
-            <span>ID：{wechatId}</span>
+          </span>
+          <div className="wx-profile-id">
+            <div className="wx-profile-name">{displayName}</div>
+            <div className="wx-profile-line">微信号：{wechatId}</div>
+            <div className="wx-profile-line">地区：{region}</div>
           </div>
         </div>
         <div className="char-card-rows">
@@ -147,30 +148,25 @@ export function CharacterBusinessCard({ characterId, sessionId, onClose, onOpenH
             <span className="char-card-value dim">{theirRemark || L.noRemark}</span>
           </div>
         </div>
-        <div className="char-card-moments">
-          <button
-            type="button"
-            className="char-card-moments-title"
-            style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "space-between", background: "none", border: 0, cursor: onOpenHomepage ? "pointer" : "default", padding: 0 }}
-            onClick={() => { if (onOpenHomepage) { onOpenHomepage(characterId); onClose(); } }}
-          >
-            <span>{L.recentMoments}</span>
-            {onOpenHomepage ? <span>›</span> : null}
-          </button>
-          {moments.length === 0 ? (
-            <div className="char-card-moments-empty">{L.noMoments}</div>
-          ) : (
-            moments.map(m => (
-              <div key={m.id} className="char-card-moment">
-                {m.photoUrl ? <img src={m.photoUrl} alt="" /> : null}
-                <div className="char-card-moment-body">
-                  <p>{m.content.slice(0, 90)}</p>
-                  <span>{formatMomentTime(m.createdAt)}</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        <button
+          type="button"
+          className="wx-profile-moments"
+          onClick={openMoments}
+        >
+          <span>朋友圈</span>
+          <span className="wx-profile-thumbs">
+            {thumbPosts.length === 0 ? (
+              <small className="menu-desc">{L.noMoments}</small>
+            ) : (
+              thumbPosts.map(m => (
+                m.photoUrl
+                  ? <img key={m.id} src={m.photoUrl} alt="" />
+                  : <MomentTextThumb key={m.id} text={m.photoDescription || m.content} size={48} radius={4} />
+              ))
+            )}
+          </span>
+          <span className="wx-profile-go">›</span>
+        </button>
         {notice ? <div className="char-card-notice">{notice}</div> : null}
         <div className="char-card-moments">
           <div className="char-card-moments-title"><span>TA 的小号（按人设开）</span></div>

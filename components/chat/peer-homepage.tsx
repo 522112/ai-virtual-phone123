@@ -1,11 +1,10 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, ChevronLeft, ChevronRight, MessageCircle, Phone, Video } from "lucide-react";
+import { Camera, ChevronLeft } from "lucide-react";
 import { loadCharacters, saveCharacters } from "@/lib/character-storage";
 import { getAllPosts } from "@/lib/moments-storage";
 import { generateMomentsBackfill } from "@/lib/moments-backfill";
-import { MomentTextThumb } from "./moment-text-thumb";
 import { WxMomentDetail, WxMomentRow } from "./wx-moment-row";
 import type { Character } from "@/lib/character-types";
 import type { MomentPost } from "@/lib/moments-types";
@@ -34,13 +33,13 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
     const [character, setCharacter] = useState<Character | null>(
         () => loadCharacters().find(c => c.id === characterId) || null,
     );
-    const [tab, setTab] = useState<"home" | "moments">("home");
     const [openPostId, setOpenPostId] = useState<string | null>(null);
     const [coverBusy, setCoverBusy] = useState(false);
     const [coverLinkOpen, setCoverLinkOpen] = useState(false);
     const [coverLinkUrl, setCoverLinkUrl] = useState("");
     const [notice, setNotice] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [backfillError, setBackfillError] = useState("");
     const [postsTick, setPostsTick] = useState(0);
     const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -53,7 +52,7 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
             return [];
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [characterId, tab, refreshing, postsTick]);
+    }, [characterId, refreshing, postsTick]);
 
     const pinned = useMemo<MomentPost | null>(() => {
         if (posts.length === 0) return null;
@@ -68,14 +67,9 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
         [posts, pinned],
     );
 
-    const previewPhotos = useMemo(
-        // 棰勮鍙敹鏈夊浘鍔ㄦ€侊紙瀹炲浘鎴栨枃瀛楀浘锛夛紝绾枃瀛楀姩鎬佷笉鍗犱綅
-        () => posts.filter(p => p.photoUrl || p.photoDescription).slice(0, 4),
-        [posts],
-    );
-
     if (!character) return null;
     const displayName = character.screenName?.trim() || character.name || "瀵规柟";
+    const signature = character.profileSignature?.trim() || character.personality?.trim().slice(0, 60) || "";
     const theme = derivePeerCoverTheme(character);
     const coverStyle: React.CSSProperties = character.momentsCover
         ? { backgroundImage: `url(${character.momentsCover})`, backgroundSize: "cover", backgroundPosition: "center" }
@@ -87,25 +81,25 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
     };
 
     // 首次进入自动补全：没动态就一次调用生成 5-10 条过往动态（时间铺开，模拟真实朋友圈）
+    const runBackfill = () => {
+        setBackfillError("");
+        setRefreshing(true);
+        void generateMomentsBackfill(characterId)
+            .catch((error) => { setBackfillError(error instanceof Error ? error.message : "生成失败"); })
+            .finally(() => { setRefreshing(false); refresh(); });
+    };
+ 
+    // 首次进入自动补全：没动态就一次调用生成 5-10 条过往动态（时间铺开，模拟真实朋友圈）
     useEffect(() => {
-        let cancelled = false;
         try {
             const existing = getAllPosts().filter(p => p.authorType === "character" && p.authorId === characterId);
             if (existing.length > 0) return;
         } catch {
             return;
         }
-        setRefreshing(true);
-        void generateMomentsBackfill(characterId)
-            .catch(() => {})
-            .finally(() => {
-                if (cancelled) return;
-                setRefreshing(false);
-                refresh();
-            });
-        return () => { cancelled = true; };
+        runBackfill();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [characterId]);
-
     const flash = (text: string) => {
         setNotice(text);
         window.setTimeout(() => setNotice(current => (current === text ? null : current)), 2200);
@@ -141,11 +135,9 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                     <button type="button" className="peer-home-back" onClick={onClose} aria-label="杩斿洖">
                         <ChevronLeft size={24} strokeWidth={1.5} />
                     </button>
-                    {tab === "moments" && <span className="peer-home-topbar-title">朋友圈</span>}
+                    <span className="peer-home-topbar-title">朋友圈</span>
                 </div>
 
-                {tab === "home" ? (
-                    <>
                         <div className="peer-home-cover" style={coverStyle}>
                             <button
                                 type="button"
@@ -202,78 +194,21 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                                 <div className="peer-home-name">{displayName}</div>
                             </div>
                         </div>
-                        <div className="peer-home-rows">
-                            <div className="peer-home-row">
-                                <span className="peer-home-label">鏄电О</span>
-                                <span className="peer-home-value">{character.name || "未命名"}</span>
-                            </div>
-                            <div className="peer-home-row">
-                                <span className="peer-home-label">微信号</span>
-                                <span className="peer-home-value">{character.wechatID || character.id.slice(-8)}</span>
-                            </div>
-                            {character.personality?.trim() && (
-                                <div className="peer-home-row">
-                                <span className="peer-home-label">个性签名</span>
-                                    <span className="peer-home-value peer-home-sign">{character.personality.trim().slice(0, 60)}</span>
-                                </div>
-                            )}
-                            <button type="button" className="peer-home-row peer-home-moments-entry" onClick={() => setTab("moments")}>
-                                <span className="peer-home-label">朋友圈</span>
-                                <span className="peer-home-thumbs">
-                                    {refreshing ? (
-                                        <span className="peer-home-empty">正在按人设刷新…</span>
-                                    ) : previewPhotos.length === 0 ? (
-                                        <span className="peer-home-empty">暂无动态</span>
-                                    ) : (
-                                        previewPhotos.map(p => (
-                                            <span key={p.id} className="peer-home-thumb">
-                                                {p.photoUrl
-                                                    ? <img src={p.photoUrl} alt="" />
-                                                    : <MomentTextThumb text={p.photoDescription || p.content} size={56} radius={4} />}
-                                            </span>
-                                        ))
-                                    )}
-                                </span>
-                                <ChevronRight size={18} className="peer-home-go" />
-                            </button>
-                        </div>
-                        <div className="peer-home-actions">
-                            {onMessage ? (
-                                <button type="button" className="peer-home-action-btn" onClick={onMessage}>
-                                    <MessageCircle size={18} /> 发消息</button>
-                            ) : null}
-                            {onVoiceCall ? (
-                                <button type="button" className="peer-home-action-btn" onClick={onVoiceCall}>
-                                    <Phone size={18} /> 闊宠棰戦€氳瘽
-                                </button>
-                            ) : null}
-                            {onVideoCall && !onVoiceCall ? (
-                                <button type="button" className="peer-home-action-btn" onClick={onVideoCall}>
-                                    <Video size={18} /> 瑙嗛閫氳瘽
-                                </button>
-                            ) : null}
-                        </div>
-                    </>
-                ) : (
-                    <div className="peer-home-feed">
-                        <div className="peer-home-feed-head" onClick={() => setTab("home")}>
-                            <div className="peer-home-feed-avatar">
-                                {character.avatar ? <img src={character.avatar} alt="" /> : <ChatFallbackAvatar />}
-                            </div>
-                            <div className="peer-home-feed-name">{displayName}</div>
-                        </div>
+                        <div className="peer-home-signline">{signature}</div>
                         <div className="peer-home-feed-list">
                             {(pinned ? [pinned, ...restPosts] : restPosts).map(post => (
                                 <WxMomentRow key={post.id} post={post} onOpen={postId => setOpenPostId(postId)} />
                             ))}
                             {posts.length === 0 && (
                                 <div className="peer-home-empty-feed">
-                                    {refreshing ? "正在生成 TA 的朋友圈…" : "TA 还没有发布过动态"}
+                                    {refreshing ? "正在生成 TA 的朋友圈…" : backfillError ? (
+                                        <span>生成失败：{backfillError} <button type="button" onClick={runBackfill}>重试</button></span>
+                                    ) : (
+                                        <span>TA 还没有发布过动态 <button type="button" onClick={runBackfill}>生成朋友圈</button></span>
+                                    )}
                                 </div>
                             )}
                         </div>
-                    </div>
-                )}
                 {openPostId && (
                     <WxMomentDetail
                         postId={openPostId}
