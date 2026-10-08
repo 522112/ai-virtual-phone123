@@ -2421,7 +2421,7 @@ async function executeRoleSubTool(call: ToolCall, context?: ToolExecutionContext
             const reply = purpose
                 ? `已开好小号「${sub.name}」（${purpose}）。用马甲身份行动，对方不会知道是你。`
                 : `已开好小号「${sub.name}」。用马甲身份行动，对方不会知道是你。`;
-            return { name: call.name, success: true, reply, continueConversation: true };
+            return { name: call.name, success: true, data: reply, continueConversation: true };
         } catch (error) {
             return fail(error instanceof Error ? error.message : "开小号失败");
         }
@@ -2449,7 +2449,7 @@ async function executeRoleSubTool(call: ToolCall, context?: ToolExecutionContext
         const reply = hit
             ? `已把${hit.name}的名片推给用户，对方点名片就能聊上/加好友。`
             : `已把${name}的名片推给用户（NPC），对方点名片可以建档加好友。`;
-        return { name: call.name, success: true, reply, continueConversation: true };
+        return { name: call.name, success: true, data: reply, continueConversation: true };
     }
 
     return fail(`未知子工具：${call.name}`);
