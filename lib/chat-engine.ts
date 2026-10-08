@@ -1991,8 +1991,14 @@ export async function buildChatPromptMessages(
     }
 
     const [memResults, coreResults, musicLocal, musicCloud] = await Promise.all([
-        retrieveMemoriesForPrompt(character.id, wbActivationContext, memConfig, session.subId).catch(() => null),
-        retrieveCoreMemoriesForPrompt(character.id, memConfig, session.subId).catch(() => null),
+        retrieveMemoriesForPrompt(character.id, wbActivationContext, memConfig, session.subId).catch(error => {
+            console.warn("[Chat] 长期记忆检索失败:", error);
+            return null;
+        }),
+        retrieveCoreMemoriesForPrompt(character.id, memConfig, session.subId).catch(error => {
+            console.warn("[Chat] 核心记忆检索失败:", error);
+            return null;
+        }),
         buildMusicLocalMacro(),
         buildMusicCloudMacro(),
     ]);

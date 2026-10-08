@@ -185,7 +185,13 @@ export function loadMemoryConfig(): MemoryConfig {
     try {
         const raw = kvGet(CONFIG_KEY);
         if (!raw) return { ...DEFAULT_MEMORY_CONFIG };
-        return { ...DEFAULT_MEMORY_CONFIG, ...JSON.parse(raw) };
+        const stored = JSON.parse(raw) as Partial<MemoryConfig>;
+        // 老默认 80 太稀疏导致中期失忆：没手动改过的统一降到 30
+        if (stored.summarizationEventInterval === 80) {
+            stored.summarizationEventInterval = 30;
+            try { kvSet(CONFIG_KEY, JSON.stringify({ ...DEFAULT_MEMORY_CONFIG, ...stored })); } catch { /* ignore */ }
+        }
+        return { ...DEFAULT_MEMORY_CONFIG, ...stored };
     } catch {
         return { ...DEFAULT_MEMORY_CONFIG };
     }
