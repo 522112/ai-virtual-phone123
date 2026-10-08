@@ -809,7 +809,7 @@ async function executeInternalTool(call: ToolCall, context?: ToolExecutionContex
     if (call.name === "稍后主动联系" || call.name === "设置定时醒来") return executeTimedWakeTool(call, context);
     if (call.name === "转发聊天记录") return executeForwardChatTool(call, context);
     if (call.name === "发起私聊") return executeRoleSideChatTool(call, context);
-    if (call.name === "开小号" || call.name === "推荐好友名片") return executeRoleSubTool(call, context);
+    if (call.name === "开小号" || call.name === "推荐好友名片" || call.name === "小号加好友") return executeRoleSubTool(call, context);
 
     if (call.name !== "写入记忆") return null;
 
@@ -2427,6 +2427,51 @@ async function executeRoleSubTool(call: ToolCall, context?: ToolExecutionContext
         }
     }
 
+    if (call.name === "小号加好友") {
+        const subQuery = typeof args.sub === "string" ? args.sub.trim().slice(0, 30) : "";
+        const verifyMsg = typeof args.verifyMsg === "string" ? args.verifyMsg.trim().slice(0, 100) : "";
+        try {
+            const { loadCharacterSubAccounts, updateCharacterSubAccount } = await import("./sub-accounts");
+            const { findBestResourceImage, resourceDisplayUrl } = await import("./resource-library");
+            const { addSubFriendRequest, loadFriendRequests } = await import("./friend-request-storage");
+            const subs = loadCharacterSubAccounts(me.id);
+            const lowered = subQuery.toLowerCase();
+            const sub = (subQuery
+                ? subs.find(s => s.id.toLowerCase() === lowered || (s.name || "").toLowerCase() === lowered)
+                : subs[0]) || null;
+            if (!sub) return fail(subQuery ? `找不到小号「${subQuery}」，先开个小号` : "你还没有小号，先开一个");
+            let avatar = sub.avatar || null;
+            if (!avatar) {
+                try {
+                    const hit = findBestResourceImage(me.id, `${sub.name} ${sub.persona || ""} 头像`);
+                    if (hit) {
+                        avatar = resourceDisplayUrl(hit);
+                        updateCharacterSubAccount(sub.id, { avatar });
+                    }
+                } catch { /* ignore */ }
+            }
+            const dup = loadFriendRequests().some(r =>
+                r.status === "pending" && r.kind === "character_sub" && r.subId === sub.id);
+            if (dup) return fail(`小号「${sub.name}」已经申请过了，等用户通过`);
+            addSubFriendRequest({
+                ownerCharacterId: me.id,
+                subId: sub.id,
+                subName: sub.name,
+                subAvatar: avatar,
+                message: verifyMsg || `我是${me.name}的小号${sub.name}，通过一下`,
+            });
+            try {
+                const { dispatchFriendRequestUpdated } = await import("./friend-request-storage");
+                dispatchFriendRequestUpdated();
+            } catch { /* ignore */ }
+            const reply = `已用小号「${sub.name}」向用户发起好友申请（验证消息：${verifyMsg || "默认"}），对方在联系人“新的朋友”里能看到，能同意也能拒绝；结果会记进你的记忆，你下次聊天就知道了。`;
+            return { name: call.name, success: true, data: reply, continueConversation: true };
+        } catch (error) {
+            return fail(error instanceof Error ? error.message : "小号加好友失败");
+        }
+    }
+
+
     if (call.name === "推荐好友名片") {
         const name = typeof args.name === "string" ? args.name.trim().slice(0, 30) : "";
         if (!name) return fail("缺少对方名字");
@@ -2443,7 +2488,7 @@ async function executeRoleSubTool(call: ToolCall, context?: ToolExecutionContext
             senderName: me.name,
             content: `[给你推荐了一位朋友：${name}]${topic ? `（${topic}）` : ""}`,
             mediaType: "contact_card",
-            mediaData: { contactCardName: hit ? hit.name : name, label: hit ? hit.name : name },
+            mediaData: { contactCardName: hit ? hit.name : name, label: hit ? hit.name : name, contactCardAvatar: hit?.avatar || null },
             status: "sent",
         });
         const reply = hit

@@ -183,3 +183,20 @@ export function deleteCharacterSubAccount(id: string): void {
   kvSet(CHARACTER_SUBS_KEY, JSON.stringify(readCharacterSubs().filter(s => s.id !== id)));
   dispatchUpdated();
 }
+
+export function updateCharacterSubAccount(id: string, patch: { name?: string; avatar?: string | null; persona?: string }): CharacterSubAccount | null {
+  const all = readCharacterSubs();
+  const idx = all.findIndex(s => s.id === id);
+  if (idx === -1) return null;
+  const now = new Date().toISOString();
+  all[idx] = {
+    ...all[idx],
+    ...(patch.name !== undefined ? { name: patch.name.trim().slice(0, 30) || all[idx].name } : {}),
+    ...(patch.avatar !== undefined ? { avatar: patch.avatar } : {}),
+    ...(patch.persona !== undefined ? { persona: patch.persona.slice(0, 2000) } : {}),
+    updatedAt: now,
+  };
+  kvSet(CHARACTER_SUBS_KEY, JSON.stringify(all));
+  dispatchUpdated();
+  return all[idx];
+}

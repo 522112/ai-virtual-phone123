@@ -8,10 +8,16 @@ import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 export type FriendRequest = {
     id: string;
     characterId: string;
-    message: string;         // AI's friend request message
+    message: string;         // AI friend request message
     status: "pending" | "accepted" | "rejected" | "abandoned";
     round: number;           // attempt number (1, 2, 3)
     createdAt: string;       // ISO date
+    // 角色小号申请：kind=character_sub，用马甲名/头像展示，接受=小号转正建档
+    kind?: "character" | "character_sub";
+    subId?: string;
+    subName?: string;
+    subAvatar?: string | null;
+    ownerCharacterId?: string;
 };
 
 const STORAGE_KEY = "ai_phone_friend_requests_v1";
@@ -47,6 +53,27 @@ export function addFriendRequest(characterId: string, message: string, round: nu
     return req;
 }
 
+/** 角色小号向用户/用户小号发起好友申请：主人格+马甲记录，接受=小号转正。 */
+export function addSubFriendRequest(input: { ownerCharacterId: string; subId: string; subName: string; subAvatar?: string | null; message: string }): FriendRequest {
+    const all = loadFriendRequests();
+    const req: FriendRequest = {
+        id: `freq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        characterId: input.ownerCharacterId,
+        message: input.message,
+        status: "pending",
+        round: 1,
+        createdAt: new Date().toISOString(),
+        kind: "character_sub",
+        subId: input.subId,
+        subName: input.subName,
+        subAvatar: input.subAvatar || null,
+        ownerCharacterId: input.ownerCharacterId,
+    };
+    all.push(req);
+    saveFriendRequests(all);
+    return req;
+}
+
 export function updateFriendRequestStatus(
     requestId: string,
     status: FriendRequest["status"],
@@ -69,7 +96,8 @@ export function getPendingFriendRequests(): FriendRequest[] {
     let changed = false;
 
     const activeRequests = all.filter(r => {
-        if (r.status !== "pending") return true;
+        // 小号申请不过滤：主人格可能是好友，但马甲不是
+        if (r.kind === "character_sub") return true;
         const stale = !characterIds.has(r.characterId) || contactCharacterIds.has(r.characterId);
         if (stale) {
             changed = true;
@@ -93,6 +121,12 @@ export function getLatestRequestForCharacter(characterId: string): FriendRequest
 export function clearRequestsForCharacter(characterId: string): void {
     const all = loadFriendRequests();
     saveFriendRequests(all.filter(r => r.characterId !== characterId));
+}
+
+/** 按 id 清理单条申请（小号转正/拒绝后用）。 */
+export function clearRequestById(requestId: string): void {
+    const all = loadFriendRequests();
+    saveFriendRequests(all.filter(r => r.id !== requestId));
 }
 
 /** Dispatch event for UI refresh. */
