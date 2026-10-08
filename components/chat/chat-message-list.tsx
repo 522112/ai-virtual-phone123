@@ -4,7 +4,6 @@ import React, { useState, useEffect, useSyncExternalStore } from "react";
 import { WxContactSelectList } from "./wx-contact-select";
 import { ChevronLeft } from "lucide-react";
 import { loadChatSessions, loadChatContacts, loadScopedContacts, ChatSession, createOrGetSession, createGroupSession, pushChatMessage, addChatContact, loadChatMessages, saveChatSessions, getLastVisibleSessionMessage, getChatMessagePreview } from "@/lib/chat-storage";
-import { ensureSubSession } from "@/lib/sub-friend-engine";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { Character } from "@/lib/character-types";
 import { COUPLE_AVATARS_UPDATED_EVENT, overlayCharacterForDisplay } from "@/lib/couple-avatar-storage";
