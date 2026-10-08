@@ -1,26 +1,22 @@
-"use client";
+﻿"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Heart } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageShell } from "@/components/ui/page-shell";
 import { ChatFallbackAvatar } from "./chat-fallback-avatar";
+import { MomentTextThumb } from "./moment-text-thumb";
+import { PeerHomepage } from "./peer-homepage";
 import { CHARACTERS_UPDATED_EVENT, loadCharacters } from "@/lib/character-storage";
 import { createOrGetSession, type ChatSession } from "@/lib/chat-storage";
 import { ensureSubSession } from "@/lib/sub-friend-engine";
-import {
-    USER_IDENTITIES_UPDATED_EVENT,
-    resolveUserIdentity,
-} from "@/lib/settings-storage";
+import { USER_IDENTITIES_UPDATED_EVENT } from "@/lib/settings-storage";
 import { getActiveSub } from "./sub-account-sheet";
+import { getAllPosts } from "@/lib/moments-storage";
+import { generateMomentsBackfill } from "@/lib/moments-backfill";
 import {
     COUPLE_AVATARS_UPDATED_EVENT,
     overlayCharacterForDisplay,
-    overlayUserIdentityForDisplay,
-    setContactCharacterAvatar,
-    setContactUserAvatar,
 } from "@/lib/couple-avatar-storage";
 import type { Character } from "@/lib/character-types";
-import type { UserIdentity } from "@/components/settings/user-identity";
 
 type ContactProfilePageProps = {
     characterId: string;
@@ -28,101 +24,22 @@ type ContactProfilePageProps = {
     onSelectSession: (session: ChatSession) => void;
 };
 
-async function fileToAvatarDataUrl(file: File): Promise<string> {
-    const source = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(reader.error || new Error("图片读取失败"));
-        reader.readAsDataURL(file);
-    });
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error("图片解码失败"));
-        img.src = source;
-    });
-    const maxSize = 512;
-    const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(image.width * scale));
-    canvas.height = Math.max(1, Math.round(image.height * scale));
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return source;
-    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/webp", 0.82);
-}
-
-function AvatarSlot({
-    label,
-    src,
-    onPick,
-    busy,
-}: {
-    label: string;
-    src?: string | null;
-    onPick: (file: File) => void;
-    busy?: boolean;
-}) {
-    const inputRef = useRef<HTMLInputElement>(null);
-    return (
-        <button
-            type="button"
-            className="couple-avatar-slot"
-            onClick={() => inputRef.current?.click()}
-            disabled={busy}
-        >
-            <div className="couple-avatar-slot-image">
-                {src ? <img src={src} alt="" /> : <ChatFallbackAvatar />}
-                {busy && <span className="couple-avatar-slot-busy">处理中</span>}
-            </div>
-            <span className="couple-avatar-slot-label">{label}</span>
-            <span className="couple-avatar-slot-hint">点击更换</span>
-            <input
-                ref={inputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={event => {
-                    const file = event.target.files?.[0];
-                    event.target.value = "";
-                    if (file) onPick(file);
-                }}
-            />
-        </button>
-    );
-}
-
 export function ContactProfilePage({ characterId, onBack, onSelectSession }: ContactProfilePageProps) {
     const [character, setCharacter] = useState<Character | null>(() => {
         const raw = loadCharacters().find(item => item.id === characterId) || null;
         return raw ? overlayCharacterForDisplay(raw) : null;
     });
-    const [identity, setIdentity] = useState<UserIdentity | null>(() =>
-        overlayUserIdentityForDisplay(characterId, resolveSubAwareIdentity(characterId)),
-    );
-    const [busySide, setBusySide] = useState<"user" | "character" | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [activeSubId, setActiveSubId] = useState<string | null>(() => getActiveSub()?.id || null);
-
-    function resolveSubAwareIdentity(cid: string): UserIdentity {
-        const sub = getActiveSub();
-        const base = resolveUserIdentity(cid, "chat");
-        if (!sub) return base;
-        return { ...base, name: sub.name, screenName: sub.name, avatarUrl: sub.avatar || undefined };
-    }
+    const [showMoments, setShowMoments] = useState(false);
+    const [postsTick, setPostsTick] = useState(0);
+    const [backfilling, setBackfilling] = useState(false);
 
     const refresh = useCallback(() => {
         const raw = loadCharacters().find(item => item.id === characterId) || null;
         setCharacter(raw ? overlayCharacterForDisplay(raw) : null);
-        const sub = getActiveSub();
-        const overlaid = overlayUserIdentityForDisplay(characterId, resolveSubAwareIdentity(characterId));
-        // 小号模式我这边强制显示小号头像，不吃主号的情头覆盖
-        if (sub && overlaid) {
-            overlaid.avatarUrl = sub.avatar || undefined;
-            overlaid.name = sub.name;
-        }
-        setIdentity(overlaid);
-        setActiveSubId(sub?.id || null);
+        setActiveSubId(getActiveSub()?.id || null);
+        setPostsTick(t => t + 1);
     }, [characterId]);
 
     useEffect(() => {
@@ -137,6 +54,26 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
         };
     }, [refresh]);
 
+    // 棰勮瑕佺敤鍒板姩鎬侊細娌″姩鎬佸氨涓€娆¤皟鐢ㄥ洖濉?5-10 鏉★紙璺熸湅鍙嬪湀椤靛叡鐢ㄥ悓涓€浠斤級
+    useEffect(() => {
+        let cancelled = false;
+        try {
+            const existing = getAllPosts().filter(p => p.authorType === "character" && p.authorId === characterId);
+            if (existing.length > 0) return;
+        } catch {
+            return;
+        }
+        setBackfilling(true);
+        void generateMomentsBackfill(characterId)
+            .catch(() => {})
+            .finally(() => {
+                if (cancelled) return;
+                setBackfilling(false);
+                setPostsTick(t => t + 1);
+            });
+        return () => { cancelled = true; };
+    }, [characterId]);
+
     useEffect(() => {
         window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true }));
         return () => {
@@ -149,96 +86,81 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
         window.setTimeout(() => setNotice(current => current === text ? null : current), 2200);
     };
 
-    const pickAndApply = async (side: "user" | "character", file: File) => {
-        // 小号模式：不能改对方头像（除非角色自己换）；我这边显示小号头像
-        if (side === "character" && getActiveSub()) {
-            showNotice("小号不能改对方头像");
-            return;
-        }
-        if (side === "user" && getActiveSub()) {
-            try {
-                const url = await fileToAvatarDataUrl(file);
-                const { updateUserSubAccount } = await import("@/lib/sub-accounts");
-                const sub = getActiveSub();
-                if (sub) updateUserSubAccount(sub.id, { avatar: url });
-                showNotice("已更换小号头像");
-                refresh();
-            } catch (error) {
-                showNotice(error instanceof Error ? error.message : "图片处理失败");
-            }
-            return;
-        }
-        setBusySide(side);
-        try {
-            const url = await fileToAvatarDataUrl(file);
-            if (side === "user") {
-                setContactUserAvatar(characterId, url);
-                showNotice("已更换我这边的头像，只对这个角色生效");
-            } else {
-                setContactCharacterAvatar(characterId, url);
-                showNotice("已更换对方头像");
-            }
-            refresh();
-        } catch (error) {
-            showNotice(error instanceof Error ? error.message : "图片处理失败");
-        } finally {
-            setBusySide(null);
-        }
-    };
-
     const wechatId = useMemo(() => character?.wechatID || "N/A", [character?.wechatID]);
+    const region = character?.profileRegion || "涓浗澶ч檰";
+    // 棰勮鍙敹鏈夊浘鍔ㄦ€侊紙瀹炲浘鎴栨枃瀛楀浘锛夛紝绾枃瀛椾笉鍗犱綅
+    const previewPosts = useMemo(() => {
+        try {
+            return getAllPosts()
+                .filter(p => p.authorType === "character" && p.authorId === characterId && (p.photoUrl || p.photoDescription))
+                .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+                .slice(0, 4);
+        } catch {
+            return [];
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [characterId, postsTick]);
+
+    const openSession = () => {
+        if (activeSubId) {
+            try {
+                onSelectSession(ensureSubSession(characterId, activeSubId));
+            } catch (error) {
+                showNotice(error instanceof Error ? error.message : "鎵撳紑澶辫触");
+            }
+            return;
+        }
+        onSelectSession(createOrGetSession(characterId));
+    };
 
     if (!character) {
         return (
-            <PageShell title="联系人" onBack={onBack}>
-                <div className="ui-empty"><span className="menu-desc">联系人不存在</span></div>
+            <PageShell title="鑱旂郴浜" onBack={onBack}>
+                <div className="ui-empty"><span className="menu-desc">鑱旂郴浜轰笉瀛樺湪</span></div>
             </PageShell>
         );
     }
 
     return (
-        <PageShell title="联系人" onBack={onBack}>
-            <div className="couple-profile-page">
-                <div className="couple-profile-hero">
-                    <AvatarSlot
-                        label={identity?.name || "我"}
-                        src={identity?.avatarUrl}
-                        busy={busySide === "user"}
-                        onPick={file => void pickAndApply("user", file)}
-                    />
-                    <div className="couple-profile-heart" aria-hidden="true">
-                        <Heart size={22} strokeWidth={1.8} />
+        <PageShell title="鑱旂郴浜" onBack={onBack}>
+            <div className="wx-profile">
+                <div className="wx-profile-head">
+                    <span className="wx-profile-avatar">
+                        {character.avatar ? <img src={character.avatar} alt="" /> : <ChatFallbackAvatar />}
+                    </span>
+                    <div className="wx-profile-id">
+                        <div className="wx-profile-name">{character.name || "瀵规柟"}</div>
+                        <div className="wx-profile-line">寰俊鍙凤細{wechatId}</div>
+                        <div className="wx-profile-line">地区：{region}</div>
                     </div>
-                    <AvatarSlot
-                        label={character.name || "对方"}
-                        src={character.avatar}
-                        busy={busySide === "character"}
-                        onPick={file => void pickAndApply("character", file)}
-                    />
                 </div>
-                <div className="couple-profile-meta">
-                    <div className="ts-18 font-bold text-[var(--c-text-title)]">{character.name || "UNNAMED"}</div>
-                    <div className="menu-desc">微信号: {wechatId}</div>
-                </div>
-                <button
-                    type="button"
-                    className="ui-btn ui-btn-success w-full"
-                    onClick={() => {
-                        if (activeSubId) {
-                            try {
-                                onSelectSession(ensureSubSession(characterId, activeSubId));
-                            } catch (error) {
-                                showNotice(error instanceof Error ? error.message : "打开失败");
-                            }
-                            return;
-                        }
-                        onSelectSession(createOrGetSession(characterId));
-                    }}
-                >
-                    发消息
+                <button type="button" className="wx-profile-moments" onClick={() => setShowMoments(true)}>
+                    <span>朋友圈</span>
+                    <span className="wx-profile-thumbs">
+                        {backfilling ? (
+                            <small className="menu-desc">正在生成…</small>
+                        ) : previewPosts.length === 0 ? null : (
+                            previewPosts.map(p => (
+                                p.photoUrl
+                                    ? <img key={p.id} src={p.photoUrl} alt="" />
+                                    : <MomentTextThumb key={p.id} text={p.photoDescription || p.content} size={48} radius={4} />
+                            ))
+                        )}
+                    </span>
+                    <span className="wx-profile-go">›</span>
+                </button>
+                <button type="button" className="wx-profile-send" onClick={openSession}>
+                    <span className="wx-profile-send-icon">馃挰</span> 鍙戞秷鎭?
                 </button>
                 {notice && <div className="couple-profile-toast">{notice}</div>}
             </div>
+            {showMoments && (
+                <PeerHomepage
+                    characterId={characterId}
+                    onClose={() => setShowMoments(false)}
+                    onMessage={() => { setShowMoments(false); openSession(); }}
+                />
+            )}
         </PageShell>
     );
 }
