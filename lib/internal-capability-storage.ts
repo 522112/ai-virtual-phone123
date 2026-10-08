@@ -1911,11 +1911,12 @@ const ROLE_SUB_SUBTOOLS: InternalToolDefinition[] = [
     },
     {
         name: "小号加好友",
-        description: "用你的小号向用户（或用户小号）发起好友申请，对方在联系人“新的朋友”里看到验证消息，能同意能拒绝，结果记进你的记忆。",
+        description: "用你的小号去加用户：加用户大号还是加用户的某个小号，由你按人设自己判断。对方在联系人“新的朋友”里看到验证消息，能同意能拒绝，结果记进你的记忆。",
         parameterSchema: JSON.stringify({
             type: "object",
             properties: {
                 sub: { type: "string", description: "用哪个小号去加，不填用第一个" },
+                target: { type: "string", description: "加谁：用户大号就写“我/用户/大号”，想加用户的某个小号就写那个小号的名字；不填默认加用户大号" },
                 verifyMsg: { type: "string", description: "验证消息，不填用默认" },
             },
         }),
