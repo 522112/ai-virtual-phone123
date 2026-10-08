@@ -115,14 +115,14 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
 
     if (!character) {
         return (
-            <PageShell title="鑱旂郴浜? onBack={onBack}>
+            <PageShell title="鑱旂郴浜" onBack={onBack}>
                 <div className="ui-empty"><span className="menu-desc">鑱旂郴浜轰笉瀛樺湪</span></div>
             </PageShell>
         );
     }
 
     return (
-        <PageShell title="鑱旂郴浜? onBack={onBack}>
+        <PageShell title="鑱旂郴浜" onBack={onBack}>
             <div className="wx-profile">
                 <div className="wx-profile-head">
                     <span className="wx-profile-avatar">
@@ -131,14 +131,14 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
                     <div className="wx-profile-id">
                         <div className="wx-profile-name">{character.name || "瀵规柟"}</div>
                         <div className="wx-profile-line">寰俊鍙凤細{wechatId}</div>
-                        <div className="wx-profile-line">鍦板尯锛歿region}</div>
+                        <div className="wx-profile-line">地区：{region}</div>
                     </div>
                 </div>
                 <button type="button" className="wx-profile-moments" onClick={() => setShowMoments(true)}>
-                    <span>鏈嬪弸鍦?/span>
+                    <span>朋友圈</span>
                     <span className="wx-profile-thumbs">
                         {backfilling ? (
-                            <small className="menu-desc">姝ｅ湪鐢熸垚鈥?/small>
+                            <small className="menu-desc">正在生成…</small>
                         ) : previewPosts.length === 0 ? null : (
                             previewPosts.map(p => (
                                 p.photoUrl
@@ -147,7 +147,7 @@ export function ContactProfilePage({ characterId, onBack, onSelectSession }: Con
                             ))
                         )}
                     </span>
-                    <span className="wx-profile-go">鈥?/span>
+                    <span className="wx-profile-go">›</span>
                 </button>
                 <button type="button" className="wx-profile-send" onClick={openSession}>
                     <span className="wx-profile-send-icon">馃挰</span> 鍙戞秷鎭?

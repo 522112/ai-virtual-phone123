@@ -86,7 +86,8 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
         setPostsTick(t => t + 1);
     };
 
-    // 棣栨杩涘叆鑷姩琛ュ叏锛氭病鍔ㄦ€佸氨涓€娆¤皟鐢ㄧ敓鎴?5-10 鏉¤繃寰€鍔ㄦ€侊紙鏃堕棿閾哄紑锛屾ā鎷熺湡瀹炴湅鍙嬪湀锛?    useEffect(() => {
+    // 首次进入自动补全：没动态就一次调用生成 5-10 条过往动态（时间铺开，模拟真实朋友圈）
+    useEffect(() => {
         let cancelled = false;
         try {
             const existing = getAllPosts().filter(p => p.authorType === "character" && p.authorId === characterId);
@@ -125,7 +126,7 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
         try {
             const url = await fileToCoverDataUrl(file);
             patchCharacter({ momentsCover: url });
-            flash("灏侀潰宸叉洿鎹?);
+            flash("封面已更换");
         } catch {
             flash("鍥剧墖璇诲彇澶辫触");
         } finally {
@@ -140,7 +141,7 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                     <button type="button" className="peer-home-back" onClick={onClose} aria-label="杩斿洖">
                         <ChevronLeft size={24} strokeWidth={1.5} />
                     </button>
-                    {tab === "moments" && <span className="peer-home-topbar-title">鏈嬪弸鍦?/span>}
+                    {tab === "moments" && <span className="peer-home-topbar-title">朋友圈</span>}
                 </div>
 
                 {tab === "home" ? (
@@ -154,7 +155,7 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                                 aria-label="鏇存崲灏侀潰"
                             >
                                 <Camera size={16} />
-                                {coverBusy ? "澶勭悊涓? : "鎹㈠皝闈?}
+                                {coverBusy ? "澶勭悊涓" : "鎹㈠皝闈"}
                             </button>
                             <button
                                 type="button"
@@ -176,7 +177,7 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                                     <button
                                         type="button"
                                         disabled={!coverLinkUrl.trim().startsWith("http")}
-                                        onClick={() => { patchCharacter({ momentsCover: coverLinkUrl.trim() }); flash("灏侀潰宸叉洿鎹?); setCoverLinkOpen(false); setCoverLinkUrl(""); }}
+                                        onClick={() => { patchCharacter({ momentsCover: coverLinkUrl.trim() }); flash("灏侀潰宸叉洿鎹"); setCoverLinkOpen(false); setCoverLinkUrl(""); }}
                                         style={{ borderRadius: 10, border: 0, padding: "8px 12px", fontSize: 13, cursor: "pointer" }}
                                     >
                                         纭畾
@@ -204,25 +205,25 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                         <div className="peer-home-rows">
                             <div className="peer-home-row">
                                 <span className="peer-home-label">鏄电О</span>
-                                <span className="peer-home-value">{character.name || "鏈懡鍚?}</span>
+                                <span className="peer-home-value">{character.name || "未命名"}</span>
                             </div>
                             <div className="peer-home-row">
-                                <span className="peer-home-label">寰俊鍙?/span>
+                                <span className="peer-home-label">微信号</span>
                                 <span className="peer-home-value">{character.wechatID || character.id.slice(-8)}</span>
                             </div>
                             {character.personality?.trim() && (
                                 <div className="peer-home-row">
-                                    <span className="peer-home-label">涓€х鍚?/span>
+                                <span className="peer-home-label">个性签名</span>
                                     <span className="peer-home-value peer-home-sign">{character.personality.trim().slice(0, 60)}</span>
                                 </div>
                             )}
                             <button type="button" className="peer-home-row peer-home-moments-entry" onClick={() => setTab("moments")}>
-                                <span className="peer-home-label">鏈嬪弸鍦?/span>
+                                <span className="peer-home-label">朋友圈</span>
                                 <span className="peer-home-thumbs">
                                     {refreshing ? (
-                                        <span className="peer-home-empty">姝ｅ湪鎸変汉璁惧埛鏂扳€?/span>
+                                        <span className="peer-home-empty">正在按人设刷新…</span>
                                     ) : previewPhotos.length === 0 ? (
-                                        <span className="peer-home-empty">鏆傛棤鍔ㄦ€?/span>
+                                        <span className="peer-home-empty">暂无动态</span>
                                     ) : (
                                         previewPhotos.map(p => (
                                             <span key={p.id} className="peer-home-thumb">
@@ -239,7 +240,7 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                         <div className="peer-home-actions">
                             {onMessage ? (
                                 <button type="button" className="peer-home-action-btn" onClick={onMessage}>
-                                    <MessageCircle size={18} /> 鍙戞秷鎭?                                </button>
+                                    <MessageCircle size={18} /> 发消息</button>
                             ) : null}
                             {onVoiceCall ? (
                                 <button type="button" className="peer-home-action-btn" onClick={onVoiceCall}>
@@ -267,7 +268,7 @@ export function PeerHomepage({ characterId, onClose, onMessage, onVoiceCall, onV
                             ))}
                             {posts.length === 0 && (
                                 <div className="peer-home-empty-feed">
-                                    {refreshing ? "姝ｅ湪鐢熸垚 TA 鐨勬湅鍙嬪湀鈥? : "TA 杩樻病鏈夊彂甯冭繃鍔ㄦ€?}
+                                    {refreshing ? "正在生成 TA 的朋友圈…" : "TA 还没有发布过动态"}
                                 </div>
                             )}
                         </div>
