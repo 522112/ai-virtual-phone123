@@ -9,6 +9,8 @@ export type Character = {
   wechatID?: string;     // 手机号格式的微信号
   screenName?: string;     // 网名：档案页填写/AI 生成，个人主页与名片优先显示
   momentsCover?: string; // 个人主页朋友圈封面（data URL / URL）；空则按人设派生
+  profileSignature?: string; // 朋友圈个性签名；空则取人设首句
+  profileRegion?: string; // 地区；默认中国大陆
   pinnedMomentId?: string; // 个人主页朋友圈置顶动态 id；空则按人设自动挑选
   personality?: string;    // 角色性格
   timeZone?: string;       // IANA 时区，例如 America/New_York；空值表示跟随系统时间
