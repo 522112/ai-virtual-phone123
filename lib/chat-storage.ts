@@ -796,7 +796,9 @@ function normalizeChatSessions(sessions: ChatSession[]): NormalizedSessionList {
     }
 
     const normalized: ChatSession[] = [];
-    const privateIndexByContact = new Map<string, number>();
+    // 单聊按身份隔离：主号/各小号同角色也绝不合并（之前这里只按 contactId 去重，
+    // 会把小号会话的消息重定向进主号、再把主号窗口丢掉）
+    const privateIndexByScopeContact = new Map<string, number>();
 
     for (const id of idOrder) {
         const session = byId.get(id);
@@ -806,9 +808,10 @@ function normalizeChatSessions(sessions: ChatSession[]): NormalizedSessionList {
             continue;
         }
 
-        const existingIndex = privateIndexByContact.get(session.contactId);
+        const scopeKey = `${session.subId || "main"}:${session.contactId}`;
+        const existingIndex = privateIndexByScopeContact.get(scopeKey);
         if (existingIndex === undefined) {
-            privateIndexByContact.set(session.contactId, normalized.length);
+            privateIndexByScopeContact.set(scopeKey, normalized.length);
             normalized.push(session);
             continue;
         }
