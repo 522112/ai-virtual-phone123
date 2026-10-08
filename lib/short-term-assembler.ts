@@ -4,6 +4,7 @@
 // Used by: memory-bank-page (UI display), memory-summarizer (summarization input).
 
 import { isReadingDiscussMessage, isSystemInstructionMessage, loadChatSessions, loadChatMessages, type ChatMessage } from "./chat-storage";
+import { loadUserSubAccounts } from "./sub-accounts";
 import { buildGroupAdminBracketText } from "./group-admin";
 import { loadMomentPosts, loadMomentComments } from "./moments-storage";
 import { loadCharacters } from "./character-storage";
@@ -187,8 +188,13 @@ export function loadNativeTimeline(
 
     // ── Chat messages ──
     const sessions = loadChatSessions();
-    // Include direct chat session AND group sessions where this character participates
-    const session = sessions.find(s => !s.isGroup && s.contactId === characterId);
+    // 主号+所有小号的直接会话全进时间线（小号=马甲，同样是角色的经历，要进记忆）；
+    // 小号会话打上马甲名，角色能分清“跟主号聊的”和“跟小号聊的”，按人设自然引用。
+    const subNames = new Map<string, string>();
+    try {
+        for (const sub of loadUserSubAccounts()) subNames.set(sub.id, sub.name);
+    } catch { /* ignore */ }
+    const directSessions = sessions.filter(s => !s.isGroup && s.contactId === characterId);
     const groupSessions = sessions.filter(s => s.isGroup && s.participantIds?.includes(characterId));
 
     // Process group sessions
@@ -282,14 +288,17 @@ export function loadNativeTimeline(
         }
     }
 
-    if (session) {
+    for (const session of directSessions) {
         const messages = loadChatMessages(session.id);
+        const subName = session.subId ? (subNames.get(session.subId) || "小号") : "";
+        // 私聊标签带身份：主号就是“私聊”，小号是“私聊（小号XX）”，角色按人设自然区分引用
+        const chatLabel = subName ? `私聊（对方小号${subName}）` : "私聊";
         for (const msg of messages) {
             if (msg.isRetracted) continue;
             if (isPromptHiddenChatMessage(msg)) continue;
             if (options?.afterTimestamp && msg.createdAt <= options.afterTimestamp) continue;
 
-            const msgLabel = formatPromptEventLabel("私聊", msg.createdAt, timeAware, timestampOptions);
+            const msgLabel = formatPromptEventLabel(chatLabel, msg.createdAt, timeAware, timestampOptions);
 
             if (msg.role === "system") {
                 // UI-only notification — skip from prompt
@@ -328,7 +337,7 @@ export function loadNativeTimeline(
                 continue;
             }
 
-            const sender = msg.role === "user" ? userName : msg.role === "tool" ? "工具" : charName;
+            const sender = msg.role === "user" ? (subName || userName) : msg.role === "tool" ? "工具" : charName;
             let content = stripStateAndInnerForPrompt(msg.content || "");
 
             // Action notifications: always override content to bracket format (stored content is natural language for UI)
