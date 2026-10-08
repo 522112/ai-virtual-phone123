@@ -23,7 +23,7 @@ import {
 } from "./tool-storage";
 import { executeCustomAppToolCall } from "./custom-app-tool-runtime";
 import { characterWorkspace, agentComputerRequest, isAgentComputerConfigured } from "./agent-computer";
-import { AGENT_COMPUTER_CAPABILITY_ID, CALENDAR_MANAGEMENT_CAPABILITY_ID, FORWARD_CHAT_CAPABILITY_ID, LISTEN_TOGETHER_CAPABILITY_ID, LOCAL_DATA_LIBRARY_CAPABILITY_ID, MEMORY_WRITE_CAPABILITY_ID, MUSIC_CONTROL_CAPABILITY_ID, NOTE_WALL_CAPABILITY_ID, REALITY_BRIDGE_CAPABILITY_ID, REVERSE_WATCH_CAPABILITY_ID, ROLE_SIDE_CHAT_CAPABILITY_ID, SEND_FILE_CAPABILITY_ID, TIMED_WAKE_CAPABILITY_ID, TOOLBOX_MANAGEMENT_CAPABILITY_ID, getInternalCapability } from "./internal-capability-storage";
+import { AGENT_COMPUTER_CAPABILITY_ID, CALENDAR_MANAGEMENT_CAPABILITY_ID, FORWARD_CHAT_CAPABILITY_ID, LISTEN_TOGETHER_CAPABILITY_ID, LOCAL_DATA_LIBRARY_CAPABILITY_ID, MEMORY_WRITE_CAPABILITY_ID, MUSIC_CONTROL_CAPABILITY_ID, NOTE_WALL_CAPABILITY_ID, REALITY_BRIDGE_CAPABILITY_ID, REVERSE_WATCH_CAPABILITY_ID, ROLE_SIDE_CHAT_CAPABILITY_ID, ROLE_SUB_CAPABILITY_ID, SEND_FILE_CAPABILITY_ID, TIMED_WAKE_CAPABILITY_ID, TOOLBOX_MANAGEMENT_CAPABILITY_ID, getInternalCapability } from "./internal-capability-storage";
 import { bridgeConnection, loadBridgeDataItems, loadBridgeShortcutActions, readAllBridgeStateSnapshots, readBridgeStateSnapshot } from "./reality-bridge/storage";
 import { createShortcutCommand, deliverShortcutCommand, waitForShortcutCommand } from "./shortcut-command-client";
 import { loadMemoryEntriesByType, saveMemoryEntry } from "./memory-storage";
@@ -809,6 +809,7 @@ async function executeInternalTool(call: ToolCall, context?: ToolExecutionContex
     if (call.name === "稍后主动联系" || call.name === "设置定时醒来") return executeTimedWakeTool(call, context);
     if (call.name === "转发聊天记录") return executeForwardChatTool(call, context);
     if (call.name === "发起私聊") return executeRoleSideChatTool(call, context);
+    if (call.name === "开小号" || call.name === "推荐好友名片") return executeRoleSubTool(call, context);
 
     if (call.name !== "写入记忆") return null;
 
@@ -2390,6 +2391,71 @@ function inferMediaAttachmentType(url: string, title: string): MediaAttachment["
  * 角色发起私聊/群聊：跟 NPC 或其他角色聊一段，用户会话里留记录卡进上帝视角。
  * 真角色写共享记忆保持连贯；NPC 只参与不留档。
  */
+async function executeRoleSubTool(call: ToolCall, context?: ToolExecutionContext): Promise<ToolResult> {
+    const fail = (error: string): ToolResult => ({
+        name: call.name, success: false, error, continueConversation: true,
+    });
+    const capability = getInternalCapability(ROLE_SUB_CAPABILITY_ID);
+    if (!capability || !capability.enabled || capability.mode === "off") {
+        return fail("角色小号能力未启用");
+    }
+    const sourceSessionId = context?.sessionId || "";
+    if (!sourceSessionId) return fail("当前没有可用的会话");
+    const source = loadChatSessions().find(s => s.id === sourceSessionId);
+    if (!source || source.isGroup) return fail("只能从单聊里开小号/推名片");
+    const meId = context?.characterId || source.contactId;
+    const me = loadCharacters().find(c => c.id === meId);
+    if (!me) return fail("找不到当前角色");
+    const args = call.args || {};
+
+    if (call.name === "开小号") {
+        const name = typeof args.name === "string" ? args.name.trim().slice(0, 30) : "";
+        const persona = typeof args.persona === "string" ? args.persona.trim().slice(0, 2000) : "";
+        const purpose = typeof args.purpose === "string" ? args.purpose.trim().slice(0, 200) : "";
+        try {
+            const { createCharacterSubByPersona } = await import("./recommend-card-engine");
+            const { createCharacterSubAccount } = await import("./sub-accounts");
+            const sub = (name || persona)
+                ? createCharacterSubAccount({ characterId: me.id, name: name || "小号", persona })
+                : await createCharacterSubByPersona(me.id);
+            const reply = purpose
+                ? `已开好小号「${sub.name}」（${purpose}）。用马甲身份行动，对方不会知道是你。`
+                : `已开好小号「${sub.name}」。用马甲身份行动，对方不会知道是你。`;
+            return { name: call.name, success: true, data: reply, continueConversation: true };
+        } catch (error) {
+            return fail(error instanceof Error ? error.message : "开小号失败");
+        }
+    }
+
+    if (call.name === "推荐好友名片") {
+        const name = typeof args.name === "string" ? args.name.trim().slice(0, 30) : "";
+        if (!name) return fail("缺少对方名字");
+        const topic = typeof args.topic === "string" ? args.topic.trim().slice(0, 200) : "";
+        const lowered = name.toLowerCase();
+        const hit = loadCharacters().find(c =>
+            c.id.toLowerCase() === lowered
+            || (c.name || "").toLowerCase() === lowered
+            || ((c.wechatID || "").trim().toLowerCase() === lowered && lowered.length > 0),
+        );
+        pushChatMessage({
+            sessionId: sourceSessionId,
+            role: "assistant",
+            senderName: me.name,
+            content: `[给你推荐了一位朋友：${name}]${topic ? `（${topic}）` : ""}`,
+            mediaType: "contact_card",
+            mediaData: { contactCardName: hit ? hit.name : name, label: hit ? hit.name : name },
+            status: "sent",
+        });
+        const reply = hit
+            ? `已把${hit.name}的名片推给用户，对方点名片就能聊上/加好友。`
+            : `已把${name}的名片推给用户（NPC），对方点名片可以建档加好友。`;
+        return { name: call.name, success: true, data: reply, continueConversation: true };
+    }
+
+    return fail(`未知子工具：${call.name}`);
+}
+
+
 async function executeRoleSideChatTool(call: ToolCall, context?: ToolExecutionContext): Promise<ToolResult> {
     const fail = (error: string): ToolResult => ({
         name: call.name, success: false, error, continueConversation: true,
